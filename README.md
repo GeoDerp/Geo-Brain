@@ -6,6 +6,19 @@ For comprehensive architectural mandates, system security guidelines, and the co
 
 ---
 
+## Understanding the Tools
+
+New to security-focused homelabs or want a deeper understanding of why specific tools were chosen? Check out our **[Tools Explained](./docs/TOOLS_EXPLAINED.md)** documentation which provides:
+
+- **Detailed explanations** of every tool used in this infrastructure
+- **Visual architecture diagrams** showing how components interact
+- **Security rationale** for each technology choice
+- **Practical examples** of how tools integrate together
+
+This educational resource is designed to help both newcomers and experienced practitioners understand the security-first approach of this homelab.
+
+---
+
 ## Directory Structure
 
 - **`.env`**: The global environment variables file containing the primary `DOMAIN` configuration.
@@ -13,6 +26,7 @@ For comprehensive architectural mandates, system security guidelines, and the co
 - **`init-node.sh`**: Bootstraps the host node (eg. openSUSE MicroOS) for remote Podman access and security auditing.
 - **`stacks/`**: Contains the Docker Compose files and respective data/configuration directories for each application.
 - **`scripts/`**: Houses utility scripts, including security auditing tools (`sast/`).
+- **`docs/`**: Educational documentation explaining the tools and architecture used in this project.
 
 ## Stacks
 
