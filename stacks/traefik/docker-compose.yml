@@ -1,0 +1,53 @@
+services:
+  traefik:
+    image: traefik:v3.3.4
+    container_name: traefik
+    restart: always
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./config:/etc/traefik:z
+      - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/var/run/docker.sock:ro
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--ping=true"
+    networks:
+      - proxy-net
+      - identity-net
+      - mgmt-net
+      - monitoring-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.3'
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=proxy"
+      - "homepage.group=Management"
+      - "homepage.name=Traefik"
+      - "homepage.icon=traefik.png"
+      - "homepage.description=Edge Proxy"
+      - "homepage.href=http://traefik.${DOMAIN}"
+
+networks:
+  proxy-net:
+    driver: bridge
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=proxy-network"
+  identity-net:
+    external: true
+  mgmt-net:
+    external: true
+  monitoring-net:
+    external: true

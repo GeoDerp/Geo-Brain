@@ -10,15 +10,20 @@ This document provides an educational overview of all tools and technologies use
 - [Core Infrastructure](#core-infrastructure)
   - [openSUSE MicroOS](#opensuse-microos)
   - [Podman](#podman)
-- [Management & Observability](#management--observability)
+- [Management & Orchestration](#management--orchestration)
   - [Homepage](#homepage)
   - [Dockge](#dockge)
-  - [RamaLama](#ramalama)
+  - [Traefik](#traefik)
+- [Observability & Logging (LGV Stack)](#observability--logging-lgv-stack)
+  - [Loki](#loki)
+  - [Grafana](#grafana)
+  - [Vector](#vector)
+  - [Prometheus](#prometheus)
 - [Security Operations Center (SOC)](#security-operations-center-soc)
   - [Wazuh](#wazuh)
-  - [Fluent-bit](#fluent-bit)
   - [Falco](#falco)
-  - [OpenSCAP](#openscap)
+  - [CrowdSec](#crowdsec)
+  - [RamaLama](#ramalama)
   - [DefectDojo](#defectdojo)
 - [Vulnerability Management & Compliance](#vulnerability-management--compliance)
   - [Trivy](#trivy)
@@ -29,10 +34,9 @@ This document provides an educational overview of all tools and technologies use
   - [Gitleaks](#gitleaks)
 - [Strategic Infrastructure](#strategic-infrastructure)
   - [Kanidm / Authelia](#kanidm--authelia)
-  - [Vaultwarden](#vaultwarden)
   - [Harbor](#harbor)
   - [Step-CA](#step-ca)
-  - [CrowdSec](#crowdsec)
+  - [MinIO](#minio)
 
 ---
 
@@ -51,37 +55,39 @@ The following diagram illustrates how all components interact within the GEO-Bra
 │  ├─────────────────────────────────────────────────────────────────────────────────┤   │
 │  │                                                                                 │   │
 │  │  ┌──────────────────────────────┐    ┌──────────────────────────────────────┐  │   │
-│  │  │   MANAGEMENT & OBSERVABILITY │    │     SECURITY OPERATIONS CENTER       │  │   │
+│  │  │   MANAGEMENT & ORCHESTRATION │    │     SECURITY OPERATIONS CENTER       │  │   │
 │  │  │  ┌─────────┐  ┌─────────┐    │    │                                      │  │   │
 │  │  │  │Homepage │  │ Dockge  │    │    │  ┌────────────────────────────────┐  │  │   │
 │  │  │  │(Dashboard)│ │(Stack Mgr)│  │    │  │           WAZUH (SIEM/XDR)     │  │  │   │
 │  │  │  └─────────┘  └─────────┘    │    │  │  ┌──────────┐    ┌──────────┐  │  │  │   │
 │  │  │       │             │        │    │  │  │ Indexer  │    │Dashboard │  │  │  │   │
 │  │  │  ┌────▼─────────────▼────┐   │    │  │  └──────────┘    └──────────┘  │  │  │   │
-│  │  │  │      RamaLama         │   │    │  └───────────────▲────────────────┘  │  │   │
-│  │  │  │  (AI Log Analysis)    │   │    │                  │                   │  │   │
-│  │  │  │  ┌──────────────┐     │   │    │   ┌──────────────┴─────────────┐     │  │   │
-│  │  │  │  │ Phi-3 Model  │     │   │───▶│   │        Fluent-bit         │     │  │   │
-│  │  │  │  └──────────────┘     │   │    │   │     (Log Forwarding)      │     │  │   │
-│  │  │  └───────────────────────┘   │    │   └───────────────────────────┘     │  │   │
-│  │  └──────────────────────────────┘    │                  ▲                   │  │   │
-│  │                                      │   ┌──────────────┴─────────────┐     │  │   │
-│  │                                      │   │          Falco             │     │  │   │
-│  │                                      │   │  (Runtime Security)        │     │  │   │
-│  │                                      │   └────────────────────────────┘     │  │   │
-│  │                                      │                                      │  │   │
-│  │                                      │   ┌────────────────────────────┐     │  │   │
-│  │                                      │   │        DefectDojo          │     │  │   │
-│  │                                      │   │  (Vulnerability Mgmt)      │◀────│──│───┤
-│  │                                      │   └────────────────────────────┘     │  │   │
-│  │                                      └──────────────────────────────────────┘  │   │
+│  │  │  │      Traefik          │   │    │  └───────────────▲────────────────┘  │  │   │
+│  │  │  │  (Reverse Proxy/TLS)  │   │    │                  │                   │  │   │
+│  │  │  └──────────────┬────────┘   │    │   ┌──────────────┴─────────────┐     │  │   │
+│  │  │                 │            │    │   │          Vector           │     │  │   │
+│  │  └─────────────────┼────────────┘    │   │     (Log Pipeline)        │     │  │   │
+│  │                    │                 │   └───────────────────────────┘     │  │   │
+│  │  ┌─────────────────▼────────────┐    │                  ▲                   │  │   │
+│  │  │   OBSERVABILITY (LGV)        │    │   ┌──────────────┴─────────────┐     │  │   │
+│  │  │  ┌─────────┐  ┌─────────┐    │    │   │          Falco             │     │  │   │
+│  │  │  │ Grafana │  │  Loki   │    │    │   │  (Runtime Security)        │     │  │   │
+│  │  │  │(Visuals)│  │ (Logs)  │    │    │   └────────────────────────────┘     │  │   │
+│  │  │  └─────────┘  └─────────┘    │    │                                      │  │   │
+│  │  │       ▲             ▲        │    │   ┌────────────────────────────┐     │  │   │
+│  │  │       │             │        │    │   │        DefectDojo          │     │  │   │
+│  │  │  ┌────┴─────────────┴────┐   │    │   │  (Vulnerability Mgmt)      │◀────│──│───┤
+│  │  │  │      Prometheus       │   │    │   └────────────────────────────┘     │  │   │
+│  │  │  │      (Metrics)        │   │    └──────────────────────────────────────┘  │   │
+│  │  │  └───────────────────────┘   │                                               │   │
+│  │  └──────────────────────────────┘                                               │   │
 │  │                                                                                 │   │
 │  │  ┌──────────────────────────────┐    ┌──────────────────────────────────────┐  │   │
 │  │  │ VULNERABILITY SCANNING SUITE │    │    STRATEGIC INFRASTRUCTURE          │  │   │
 │  │  │                              │    │                                      │  │   │
 │  │  │ ┌───────┐ ┌───────┐ ┌──────┐│    │ ┌────────────┐   ┌──────────────┐    │  │   │
-│  │  │ │ Trivy │ │ Grype │ │Dockle││    │ │  Kanidm/   │   │  Vaultwarden │    │  │   │
-│  │  │ │(CVEs) │ │(CVEs) │ │(Lint)││    │ │  Authelia  │   │  (Secrets)   │    │  │   │
+│  │  │ │ Trivy │ │ Grype │ │Dockle││    │ │  Kanidm/   │   │     MinIO    │    │  │   │
+│  │  │ │(CVEs) │ │(CVEs) │ │(Lint)││    │ │  Authelia  │   │   (Storage)  │    │  │   │
 │  │  │ └───┬───┘ └───┬───┘ └──┬───┘│    │ │   (IAM)    │   └──────────────┘    │  │   │
 │  │  │     │         │        │    │    │ └────────────┘                       │  │   │
 │  │  │ ┌───▼─────────▼────────▼──┐ │    │ ┌────────────┐   ┌──────────────┐    │  │   │
@@ -95,8 +101,8 @@ The following diagram illustrates how all components interact within the GEO-Bra
 │  │  │ └────────┘ └─────────┘      │    │ └────────────────────────────────┘   │  │   │
 │  │  │                              │    │                                      │  │   │
 │  │  │ ┌────────────────────────┐  │    │ ┌────────────────────────────────┐   │  │   │
-│  │  │ │       Gitleaks         │  │    │ │         OpenSCAP               │   │  │   │
-│  │  │ │   (Secret Detection)   │  │    │ │    (STIG Compliance)           │   │  │   │
+│  │  │ │       Gitleaks         │  │    │ │         RamaLama               │   │  │   │
+│  │  │ │   (Secret Detection)   │  │    │ │    (Local AI Analysis)         │   │  │   │
 │  │  │ └────────────────────────┘  │    │ └────────────────────────────────┘   │  │   │
 │  │  └──────────────────────────────┘    └──────────────────────────────────────┘  │   │
 │  │                                                                                 │   │
@@ -163,7 +169,7 @@ Traditional Docker:     Podman (Rootless):
 
 ---
 
-## Management & Observability
+## Management & Orchestration
 
 ### Homepage
 
@@ -205,24 +211,67 @@ labels:
 
 ---
 
-### RamaLama
+### Traefik
 
-**What it is:** RamaLama is an AI-powered log analysis tool that uses lightweight Large Language Models (LLMs) to evaluate security alerts.
+**What it is:** Traefik is a modern HTTP reverse proxy and load balancer designed for containerized environments.
 
 **Why it's used:**
-- **AI-Assisted Triage:** Helps human operators prioritize security alerts from Wazuh and DefectDojo.
-- **Air-Gapped Operation:** Runs locally without internet connectivity, ensuring no data exfiltration.
-- **Lightweight Models:** Uses efficient models like Phi-3 Mini that run on modest hardware.
-- **OpenAI-Compatible API:** Easy integration with existing tooling and scripts.
+- **Dynamic Configuration:** Automatically discovers services via Podman labels.
+- **TLS Termination:** Manages internal TLS certificates issued by Step-CA.
+- **SSO Integration:** Forwards authentication requests to Authelia for centralized SSO.
+- **Rootless Compatible:** Runs efficiently in a rootless Podman environment.
 
-**Use Case:**
-
-See the included `scripts/analysis/analyze_security.py` script for AI-powered security analysis:
-
-```bash
-# Analyze a Wazuh alert using the local LLM
-./scripts/analysis/analyze_security.py Wazuh /path/to/alert.log
+**Protection Workflow:**
 ```
+User → Traefik (TLS) → Authelia (MFA) → Backend Service
+```
+
+---
+
+## Observability & Logging (LGV Stack)
+
+### Loki
+
+**What it is:** Loki is a horizontally scalable, highly available, multi-tenant log aggregation system inspired by Prometheus.
+
+**Why it's used:**
+- **Efficient Indexing:** Indexes only metadata, not the full log content, significantly reducing storage costs.
+- **Prometheus Integration:** Shares labeling strategies with Prometheus, enabling seamless transitions between metrics and logs.
+- **MinIO Storage:** Uses MinIO (S3) for durable, long-term log storage.
+
+---
+
+### Grafana
+
+**What it is:** Grafana is the open-source platform for monitoring and observability.
+
+**Why it's used:**
+- **Unified Visualization:** Combines metrics (Prometheus), logs (Loki), and security events (Wazuh) into a single dashboard.
+- **Advanced Alerting:** Provides a robust alerting engine for all data sources.
+- **Customizable Dashboards:** Supports community-sourced dashboards for all infrastructure components.
+
+---
+
+### Vector
+
+**What it is:** Vector is a high-performance, observability data pipeline that collect, transform, and route all your logs and metrics.
+
+**Why it's used:**
+- **Log Unification:** Collects logs from `journald`, Podman containers, and system files.
+- **Transformation:** Normalizes logs before forwarding to Loki or Wazuh.
+- **Reliability:** Built in Rust for memory safety and high performance.
+- **STIG Compliance:** Replaces legacy log forwarders with a more secure, modern alternative.
+
+---
+
+### Prometheus
+
+**What it is:** Prometheus is an open-source systems monitoring and alerting toolkit.
+
+**Why it's used:**
+- **Metrics Collection:** Scrapes metrics from all containers and the host OS.
+- **Time-Series Database:** Optimized for storing high-cardinality monitoring data.
+- **Alertmanager:** Handles alerts generated by client applications and forwards them to the SOC.
 
 ---
 
@@ -248,23 +297,6 @@ See the included `scripts/analysis/analyze_security.py` script for AI-powered se
 
 ---
 
-### Fluent-bit
-
-**What it is:** Fluent-bit is a lightweight log processor and forwarder designed for high-throughput environments.
-
-**Why it's used:**
-- **Journald Integration:** Collects logs from systemd's journald on the host.
-- **Low Resource Usage:** Minimal memory footprint compared to alternatives like Fluentd.
-- **Flexible Routing:** Can parse, filter, and route logs to multiple destinations.
-- **Wazuh Integration:** Forwards processed logs to Wazuh for security analysis.
-
-**Data Flow:**
-```
-journald → Fluent-bit → Wazuh Manager → Analysis/Alerting
-```
-
----
-
 ### Falco
 
 **What it is:** Falco is a cloud-native runtime security tool that detects anomalous activity in containers and hosts.
@@ -283,20 +315,25 @@ journald → Fluent-bit → Wazuh Manager → Analysis/Alerting
 
 ---
 
-### OpenSCAP
+### CrowdSec
 
-**What it is:** OpenSCAP is an ecosystem for Security Content Automation Protocol (SCAP) compliance checking.
+**What it is:** CrowdSec is a collaborative intrusion prevention system that detects and blocks malicious behavior.
 
 **Why it's used:**
-- **STIG Compliance:** Validates systems against DISA STIGs (Security Technical Implementation Guides).
-- **Automated Scanning:** Runs periodic compliance checks on host and containers.
-- **Detailed Reports:** Generates comprehensive reports showing compliance status.
-- **DefectDojo Integration:** Results can be imported into DefectDojo for unified reporting.
+- **Behavioral Detection:** Analyzes logs to detect malicious patterns.
+- **Bouncer Architecture:** Integrates with firewalls, reverse proxies (Traefik), and applications.
+- **Podman Compatible:** Works well with containerized deployments.
 
-**Compliance Flow:**
-```
-OpenSCAP Scan → SCAP Results (XML/HTML) → DefectDojo Import → Unified Dashboard
-```
+---
+
+### RamaLama
+
+**What it is:** RamaLama is an AI-powered log analysis tool that uses lightweight Large Language Models (LLMs) to evaluate security alerts.
+
+**Why it's used:**
+- **AI-Assisted Triage:** Helps human operators prioritize security alerts from Wazuh and DefectDojo.
+- **Air-Gapped Operation:** Runs locally without internet connectivity, ensuring no data exfiltration.
+- **Lightweight Models:** Uses efficient models like Phi-3 Mini that run on modest hardware.
 
 ---
 
@@ -308,15 +345,7 @@ OpenSCAP Scan → SCAP Results (XML/HTML) → DefectDojo Import → Unified Dash
 - **Unified View:** Aggregates findings from multiple security tools (Trivy, Grype, OpenSCAP, etc.).
 - **Deduplication:** Automatically identifies and merges duplicate findings.
 - **Trend Analysis:** Tracks vulnerability metrics over time.
-- **Integration Hub:** Supports importing results from 150+ security tools.
 - **Workflow Management:** Assigns findings to team members and tracks remediation.
-
-**Data Sources:**
-- Trivy/Grype CVE scans
-- Checkov/Terrascan IaC findings
-- Gitleaks secret detections
-- OpenSCAP compliance results
-- Falco runtime alerts
 
 ---
 
@@ -330,15 +359,6 @@ OpenSCAP Scan → SCAP Results (XML/HTML) → DefectDojo Import → Unified Dash
 - **Multi-Target:** Scans container images, filesystems, Git repositories, and IaC files.
 - **Comprehensive Database:** Maintains an extensive CVE database with fast updates.
 - **Air-Gap Support:** Can operate with locally cached vulnerability databases.
-- **CI/CD Integration:** Easy to integrate into automated pipelines.
-
-**Scan Types:**
-| Target | What It Scans |
-|--------|---------------|
-| Image | Container image layers for vulnerabilities |
-| Filesystem | Local directories for vulnerabilities and secrets |
-| Repository | Git repos for misconfigurations and secrets |
-| Config | IaC files (Terraform, Kubernetes, Docker) |
 
 ---
 
@@ -349,11 +369,6 @@ OpenSCAP Scan → SCAP Results (XML/HTML) → DefectDojo Import → Unified Dash
 **Why it's used:**
 - **Anchore Database:** Leverages Anchore's comprehensive vulnerability feed.
 - **Alternative Perspective:** Provides a second opinion alongside Trivy for thorough coverage.
-- **SBOM Integration:** Works with Software Bill of Materials (SBOM) generated by Syft.
-- **Fast Scanning:** Optimized for quick scans with accurate results.
-
-**Why Use Both Trivy and Grype:**
-Different vulnerability databases may catch different CVEs. Using both ensures more comprehensive coverage.
 
 ---
 
@@ -364,13 +379,6 @@ Different vulnerability databases may catch different CVEs. Using both ensures m
 **Why it's used:**
 - **Best Practices:** Validates images against container security best practices.
 - **CIS Benchmark:** Checks compliance with CIS Docker Benchmark guidelines.
-- **Build-Time Security:** Catches issues before images are deployed.
-
-**Common Checks:**
-- Running as non-root user
-- No sensitive files in image
-- Proper health checks defined
-- No hardcoded secrets
 
 ---
 
@@ -381,14 +389,6 @@ Different vulnerability databases may catch different CVEs. Using both ensures m
 **Why it's used:**
 - **IaC Security:** Scans Docker Compose, Terraform, Kubernetes, and other IaC formats.
 - **Policy-as-Code:** Supports custom policies written in Python or YAML.
-- **Misconfiguration Detection:** Identifies security misconfigurations before deployment.
-- **Compliance Frameworks:** Maps findings to compliance standards (CIS, SOC2, etc.).
-
-**Supported Formats:**
-- Docker Compose files
-- Dockerfiles
-- Kubernetes manifests
-- Terraform configurations
 
 ---
 
@@ -399,8 +399,6 @@ Different vulnerability databases may catch different CVEs. Using both ensures m
 **Why it's used:**
 - **Multi-Cloud:** Supports AWS, Azure, GCP, and Kubernetes configurations.
 - **OPA Integration:** Uses Open Policy Agent (OPA) for policy enforcement.
-- **Alternative to Checkov:** Provides additional coverage with different rule sets.
-- **CI/CD Friendly:** Designed for automated pipeline integration.
 
 ---
 
@@ -411,15 +409,6 @@ Different vulnerability databases may catch different CVEs. Using both ensures m
 **Why it's used:**
 - **Secret Prevention:** Catches hardcoded credentials before they reach production.
 - **Historical Scanning:** Can scan entire Git history for exposed secrets.
-- **Pre-Commit Hook:** Can be used as a pre-commit hook to prevent secret commits.
-- **Custom Rules:** Supports custom patterns for organization-specific secrets.
-
-**Protected Secret Types:**
-- API keys (AWS, Azure, GCP, etc.)
-- Database passwords
-- Private keys and certificates
-- OAuth tokens
-- Generic passwords and credentials
 
 ---
 
@@ -435,27 +424,6 @@ Different vulnerability databases may catch different CVEs. Using both ensures m
 - **Centralized IAM:** Provides single sign-on (SSO) for all web interfaces.
 - **Multi-Factor Authentication:** Enforces MFA for enhanced security.
 - **Access Control:** Implements role-based access control (RBAC) for services.
-- **LDAP/OIDC Support:** Integrates with applications via standard protocols.
-
-**Authentication Flow:**
-```
-User → Authelia/Kanidm → MFA Challenge → Authenticated Session → Application
-```
-
----
-
-### Vaultwarden
-
-**What it is:** Vaultwarden is a lightweight, self-hosted Bitwarden-compatible password manager.
-
-**Why it's used:**
-- **Secret Storage:** Securely stores application credentials and secrets.
-- **Encrypted Database:** All data is encrypted at rest.
-- **Browser Extensions:** Compatible with Bitwarden browser extensions and apps.
-- **No Cloud Dependency:** Operates entirely locally, supporting air-gapped environments.
-
-**Security Mandate:**
-> No plain-text secrets should exist in this repository. All credentials must be stored in Vaultwarden.
 
 ---
 
@@ -467,13 +435,6 @@ User → Authelia/Kanidm → MFA Challenge → Authenticated Session → Applica
 - **Local Registry:** Caches container images for air-gapped operation.
 - **Pull-Through Cache:** Mirrors external registries to reduce external dependencies.
 - **Vulnerability Scanning:** Integrates Trivy for automatic image scanning.
-- **Access Control:** Provides project-based access control for images.
-- **Image Signing:** Supports content trust via Notary for image verification.
-
-**Air-Gap Workflow:**
-```
-Internet → Harbor (Pull-Through Cache) → Internal Network → Podman
-```
 
 ---
 
@@ -484,40 +445,17 @@ Internet → Harbor (Pull-Through Cache) → Internal Network → Podman
 **Why it's used:**
 - **Internal PKI:** Issues certificates for `*.example.local` domain.
 - **ACME Support:** Supports automatic certificate issuance via ACME protocol.
-- **Short-Lived Certificates:** Can issue short-lived certificates for enhanced security.
-- **No External Dependencies:** Removes reliance on external CAs like Let's Encrypt.
-
-**Certificate Hierarchy:**
-```
-Step-CA Root Certificate
-    └── Intermediate CA
-        ├── *.example.local
-        ├── wazuh.example.local
-        └── harbor.example.local
-```
 
 ---
 
-### CrowdSec
+### MinIO
 
-**What it is:** CrowdSec is a collaborative intrusion prevention system that detects and blocks malicious behavior.
+**What it is:** MinIO is a high-performance, S3-compatible object storage server.
 
 **Why it's used:**
-- **Behavioral Detection:** Analyzes logs to detect malicious patterns.
-- **Community Intelligence:** (Optional) Shares threat intelligence with the community.
-- **Bouncer Architecture:** Integrates with firewalls, reverse proxies, and applications.
-- **Podman Compatible:** Works well with containerized deployments.
-
-**Protection Mechanisms:**
-- Brute-force attack mitigation
-- HTTP flood protection
-- Port scan detection
-- Bad bot blocking
-
-**Architecture:**
-```
-Logs → CrowdSec Agent → Decision Engine → Bouncers → Block/Allow
-```
+- **Backend Storage:** Provides persistent storage for Loki logs and backups.
+- **S3 Compatibility:** Works with any application that supports S3-compliant storage.
+- **Scalability:** Can be scaled horizontally to meet increasing storage needs.
 
 ---
 
@@ -527,22 +465,22 @@ Logs → CrowdSec Agent → Decision Engine → Bouncers → Block/Allow
 |----------|-------|---------|
 | **Host OS** | openSUSE MicroOS | Immutable, hardened container host |
 | **Container Engine** | Podman | Rootless container runtime |
-| **Management** | Homepage, Dockge | Dashboard and stack management |
+| **Orchestration** | Traefik, Homepage | Proxy, Dashboard, and Management |
+| **Stack Mgmt** | Dockge | Docker Compose stack management |
 | **AI Analysis** | RamaLama | Intelligent log triage |
 | **SIEM/XDR** | Wazuh | Security event management |
-| **Log Pipeline** | Fluent-bit | Log collection and forwarding |
+| **Log Pipeline** | Vector | Log collection and forwarding |
 | **Runtime Security** | Falco | Real-time threat detection |
-| **Compliance** | OpenSCAP | STIG compliance scanning |
 | **Vuln Management** | DefectDojo | Finding aggregation and tracking |
 | **Image Scanning** | Trivy, Grype | CVE detection |
 | **Image Linting** | Dockle | Best practice validation |
 | **IaC Scanning** | Checkov, Terrascan | Configuration security |
 | **Secret Detection** | Gitleaks | Credential leak prevention |
 | **Identity** | Kanidm, Authelia | Authentication and authorization |
-| **Secrets** | Vaultwarden | Credential management |
 | **Registry** | Harbor | Image caching and scanning |
 | **PKI** | Step-CA | Internal certificate authority |
 | **IPS** | CrowdSec | Intrusion prevention |
+| **Storage** | MinIO | S3-compatible object storage |
 
 ---
 

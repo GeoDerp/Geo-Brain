@@ -6,7 +6,7 @@ services:
     volumes:
       - ./config:/etc/vector:z
       - /var/log:/var/log:ro
-      - /var/run/podman/podman.sock:/var/run/docker.sock:ro # For container logs
+      - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/var/run/docker.sock:ro # For container logs
     networks:
       - monitoring-net
     deploy:
