@@ -1,0 +1,39 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: prometheus
+    restart: always
+    volumes:
+      - ./config:/etc/prometheus:z
+      - ./data:/prometheus:Z
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/console_templates'
+    ports:
+      - 9090:9090
+    networks:
+      - monitoring-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=metrics-storage"
+      - "homepage.group=Observability"
+      - "homepage.name=Prometheus"
+      - "homepage.icon=prometheus.png"
+      - "homepage.description=Metrics Monitoring"
+      - "homepage.href=http://${DOMAIN}:9090"
+
+networks:
+  monitoring-net:
+    driver: bridge

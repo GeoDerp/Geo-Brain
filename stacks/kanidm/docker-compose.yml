@@ -1,0 +1,33 @@
+services:
+  kanidm:
+    image: kanidm/server:1.9.1
+    container_name: kanidm
+    restart: always
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./data:/data:Z
+    networks:
+      - identity-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost:8443/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=identity-provider"
+      - "homepage.group=Identity"
+      - "homepage.name=Kanidm"
+      - "homepage.icon=kanidm.png"
+      - "homepage.description=IDM Server"
+      - "homepage.href=https://${DOMAIN}:8443"
+
+networks:
+  identity-net:
+    driver: bridge

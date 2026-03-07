@@ -1,0 +1,65 @@
+services:
+  defectdojo-django:
+    image: defectdojo/defectdojo-django:2.55.4
+    container_name: defectdojo-django
+    restart: always
+    depends_on:
+      - defectdojo-db
+      - defectdojo-redis
+    environment:
+      - DD_DATABASE_URL=postgres://defectdojo:defectdojo@defectdojo-db:5432/defectdojo
+      - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
+    networks:
+      - vulnerability-net
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=vulnerability-mgmt"
+      - "homepage.group=SOC"
+      - "homepage.name=DefectDojo"
+      - "homepage.icon=defectdojo.png"
+      - "homepage.description=Vulnerability Management"
+      - "homepage.href=http://${DOMAIN}:8080"
+
+  defectdojo-db:
+    image: postgres:15-alpine
+    container_name: defectdojo-db
+    restart: always
+    environment:
+      - POSTGRES_DB=defectdojo
+      - POSTGRES_USER=defectdojo
+      - POSTGRES_PASSWORD=defectdojo # TODO: Move to .env/Vault
+    volumes:
+      - ./data/database:/var/lib/postgresql/data:Z
+    networks:
+      - vulnerability-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.3'
+
+  defectdojo-redis:
+    image: valkey/valkey:7.2.12
+    container_name: defectdojo-redis
+    restart: always
+    networks:
+      - vulnerability-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.2'
+
+networks:
+  vulnerability-net:
+    driver: bridge

@@ -1,0 +1,38 @@
+services:
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-01-20T14-44-14Z
+    container_name: minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - ./data:/data:Z
+    ports:
+      - 9000:9000
+      - 9001:9001
+    networks:
+      - storage-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=storage"
+      - "homepage.group=Infrastructure"
+      - "homepage.name=MinIO"
+      - "homepage.icon=minio.png"
+      - "homepage.description=S3-Compatible Object Storage"
+      - "homepage.href=http://${DOMAIN}:9001"
+
+networks:
+  storage-net:
+    driver: bridge

@@ -1,0 +1,33 @@
+services:
+  authelia:
+    image: authelia/authelia:4.38.19
+    container_name: authelia
+    restart: always
+    volumes:
+      - ./config:/config:z
+    networks:
+      - identity-net
+    ports:
+      - "9091:9091"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.3'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=auth-proxy"
+      - "homepage.group=Identity"
+      - "homepage.name=Authelia"
+      - "homepage.icon=authelia.png"
+      - "homepage.description=Auth & Portal"
+      - "homepage.href=https://${DOMAIN}:9091"
+
+networks:
+  identity-net:
+    external: true
