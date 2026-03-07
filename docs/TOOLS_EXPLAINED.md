@@ -1,6 +1,6 @@
 # GEO-Brain Tools: A Deep Dive
 
-This document provides an educational overview of all tools and technologies used in the GEO-Brain homelab infrastructure. It explains what each tool does, why it was selected, and how it fits into the overall security-focused architecture defined in [GEMINI.md](../GEMINI.md).
+This document provides an educational overview of all tools and technologies used in the GEO-Brain SSOF homelab infrastructure. It explains what each tool does, why it was selected, and how it fits into the overall security-focused architecture defined in [GEMINI.md](../GEMINI.md).
 
 ---
 
@@ -176,6 +176,9 @@ Traditional Docker:     Podman (Rootless):
 - **Customizable:** Supports widgets, bookmarks, and service integrations.
 
 **Configuration Example:**
+
+> **Note:** `${DOMAIN}` is an environment variable configured in the root `.env` file (default: `example.local`).
+
 ```yaml
 labels:
   - "homepage.group=Security"
@@ -213,6 +216,9 @@ labels:
 - **OpenAI-Compatible API:** Easy integration with existing tooling and scripts.
 
 **Use Case:**
+
+See the included `scripts/analysis/analyze_security.py` script for AI-powered security analysis:
+
 ```bash
 # Analyze a Wazuh alert using the local LLM
 ./scripts/analysis/analyze_security.py Wazuh /path/to/alert.log
@@ -550,4 +556,4 @@ Logs → CrowdSec Agent → Decision Engine → Bouncers → Block/Allow
 
 ---
 
-*This document is part of the GEO-Brain Single Source of Truth repository. For architectural mandates and system requirements, see [GEMINI.md](../GEMINI.md).*
+*This document is part of the GEO-Brain SSOF (Single Source of Truth) repository. For architectural mandates and system requirements, see [GEMINI.md](../GEMINI.md).*
