@@ -1,0 +1,33 @@
+services:
+  vaultwarden:
+    image: vaultwarden/server:1.35.1
+    container_name: vaultwarden
+    restart: always
+    environment:
+      - SIGNUPS_ALLOWED=false
+    volumes:
+      - ./data:/data:Z
+    networks:
+      - secret-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.2'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=secret-mgmt"
+      - "homepage.group=Security"
+      - "homepage.name=Vaultwarden"
+      - "homepage.icon=vaultwarden.png"
+      - "homepage.description=Encrypted Secrets Storage"
+      - "homepage.href=http://${DOMAIN}:80"
+
+networks:
+  secret-net:
+    driver: bridge

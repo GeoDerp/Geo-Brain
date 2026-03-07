@@ -1,0 +1,37 @@
+services:
+  dockge:
+    image: louislam/dockge:1
+    container_name: dockge
+    restart: always
+    ports:
+      - 5001:5001
+    volumes:
+      - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/var/run/docker.sock
+      - ./data:/app/data:z
+      - ../:/app/stacks:z
+    environment:
+      - DOCKGE_STACKS_DIR=/app/stacks
+    networks:
+      - mgmt-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.3'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=management"
+      - "homepage.group=Management"
+      - "homepage.name=Dockge"
+      - "homepage.icon=dockge.png"
+      - "homepage.description=Stack Management"
+      - "homepage.href=http://${DOMAIN}:5001"
+
+networks:
+  mgmt-net:
+    driver: bridge

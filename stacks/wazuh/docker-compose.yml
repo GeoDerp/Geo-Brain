@@ -1,0 +1,94 @@
+services:
+  wazuh-indexer:
+    image: wazuh/wazuh-indexer:4.14.3
+    container_name: wazuh-indexer
+    restart: always
+    environment:
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - ./data/indexer:/var/lib/opensearch/data:Z
+    networks:
+      - wazuh-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=indexer"
+      - "homepage.group=SOC"
+      - "homepage.name=Wazuh Indexer"
+      - "homepage.icon=wazuh.png"
+
+  wazuh-manager:
+    image: wazuh/wazuh-manager:4.14.3
+    container_name: wazuh-manager
+    restart: always
+    ports:
+      - 1514:1514
+      - 1515:1515
+      - 55000:55000
+    volumes:
+      - ./data/manager:/var/ossec/data:Z
+    networks:
+      - wazuh-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "/var/ossec/bin/wazuh-control", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=manager"
+      - "homepage.group=SOC"
+      - "homepage.name=Wazuh Manager"
+      - "homepage.icon=wazuh.png"
+
+  wazuh-dashboard:
+    image: wazuh/wazuh-dashboard:4.14.3
+    container_name: wazuh-dashboard
+    restart: always
+    ports:
+      - 443:5601
+    depends_on:
+      - wazuh-indexer
+      - wazuh-manager
+    environment:
+      - WAZUH_MANAGER_URL=http://wazuh-manager
+      - INDEXER_URL=https://wazuh-indexer:9200
+    networks:
+      - wazuh-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5601"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=dashboard"
+      - "homepage.group=SOC"
+      - "homepage.name=Wazuh Dashboard"
+      - "homepage.icon=wazuh.png"
+      - "homepage.description=Security Monitoring Dashboard"
+      - "homepage.href=https://${DOMAIN}:443"
+
+networks:
+  wazuh-net:
+    driver: bridge
+    internal: false # Needs to receive logs from external agents

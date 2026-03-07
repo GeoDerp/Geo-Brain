@@ -1,0 +1,20 @@
+# Environment & Secrets
+.env.local
+.env.*.local
+.env.secrets
+*.key
+*.pem
+
+# Stack data and runtime directories
+stacks/*/data/
+stacks/*/logs/
+
+# OS
+.DS_Store
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/

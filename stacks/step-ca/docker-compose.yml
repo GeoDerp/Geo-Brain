@@ -1,0 +1,36 @@
+services:
+  step-ca:
+    image: docker.io/smallstep/step-ca:0.28.2
+    container_name: step-ca
+    user: "1000:1000"
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./data/step:/home/step:z
+    environment:
+      - DOCKER_STEPCA_INIT_NAME=Example Local CA
+      - DOCKER_STEPCA_INIT_DNS_NAMES=ca.example.local,localhost
+    networks:
+      - pki-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.2'
+    healthcheck:
+      test: ["CMD", "step", "ca", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=pki"
+      - "homepage.group=Security"
+      - "homepage.name=Step CA"
+      - "homepage.icon=step-ca.png"
+      - "homepage.description=Internal Certificate Authority"
+      - "homepage.href=https://${DOMAIN}:9000"
+
+networks:
+  pki-net:
+    driver: bridge

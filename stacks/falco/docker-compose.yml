@@ -1,0 +1,37 @@
+services:
+  falco:
+    image: falcosecurity/falco:0.43.0
+    container_name: falco
+    restart: always
+    privileged: true
+    # modern_ebpf doesn't need modules or boot, but it needs proc and dev
+    volumes:
+      - /dev:/host/dev:ro
+      - /proc:/host/proc:ro
+      - /etc:/host/etc:ro
+      - ./config/falco.yaml:/etc/falco/falco.yaml:ro
+    command: ["falco", "-o", "engine.kind=modern_ebpf"]
+    networks:
+      - security-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "/usr/bin/falco-healthcheck"] # Falco has a built-in healthcheck script in newer versions
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=runtime-security"
+      - "security.stig.bypass_privileged=true"
+      - "homepage.group=SOC"
+      - "homepage.name=Falco"
+      - "homepage.icon=falco.png"
+      - "homepage.description=Runtime Security (eBPF)"
+
+networks:
+  security-net:
+    driver: bridge

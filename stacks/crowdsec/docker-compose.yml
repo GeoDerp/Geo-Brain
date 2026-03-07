@@ -1,0 +1,35 @@
+services:
+  crowdsec:
+    image: crowdsecurity/crowdsec:v1.7.6
+    container_name: crowdsec
+    restart: always
+    environment:
+      - COLLECTIONS=crowdsecurity/linux crowdsecurity/podman
+    volumes:
+      - ./data/config:/etc/crowdsec:z
+      - ./data/data:/var/lib/crowdsec/data:z
+      - /var/log:/var/log:ro # Read host logs
+    networks:
+      - security-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.3'
+    healthcheck:
+      test: ["CMD", "cscli", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=ips"
+      - "homepage.group=SOC"
+      - "homepage.name=CrowdSec"
+      - "homepage.icon=crowdsec.png"
+      - "homepage.description=Intrusion Prevention"
+
+networks:
+  security-net:
+    # Shares network with Falco
+    external: true
