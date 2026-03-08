@@ -42,83 +42,107 @@ This document provides an educational overview of all tools and technologies use
 
 ## Architecture Diagram
 
-The following diagram illustrates how all components interact within the GEO-Brain homelab infrastructure:
+The following diagram illustrates how all components interact within the GEO-Brain homelab infrastructure. Edge labels describe what data flows between components.
 
+```mermaid
+graph TD
+    USER(["User / Browser"])
+
+    subgraph Host ["openSUSE MicroOS (STIG-Compliant, Immutable Host)"]
+
+        subgraph HOST_MON ["Host-Level Monitoring (systemd services)"]
+            JD["journald — captures all systemd<br/>unit and kernel log output"]
+            AD["auditd — records syscall-level<br/>events for STIG audit trails"]
+            TU["transactional-update — reports<br/>atomic OS update status & rollback health"]
+        end
+
+        subgraph Podman ["Podman (Rootless Container Engine — all stacks run unprivileged)"]
+
+            subgraph MGMT ["Management & Orchestration"]
+                TR["Traefik<br/>Reverse proxy that terminates TLS,<br/>routes *.example.local traffic,<br/>and enforces auth via middleware"]
+                HP["Homepage<br/>Dashboard auto-discovers services<br/>via container labels and displays<br/>real-time health status"]
+                DG["Dockge<br/>Visual Compose stack manager<br/>synced from Git for GitOps control"]
+            end
+
+            subgraph AUTH ["Identity & Access"]
+                IAM["Kanidm / Authelia<br/>Centralized SSO + MFA provider;<br/>Traefik delegates all authn/authz here"]
+            end
+
+            subgraph SOC ["Security Operations Center (SOC)"]
+                WZ["Wazuh (SIEM/XDR)<br/>Correlates all security events, runs<br/>threat-detection rules, and monitors<br/>compliance drift"]
+                FL["Falco<br/>eBPF-based runtime monitor that<br/>detects anomalous syscalls inside<br/>containers (shell spawns, file access)"]
+                CS["CrowdSec<br/>Behavioral IPS that analyzes Traefik<br/>access logs and pushes block<br/>decisions to its bouncer"]
+                DD["DefectDojo<br/>Aggregates, deduplicates, and tracks<br/>vulnerability findings from all scanners"]
+                RL["RamaLama<br/>Local LLM (air-gapped) that triages<br/>Wazuh alerts and DefectDojo findings<br/>to assist human operators"]
+            end
+
+            subgraph LGV ["Observability — LGV Stack"]
+                VC["Vector<br/>High-performance log pipeline (Rust);<br/>collects, transforms, and routes<br/>all log data from host + containers"]
+                LK["Loki<br/>Log aggregation engine; indexes<br/>metadata only for cost-efficient<br/>long-term storage on MinIO"]
+                PR["Prometheus<br/>Scrapes /metrics endpoints from all<br/>containers and the host; stores<br/>time-series data for alerting"]
+                GF["Grafana<br/>Unified dashboards querying Loki (logs),<br/>Prometheus (metrics), and Wazuh<br/>(security events) in one pane"]
+            end
+
+            subgraph SCAN ["Vulnerability Scanning Suite (scheduled / CI)"]
+                TV["Trivy — image & filesystem CVE scanner"]
+                GP["Grype — secondary CVE scanner (Anchore feed)"]
+                DL["Dockle — image CIS benchmark linter"]
+                CV["Checkov — IaC policy-as-code scanner"]
+                TS["Terrascan — IaC scanner with OPA policies"]
+                GL["Gitleaks — Git history secret detector"]
+            end
+
+            subgraph INFRA ["Strategic Infrastructure"]
+                HB["Harbor<br/>Pull-through cache / local registry;<br/>mirrors external images for air-gap<br/>and runs Trivy on every push"]
+                CA["Step-CA<br/>Internal ACME-compatible PKI that<br/>issues *.example.local TLS certs<br/>to Traefik automatically"]
+                MO["MinIO<br/>S3-compatible object store backing<br/>Loki log retention and backups"]
+            end
+        end
+    end
+
+    %% ── User Access Flow ──
+    USER -- "HTTPS request<br/>(*.example.local)" --> TR
+    TR -- "ForwardAuth middleware<br/>checks session / MFA" --> IAM
+    IAM -. "auth OK → pass-through" .-> TR
+    TR -- "proxies to backend" --> HP & DG & GF & WZ & DD
+
+    %% ── TLS & Registry Infrastructure ──
+    CA -- "issues ACME certs<br/>(auto-renewed)" --> TR
+    HB -- "serves pinned container<br/>images (digest-verified)" --> Podman
+
+    %% ── Host Logs → Vector Pipeline ──
+    JD -- "system + unit logs" --> VC
+    AD -- "syscall audit events" --> VC
+    TU -- "update status events" --> VC
+
+    %% ── Vector Log Routing (fan-out) ──
+    VC -- "structured logs<br/>(indexed by labels)" --> LK
+    VC -- "security-relevant logs<br/>(auth failures, alerts)" --> WZ
+
+    %% ── Runtime Security ──
+    FL -- "eBPF syscall alerts<br/>(container context)" --> VC
+    CS -- "reads access logs<br/>from Traefik" --> TR
+    CS -. "pushes ban decisions<br/>to Traefik bouncer" .-> TR
+
+    %% ── Observability Queries ──
+    LK -- "log query API" --> GF
+    PR -- "metrics query API" --> GF
+    MO -- "S3 storage backend<br/>for log chunks" --> LK
+    PR -- "scrapes /metrics" --> Podman
+
+    %% ── Vulnerability Scan Results ──
+    TV & GP & DL -- "image scan<br/>findings (SARIF/JSON)" --> DD
+    CV & TS -- "IaC misconfig<br/>findings" --> DD
+    GL -- "exposed secret<br/>findings" --> DD
+
+    %% ── SOC Correlation ──
+    DD -. "high-severity findings<br/>forwarded as alerts" .-> WZ
+    RL -. "queries alerts for<br/>AI-assisted triage" .-> WZ
+    RL -. "queries findings for<br/>prioritization advice" .-> DD
+    WZ -- "security events" --> GF
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                              GEO-BRAIN HOMELAB ARCHITECTURE                             │
-│                           openSUSE MicroOS (STIG Compliant Host)                        │
-├─────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────────────────────┐   │
-│  │                           PODMAN (Rootless Container Engine)                    │   │
-│  ├─────────────────────────────────────────────────────────────────────────────────┤   │
-│  │                                                                                 │   │
-│  │  ┌──────────────────────────────┐    ┌──────────────────────────────────────┐  │   │
-│  │  │   MANAGEMENT & ORCHESTRATION │    │     SECURITY OPERATIONS CENTER       │  │   │
-│  │  │  ┌─────────┐  ┌─────────┐    │    │                                      │  │   │
-│  │  │  │Homepage │  │ Dockge  │    │    │  ┌────────────────────────────────┐  │  │   │
-│  │  │  │(Dashboard)│ │(Stack Mgr)│  │    │  │           WAZUH (SIEM/XDR)     │  │  │   │
-│  │  │  └─────────┘  └─────────┘    │    │  │  ┌──────────┐    ┌──────────┐  │  │  │   │
-│  │  │       │             │        │    │  │  │ Indexer  │    │Dashboard │  │  │  │   │
-│  │  │  ┌────▼─────────────▼────┐   │    │  │  └──────────┘    └──────────┘  │  │  │   │
-│  │  │  │      Traefik          │   │    │  └───────────────▲────────────────┘  │  │   │
-│  │  │  │  (Reverse Proxy/TLS)  │   │    │                  │                   │  │   │
-│  │  │  └──────────────┬────────┘   │    │   ┌──────────────┴─────────────┐     │  │   │
-│  │  │                 │            │    │   │          Vector           │     │  │   │
-│  │  └─────────────────┼────────────┘    │   │     (Log Pipeline)        │     │  │   │
-│  │                    │                 │   └───────────────────────────┘     │  │   │
-│  │  ┌─────────────────▼────────────┐    │                  ▲                   │  │   │
-│  │  │   OBSERVABILITY (LGV)        │    │   ┌──────────────┴─────────────┐     │  │   │
-│  │  │  ┌─────────┐  ┌─────────┐    │    │   │          Falco             │     │  │   │
-│  │  │  │ Grafana │  │  Loki   │    │    │   │  (Runtime Security)        │     │  │   │
-│  │  │  │(Visuals)│  │ (Logs)  │    │    │   └────────────────────────────┘     │  │   │
-│  │  │  └─────────┘  └─────────┘    │    │                                      │  │   │
-│  │  │       ▲             ▲        │    │   ┌────────────────────────────┐     │  │   │
-│  │  │       │             │        │    │   │        DefectDojo          │     │  │   │
-│  │  │  ┌────┴─────────────┴────┐   │    │   │  (Vulnerability Mgmt)      │◀────│──│───┤
-│  │  │  │      Prometheus       │   │    │   └────────────────────────────┘     │  │   │
-│  │  │  │      (Metrics)        │   │    └──────────────────────────────────────┘  │   │
-│  │  │  └───────────────────────┘   │                                               │   │
-│  │  └──────────────────────────────┘                                               │   │
-│  │                                                                                 │   │
-│  │  ┌──────────────────────────────┐    ┌──────────────────────────────────────┐  │   │
-│  │  │ VULNERABILITY SCANNING SUITE │    │    STRATEGIC INFRASTRUCTURE          │  │   │
-│  │  │                              │    │                                      │  │   │
-│  │  │ ┌───────┐ ┌───────┐ ┌──────┐│    │ ┌────────────┐   ┌──────────────┐    │  │   │
-│  │  │ │ Trivy │ │ Grype │ │Dockle││    │ │  Kanidm/   │   │     MinIO    │    │  │   │
-│  │  │ │(CVEs) │ │(CVEs) │ │(Lint)││    │ │  Authelia  │   │   (Storage)  │    │  │   │
-│  │  │ └───┬───┘ └───┬───┘ └──┬───┘│    │ │   (IAM)    │   └──────────────┘    │  │   │
-│  │  │     │         │        │    │    │ └────────────┘                       │  │   │
-│  │  │ ┌───▼─────────▼────────▼──┐ │    │ ┌────────────┐   ┌──────────────┐    │  │   │
-│  │  │ │       DefectDojo        │ │    │ │   Harbor   │   │   Step-CA    │    │  │   │
-│  │  │ │   (Unified Reporting)   │ │    │ │ (Registry) │   │ (Int. PKI)   │    │  │   │
-│  │  │ └─────────────────────────┘ │    │ └────────────┘   └──────────────┘    │  │   │
-│  │  │                              │    │                                      │  │   │
-│  │  │ ┌────────┐ ┌─────────┐      │    │ ┌────────────────────────────────┐   │  │   │
-│  │  │ │Checkov │ │Terrascan│      │    │ │          CrowdSec              │   │  │   │
-│  │  │ │ (IaC)  │ │  (IaC)  │      │    │ │    (Intrusion Prevention)      │   │  │   │
-│  │  │ └────────┘ └─────────┘      │    │ └────────────────────────────────┘   │  │   │
-│  │  │                              │    │                                      │  │   │
-│  │  │ ┌────────────────────────┐  │    │ ┌────────────────────────────────┐   │  │   │
-│  │  │ │       Gitleaks         │  │    │ │         RamaLama               │   │  │   │
-│  │  │ │   (Secret Detection)   │  │    │ │    (Local AI Analysis)         │   │  │   │
-│  │  │ └────────────────────────┘  │    │ └────────────────────────────────┘   │  │   │
-│  │  └──────────────────────────────┘    └──────────────────────────────────────┘  │   │
-│  │                                                                                 │   │
-│  └─────────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────────────────────┐   │
-│  │                              HOST-LEVEL MONITORING                              │   │
-│  │                                                                                 │   │
-│  │   ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────────────┐   │   │
-│  │   │     journald     │   │     auditd       │   │  transactional-update    │   │   │
-│  │   │  (System Logs)   │   │ (Syscall Audit)  │   │   (OS Update Status)     │   │   │
-│  │   └──────────────────┘   └──────────────────┘   └──────────────────────────┘   │   │
-│  └─────────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                         │
-└─────────────────────────────────────────────────────────────────────────────────────────┘
-```
+
+> **Reading the diagram:** Solid arrows (`→`) represent active data flows during normal operation. Dashed arrows (`⇢`) represent on-demand, advisory, or conditional flows (e.g., AI triage queries, alert forwarding).
 
 ---
 

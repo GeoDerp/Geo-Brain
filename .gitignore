@@ -18,3 +18,7 @@ stacks/*/logs/
 # IDE
 .vscode/
 .idea/
+
+# User-specific stacks (ignored)
+stacks/user/
+.env

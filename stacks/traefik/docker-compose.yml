@@ -8,7 +8,7 @@ services:
       - 443:443
     volumes:
       - ./config:/etc/traefik:z
-      - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/var/run/docker.sock:ro
+      - ${PODMAN_SOCK}:/var/run/docker.sock:ro
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"

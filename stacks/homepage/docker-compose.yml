@@ -7,7 +7,7 @@ services:
       - 3000:3000
     volumes:
       - ./config:/app/config:z
-      - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/var/run/docker.sock:ro
+      - ${PODMAN_SOCK}:/var/run/docker.sock:ro
     networks:
       - mgmt-net
     deploy:
@@ -31,5 +31,4 @@ services:
 
 networks:
   mgmt-net:
-    # Use the same management network as Dockge for consistency
     external: true

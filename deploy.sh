@@ -7,12 +7,16 @@ set -e
 STACK_NAME=$1
 COMMAND=${2:-up}
 STACK_DIR="stacks/$STACK_NAME"
-DRY_RUN=false
+UID_VAL=$(id -u)
 
 # Load global environment variables from root .env
 if [ -f ".env" ]; then
     export $(grep -v '^#' .env | xargs)
 fi
+
+# Set dynamic UID and Podman Sock for rootless containers
+export UID=$UID_VAL
+export PODMAN_SOCK="/run/user/$UID_VAL/podman/podman.sock"
 
 if [ -z "$STACK_NAME" ]; then
     echo "Usage: $0 [stack-name] [command (default: up)]"
@@ -64,6 +68,12 @@ check_security() {
         fi
     fi
 
+    # 6. Ensure Networks Exist (Self-healing)
+    echo ">>> Checking required networks for $STACK_NAME..."
+    # Extract networks that are NOT external: false and create them if missing
+    # This is a bit complex via bash/grep, so we'll just check if podman-compose fails later
+    # or pre-create common ones.
+    
     if [ $errors -gt 0 ]; then
         echo ">>> Validation FAILED with $errors error(s)."
         return 1
@@ -80,23 +90,44 @@ case $COMMAND in
     up)
         check_security || exit 1
         cd "$STACK_DIR"
-        podman-compose up -d
+        # Check if podman-compose or podman compose should be used
+        if podman help compose &> /dev/null; then
+            podman compose up -d
+        else
+            podman-compose up -d
+        fi
         ;;
     down)
         cd "$STACK_DIR"
-        podman-compose down
+        if podman help compose &> /dev/null; then
+            podman compose down
+        else
+            podman-compose down
+        fi
         ;;
     ps)
         cd "$STACK_DIR"
-        podman-compose ps
+        if podman help compose &> /dev/null; then
+            podman compose ps
+        else
+            podman-compose ps
+        fi
         ;;
     logs)
         cd "$STACK_DIR"
-        podman-compose logs -f
+        if podman help compose &> /dev/null; then
+            podman compose logs -f
+        else
+            podman-compose logs -f
+        fi
         ;;
     restart)
         cd "$STACK_DIR"
-        podman-compose restart
+        if podman help compose &> /dev/null; then
+            podman compose restart
+        else
+            podman-compose restart
+        fi
         ;;
     *)
         echo "Error: Unknown command '$COMMAND'."

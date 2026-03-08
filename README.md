@@ -25,6 +25,7 @@ This educational resource is designed to help both newcomers and experienced pra
 - **`deploy.sh`**: A wrapper script to validate and deploy stacks reliably via `podman-compose`.
 - **`init-node.sh`**: Bootstraps the host node (eg. openSUSE MicroOS) for remote Podman access and security auditing.
 - **`stacks/`**: Contains the Docker Compose files and respective data/configuration directories for each application.
+- **`stacks/user/`**: (Git-ignored) A dedicated directory for user-specific stacks. Applications placed here will not be committed to the repository, allowing for local experimentation or personal tools (e.g., note-taking, private dashboards) while still leveraging the `deploy.sh` and `init-node.sh` infrastructure.
 - **`scripts/`**: Houses utility scripts, including security auditing tools (`sast/`).
 - **`docs/`**: Educational documentation explaining the tools and architecture used in this project.
 

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# init-node.sh: Initialize an openSUSE MicroOS node for remote Podman deployments.
+# init-node.sh: Initialize an openSUSE MicroOS or Fedora CoreOS node for remote Podman deployments.
 # Usage: ./init-node.sh (Run on the target node)
 
 set -e
 
 # Identification
 OS_ID=$(grep "^ID=" /etc/os-release | cut -d'=' -f2 | tr -d '"')
+VARIANT_ID=$(grep "^VARIANT_ID=" /etc/os-release | cut -d'=' -f2 | tr -d '"')
 USER=$(whoami)
 UID_VAL=$(id -u)
 
@@ -14,7 +15,7 @@ echo ">>> Initializing node for brain-ssof (STIG Homelab)..."
 # 1. OS Validation
 if [[ "$OS_ID" == "opensuse-microos" ]]; then
     PKG_MGR="transactional-update pkg install"
-    REBOOT_CMD="sudo reboot"
+    REBOOT_CMD="sudo transactional-update reboot"
 elif [[ "$OS_ID" == "fedora" || "$OS_ID" == "coreos" ]]; then
     echo ">>> Detected Fedora/CoreOS system..."
     PKG_MGR="rpm-ostree install"
@@ -35,7 +36,8 @@ check_pkg() {
     return 0
 }
 
-PACKAGES=("podman" "podman-compose" "audit" "openssh" "policycoreutils")
+# Core packages required for the project
+PACKAGES=("podman" "podman-compose" "audit" "openssh" "policycoreutils" "firewalld")
 MISSING=0
 for pkg in "${PACKAGES[@]}"; do
     check_pkg "$pkg" || MISSING=$((MISSING+1))
@@ -64,14 +66,25 @@ else
     sudo systemctl enable --now auditd || echo "[ERROR] auditd failed to start."
 fi
 
-# 6. SELinux Check
+# 6. Firewalld Configuration
+if systemctl is-active --quiet firewalld; then
+    echo ">>> Configuring firewalld for remote access..."
+    # Allow podman-remote access if needed (default uses SSH, so SSH is enough)
+    # But let's allow common services
+    sudo firewall-cmd --permanent --add-service=ssh
+    sudo firewall-cmd --permanent --add-service=http
+    sudo firewall-cmd --permanent --add-service=https
+    sudo firewall-cmd --reload
+fi
+
+# 7. SELinux Check
 if [[ $(getenforce) == "Enforcing" ]]; then
     echo ">>> SELinux is ENFORCING (Correct)."
 else
     echo "[WARNING] SELinux is NOT Enforcing. Check /etc/selinux/config."
 fi
 
-# 7. Sysctl for rootless and high-load apps
+# 8. Sysctl for rootless and high-load apps
 if [[ $(sysctl -n kernel.unprivileged_userns_clone 2>/dev/null) == "1" ]]; then
     echo ">>> kernel.unprivileged_userns_clone is enabled."
 fi
@@ -83,7 +96,17 @@ if [[ $(sysctl -n vm.max_map_count) -lt 262144 ]]; then
     echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.d/99-wazuh.conf
 fi
 
-# 8. Summary
+# 9. Pre-create mandatory networks
+echo ">>> Pre-creating mandatory Podman networks..."
+MANDATORY_NETS=("proxy-net" "identity-net" "mgmt-net" "monitoring-net" "soc-net" "lgv-net")
+for net in "${MANDATORY_NETS[@]}"; do
+    if ! podman network exists "$net"; then
+        echo "[FIXING] Creating network: $net..."
+        podman network create --label "security.stig.compliance=true" "$net"
+    fi
+done
+
+# 10. Summary
 echo ">>> node initialization complete."
 echo ">>> Remote access URI: unix:///run/user/$UID_VAL/podman/podman.sock"
 echo ">>> SSH Access: podman --remote --url ssh://$USER@$(hostname -f)/run/user/$UID_VAL/podman/podman.sock"

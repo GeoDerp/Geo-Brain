@@ -6,7 +6,7 @@ services:
     ports:
       - 5001:5001
     volumes:
-      - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/var/run/docker.sock
+      - ${PODMAN_SOCK}:/var/run/docker.sock
       - ./data:/app/data:z
       - ../:/app/stacks:z
     environment:
