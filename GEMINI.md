@@ -45,6 +45,10 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - **Harbor (Registry):** Local OCI registry and pull-through cache with integrated Trivy scanning.
 - **MinIO (Storage):** S3-compatible object storage for Loki chunks and Velero/Restic backups.
 
+### Optional Stacks (WIP)
+- **Pangolin (Tunnel Proxy):** Identity-aware reverse proxy and WireGuard VPN for zero-trust remote access. Replaces Traefik + Authelia when used.
+- **BunkerWeb (WAF):** L7 Web Application Firewall with ModSecurity + OWASP CRS, rate limiting, DDoS protection, and CrowdSec integration. Sits in front of Traefik.
+
 ## Tooling & Automation
 - **`deploy.sh`:** STIG-compliant wrapper that validates image pinning, resource limits, and network isolation before execution.
 - **`init-node.sh`:** Multi-OS bootstrap script for MicroOS/CoreOS; configures `auditd`, `subuids`, and `vm.max_map_count`.

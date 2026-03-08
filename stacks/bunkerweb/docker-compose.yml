@@ -1,0 +1,94 @@
+# # BunkerWeb - L7 Web Application Firewall (WAF) & DDoS Protection
+# # OPTIONAL STACK: Sits in front of Traefik as an L7 WAF perimeter.
+# # When enabled, update Traefik to listen on internal ports only (e.g., 8080/8443)
+# # and point BunkerWeb's REVERSE_PROXY_HOST to Traefik's internal address.
+# # License: AGPL-3.0
+# services:
+#   bunkerweb:
+#     image: bunkerity/bunkerweb-all-in-one:1.6.8
+#     container_name: bunkerweb
+#     restart: always
+#     # AIO image runs internally as UID 101:101 (nginx); cannot override.
+#     ports:
+#       - "80:8080/tcp"
+#       - "443:8443/tcp"
+#       - "443:8443/udp"
+#     environment:
+#       # -- Core --
+#       SERVER_NAME: "${DOMAIN}"
+#       MULTISITE: "no"
+#       DISABLE_DEFAULT_SERVER: "no"
+#       # -- Reverse proxy to Traefik --
+#       USE_REVERSE_PROXY: "yes"
+#       REVERSE_PROXY_URL: "/"
+#       REVERSE_PROXY_HOST: "http://traefik:80"
+#       # -- WAF (ModSecurity + OWASP CRS) --
+#       USE_MODSECURITY: "yes"
+#       USE_MODSECURITY_CRS: "yes"
+#       MODSECURITY_SEC_AUDIT_ENGINE: "RelevantOnly"
+#       # -- DDoS / Rate Limiting --
+#       USE_LIMIT_REQ: "yes"
+#       LIMIT_REQ_URL: "/"
+#       LIMIT_REQ_RATE: "30r/s"
+#       USE_LIMIT_CONN: "yes"
+#       LIMIT_CONN_MAX: "50"
+#       # -- Anti-Bot --
+#       USE_ANTIBOT: "cookie"
+#       # -- Bad Behavior Detection --
+#       USE_BAD_BEHAVIOR: "yes"
+#       BAD_BEHAVIOR_STATUS_CODES: "400 401 403 404 405 429 444"
+#       BAD_BEHAVIOR_THRESHOLD: "10"
+#       BAD_BEHAVIOR_BAN_TIME: "86400"
+#       # -- IP Blacklists & DNSBL --
+#       USE_BLACKLIST: "yes"
+#       USE_DNSBL: "yes"
+#       DNSBL_LIST: "bl.blocklist.de problems.dnsbl.sorbs.net sbl.spamhaus.org xbl.spamhaus.org"
+#       # -- Security Headers --
+#       USE_SECURITY_HEADERS: "yes"
+#       STRICT_TRANSPORT_SECURITY: "max-age=63072000; includeSubDomains; preload"
+#       CONTENT_SECURITY_POLICY: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+#       REFERRER_POLICY: "strict-origin-when-cross-origin"
+#       PERMISSIONS_POLICY: "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+#       X_CONTENT_TYPE_OPTIONS: "nosniff"
+#       X_FRAME_OPTIONS: "SAMEORIGIN"
+#       # -- TLS --
+#       AUTO_LETS_ENCRYPT: "no"
+#       # -- CrowdSec (integrated in AIO) --
+#       USE_CROWDSEC: "yes"
+#       # -- UI --
+#       SERVICE_UI: "yes"
+#       # -- Logging --
+#       LOG_LEVEL: "info"
+#     volumes:
+#       - ./data:/data:Z
+#     networks:
+#       - waf-net
+#       - proxy-net
+#     deploy:
+#       resources:
+#         limits:
+#           memory: 1G
+#           cpus: '0.5'
+#     healthcheck:
+#       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+#       interval: 30s
+#       timeout: 10s
+#       retries: 3
+#     labels:
+#       - "security.stig.compliance=true"
+#       - "security.stig.bypass_privileged=true"
+#       - "security.stig.role=waf"
+#       - "homepage.group=Optional"
+#       - "homepage.name=BunkerWeb"
+#       - "homepage.icon=bunkerweb.png"
+#       - "homepage.description=L7 WAF & DDoS Protection"
+#       - "homepage.href=https://waf.${DOMAIN}"
+
+# networks:
+#   waf-net:
+#     driver: bridge
+#     labels:
+#       - "security.stig.compliance=true"
+#       - "security.stig.role=waf-network"
+#   proxy-net:
+#     external: true

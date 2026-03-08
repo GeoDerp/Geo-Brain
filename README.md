@@ -55,6 +55,15 @@ The infrastructure is broken down into modular stacks, all utilizing rootless Po
 - **Security Operations Center (SOC):** Wazuh, Falco, DefectDojo, **RamaLama (AI Analysis)**
 - **Core Security Infrastructure:** Vaultwarden (Secrets), Kanidm (Identity), Step-CA (Internal PKI), Harbor (Registry), CrowdSec (Intrusion Prevention)
 
+### Optional Stacks
+
+These stacks are **not deployed by default** and serve as drop-in enhancements for specific use cases:
+
+- **Pangolin (Zero-Trust Tunnel Proxy):** Identity-aware reverse proxy and WireGuard VPN for secure remote access without exposing ports or requiring a public IP. Replaces Traefik + Authelia when tunnel-based access is needed. *(AGPL-3.0, fosrl/pangolin)*
+- **BunkerWeb (L7 WAF & DDoS Protection):** Next-generation Web Application Firewall based on NGINX with integrated ModSecurity + OWASP Core Rule Set, rate limiting, anti-bot challenges, IP blacklists, DNSBL, and CrowdSec integration. Sits in front of Traefik as an L7 security perimeter. *(AGPL-3.0, bunkerity/bunkerweb)*
+
+> **Note:** Pangolin bundles its own Traefik instance and **cannot** run alongside the existing Traefik stack. BunkerWeb requires Traefik to move to internal-only ports when deployed as the external-facing WAF.
+
 ---
 
 ## Configuration

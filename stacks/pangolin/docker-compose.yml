@@ -1,0 +1,71 @@
+# # Pangolin - Identity-Aware Reverse Proxy & WireGuard VPN
+# # OPTIONAL STACK: Replaces Traefik + Authelia for zero-trust tunnel-based access.
+# # Pangolin bundles its own Traefik instance; do NOT run alongside the traefik stack.
+# # Requires ports 80, 443, 51820 (site tunnels), and 21820 (client VPN).
+# # License: AGPL-3.0 (Community Edition)
+# services:
+#   pangolin:
+#     image: ghcr.io/fosrl/pangolin:1.16.2
+#     container_name: pangolin
+#     restart: always
+#     volumes:
+#       - ./config:/app/config:z
+#       - ./data:/app/config/db:Z
+#     networks:
+#       - pangolin-net
+#     deploy:
+#       resources:
+#         limits:
+#           memory: 512M
+#           cpus: '0.5'
+#     healthcheck:
+#       test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/auth/check"]
+#       interval: 30s
+#       timeout: 10s
+#       retries: 3
+#     labels:
+#       - "security.stig.compliance=true"
+#       - "security.stig.role=tunnel-proxy"
+#       - "homepage.group=Optional"
+#       - "homepage.name=Pangolin"
+#       - "homepage.icon=pangolin.png"
+#       - "homepage.description=Zero-Trust Tunnel Proxy"
+#       - "homepage.href=https://pangolin.${DOMAIN}"
+
+#   gerbil:
+#     image: ghcr.io/fosrl/gerbil:1.16.2
+#     container_name: gerbil
+#     restart: always
+#     cap_add:
+#       - NET_ADMIN
+#       - SYS_MODULE
+#     ports:
+#       - 80:80
+#       - 443:443
+#       - 51820:51820/udp
+#       - 21820:21820/udp
+#     volumes:
+#       - ./config:/app/config:z
+#     networks:
+#       - pangolin-net
+#     deploy:
+#       resources:
+#         limits:
+#           memory: 256M
+#           cpus: '0.3'
+#     healthcheck:
+#       test: ["CMD", "cat", "/proc/net/udp"]
+#       interval: 30s
+#       timeout: 10s
+#       retries: 3
+#     labels:
+#       - "security.stig.compliance=true"
+#       - "security.stig.bypass_privileged=true"
+#       - "security.stig.role=wireguard-tunnel"
+
+# networks:
+#   pangolin-net:
+#     driver: bridge
+#     labels:
+#       - "security.stig.compliance=true"
+#       - "security.stig.role=pangolin-network"
