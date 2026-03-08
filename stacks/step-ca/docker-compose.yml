@@ -2,9 +2,10 @@ services:
   step-ca:
     image: docker.io/smallstep/step-ca:0.28.2
     container_name: step-ca
+    restart: always
     user: "1000:1000"
     ports:
-      - "9000:9000"
+      - "9443:9000"
     volumes:
       - ./data/step:/home/step:z
     environment:
@@ -12,6 +13,7 @@ services:
       - DOCKER_STEPCA_INIT_DNS_NAMES=ca.example.local,localhost
     networks:
       - pki-net
+      - proxy-net
     deploy:
       resources:
         limits:
@@ -29,8 +31,10 @@ services:
       - "homepage.name=Step CA"
       - "homepage.icon=step-ca.png"
       - "homepage.description=Internal Certificate Authority"
-      - "homepage.href=https://${DOMAIN}:9000"
+      - "homepage.href=https://ca.${DOMAIN}:9443"
 
 networks:
   pki-net:
     driver: bridge
+  proxy-net:
+    external: true

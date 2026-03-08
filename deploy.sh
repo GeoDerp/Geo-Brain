@@ -15,7 +15,7 @@ if [ -f ".env" ]; then
 fi
 
 # Set dynamic UID and Podman Sock for rootless containers
-export UID=$UID_VAL
+export CONTAINER_UID=$UID_VAL
 export PODMAN_SOCK="/run/user/$UID_VAL/podman/podman.sock"
 
 if [ -z "$STACK_NAME" ]; then
@@ -90,43 +90,58 @@ case $COMMAND in
     up)
         check_security || exit 1
         cd "$STACK_DIR"
-        # Check if podman-compose or podman compose should be used
-        if podman help compose &> /dev/null; then
+        # Preference: 'podman compose' (plugin) > 'podman-compose' (standalone)
+        if podman compose version &> /dev/null; then
             podman compose up -d
-        else
+        elif command -v podman-compose &> /dev/null; then
             podman-compose up -d
+        else
+            echo "[ERROR] Neither 'podman compose' nor 'podman-compose' found."
+            exit 1
         fi
         ;;
     down)
         cd "$STACK_DIR"
-        if podman help compose &> /dev/null; then
+        if podman compose version &> /dev/null; then
             podman compose down
-        else
+        elif command -v podman-compose &> /dev/null; then
             podman-compose down
+        else
+            echo "[ERROR] Neither 'podman compose' nor 'podman-compose' found."
+            exit 1
         fi
         ;;
     ps)
         cd "$STACK_DIR"
-        if podman help compose &> /dev/null; then
+        if podman compose version &> /dev/null; then
             podman compose ps
-        else
+        elif command -v podman-compose &> /dev/null; then
             podman-compose ps
+        else
+            echo "[ERROR] Neither 'podman compose' nor 'podman-compose' found."
+            exit 1
         fi
         ;;
     logs)
         cd "$STACK_DIR"
-        if podman help compose &> /dev/null; then
+        if podman compose version &> /dev/null; then
             podman compose logs -f
-        else
+        elif command -v podman-compose &> /dev/null; then
             podman-compose logs -f
+        else
+            echo "[ERROR] Neither 'podman compose' nor 'podman-compose' found."
+            exit 1
         fi
         ;;
     restart)
         cd "$STACK_DIR"
-        if podman help compose &> /dev/null; then
+        if podman compose version &> /dev/null; then
             podman compose restart
-        else
+        elif command -v podman-compose &> /dev/null; then
             podman-compose restart
+        else
+            echo "[ERROR] Neither 'podman compose' nor 'podman-compose' found."
+            exit 1
         fi
         ;;
     *)

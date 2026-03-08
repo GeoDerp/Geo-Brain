@@ -3,6 +3,7 @@ services:
     image: authelia/authelia:4.38.19
     container_name: authelia
     restart: always
+    user: "1000:1000"
     volumes:
       - ./config:/config:z
     networks:

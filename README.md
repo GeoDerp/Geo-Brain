@@ -6,6 +6,20 @@ For comprehensive architectural mandates, system security guidelines, and the co
 
 ---
 
+## Scope: Deployment & Monitoring, Not GitOps
+
+> **This is not a GitOps or DevSecOps CI/CD pipeline.**
+
+This repository does **not** build, scan, or push container images. There is no `build → scan → push → deploy` automation cycle here. Instead, this repo:
+
+- **Pulls pre-built images** from public or private container registries (e.g., Docker Hub, GHCR, Harbor)
+- **Deploys and configures** those existing containers on a single node using Podman + Compose
+- **Monitors and audits** the running environment using a security-focused tool stack (Wazuh, Falco, CrowdSec, etc.)
+
+If you are looking for a full DevSecOps GitOps pipeline with image building, SBOM generation, registry signing, and automated rollouts, this repository is out of scope for that pattern. The focus here is on **operational security** — hardening, observability, and incident response for already-deployed workloads.
+
+---
+
 ## Understanding the Tools
 
 New to security-focused homelabs or want a deeper understanding of why specific tools were chosen? Check out our **[Tools Explained](./docs/TOOLS_EXPLAINED.md)** documentation which provides:

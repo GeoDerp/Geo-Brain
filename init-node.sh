@@ -12,14 +12,19 @@ UID_VAL=$(id -u)
 
 echo ">>> Initializing node for brain-ssof (STIG Homelab)..."
 
-# 1. OS Validation
+# 1. OS Validation & Configuration
 if [[ "$OS_ID" == "opensuse-microos" ]]; then
+    echo ">>> Detected openSUSE MicroOS..."
     PKG_MGR="transactional-update pkg install"
     REBOOT_CMD="sudo transactional-update reboot"
-elif [[ "$OS_ID" == "fedora" || "$OS_ID" == "coreos" ]]; then
-    echo ">>> Detected Fedora/CoreOS system..."
+elif [[ "$VARIANT_ID" == "coreos" ]]; then
+    echo ">>> Detected Fedora CoreOS..."
     PKG_MGR="rpm-ostree install"
     REBOOT_CMD="sudo systemctl reboot"
+elif [[ "$OS_ID" == "fedora" ]]; then
+    echo ">>> Detected Fedora (Standard/Server)..."
+    PKG_MGR="dnf install"
+    REBOOT_CMD="sudo reboot"
 else
     echo "[WARNING] Unknown OS: $OS_ID. Manual package installation required."
     PKG_MGR="echo [MANUAL] Install:"
@@ -37,15 +42,23 @@ check_pkg() {
 }
 
 # Core packages required for the project
-PACKAGES=("podman" "podman-compose" "audit" "openssh" "policycoreutils" "firewalld")
+# Note: podman-compose might be in a different repo for CoreOS (use 'podman compose' plugin if possible)
+PACKAGES=("podman" "audit" "openssh" "policycoreutils" "firewalld")
 MISSING=0
 for pkg in "${PACKAGES[@]}"; do
     check_pkg "$pkg" || MISSING=$((MISSING+1))
 done
 
+# Special check for podman-compose or the podman compose plugin
+if ! podman help compose &> /dev/null && ! command -v podman-compose &> /dev/null; then
+    echo "[REQUIRED] Neither 'podman compose' plugin nor 'podman-compose' found."
+    echo "On MicroOS: sudo transactional-update pkg install podman-compose && sudo transactional-update reboot"
+    echo "On CoreOS: sudo rpm-ostree install podman-compose && sudo systemctl reboot"
+    MISSING=$((MISSING+1))
+fi
+
 if [ $MISSING -gt 0 ]; then
-    echo "[CRITICAL] $MISSING required packages are missing. Fix them before continuing."
-    # We don't exit here because some might be in the current transaction but not yet rebooted
+    echo "[CRITICAL] $MISSING required package(s) or plugin(s) are missing. Fix them before continuing."
 fi
 
 # 3. Rootless Configuration (subuid/subgid)
@@ -56,6 +69,8 @@ fi
 
 # 4. Podman Socket for Remote Access
 echo ">>> Enabling podman.socket for rootless usage..."
+# Ensure the user runtime directory exists
+export XDG_RUNTIME_DIR="/run/user/$UID_VAL"
 systemctl --user enable --now podman.socket
 
 # 5. Security Services (auditd)
@@ -69,8 +84,6 @@ fi
 # 6. Firewalld Configuration
 if systemctl is-active --quiet firewalld; then
     echo ">>> Configuring firewalld for remote access..."
-    # Allow podman-remote access if needed (default uses SSH, so SSH is enough)
-    # But let's allow common services
     sudo firewall-cmd --permanent --add-service=ssh
     sudo firewall-cmd --permanent --add-service=http
     sudo firewall-cmd --permanent --add-service=https
@@ -98,7 +111,7 @@ fi
 
 # 9. Pre-create mandatory networks
 echo ">>> Pre-creating mandatory Podman networks..."
-MANDATORY_NETS=("proxy-net" "identity-net" "mgmt-net" "monitoring-net" "soc-net" "lgv-net")
+MANDATORY_NETS=("proxy-net" "identity-net" "mgmt-net" "monitoring-net" "security-net" "wazuh-net" "vulnerability-net" "harbor-net" "storage-net" "pki-net" "user-net")
 for net in "${MANDATORY_NETS[@]}"; do
     if ! podman network exists "$net"; then
         echo "[FIXING] Creating network: $net..."

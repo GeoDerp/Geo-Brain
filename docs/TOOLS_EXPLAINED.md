@@ -46,103 +46,123 @@ The following diagram illustrates how all components interact within the GEO-Bra
 
 ```mermaid
 graph TD
-    USER(["User / Browser"])
+    USER(["🖥️ User / Browser"])
 
-    subgraph Host ["openSUSE MicroOS (STIG-Compliant, Immutable Host)"]
+    subgraph Host ["openSUSE MicroOS — STIG-Compliant Immutable Host"]
 
-        subgraph HOST_MON ["Host-Level Monitoring (systemd services)"]
-            JD["journald — captures all systemd<br/>unit and kernel log output"]
-            AD["auditd — records syscall-level<br/>events for STIG audit trails"]
-            TU["transactional-update — reports<br/>atomic OS update status & rollback health"]
+        subgraph HOST_MON ["Host-Level Monitoring"]
+            JD["journald"]
+            AD["auditd"]
+            TU["transactional-update"]
         end
 
-        subgraph Podman ["Podman (Rootless Container Engine — all stacks run unprivileged)"]
+        subgraph Podman ["Podman — Rootless Container Engine"]
 
             subgraph MGMT ["Management & Orchestration"]
-                TR["Traefik<br/>Reverse proxy that terminates TLS,<br/>routes *.example.local traffic,<br/>and enforces auth via middleware"]
-                HP["Homepage<br/>Dashboard auto-discovers services<br/>via container labels and displays<br/>real-time health status"]
-                DG["Dockge<br/>Visual Compose stack manager<br/>synced from Git for GitOps control"]
+                TR["Traefik — Reverse Proxy / TLS"]
+                HP["Homepage — Dashboard"]
+                DG["Dockge — Stack Manager"]
             end
 
             subgraph AUTH ["Identity & Access"]
-                IAM["Kanidm / Authelia<br/>Centralized SSO + MFA provider;<br/>Traefik delegates all authn/authz here"]
+                IAM["Kanidm / Authelia — SSO + MFA"]
             end
 
-            subgraph SOC ["Security Operations Center (SOC)"]
-                WZ["Wazuh (SIEM/XDR)<br/>Correlates all security events, runs<br/>threat-detection rules, and monitors<br/>compliance drift"]
-                FL["Falco<br/>eBPF-based runtime monitor that<br/>detects anomalous syscalls inside<br/>containers (shell spawns, file access)"]
-                CS["CrowdSec<br/>Behavioral IPS that analyzes Traefik<br/>access logs and pushes block<br/>decisions to its bouncer"]
-                DD["DefectDojo<br/>Aggregates, deduplicates, and tracks<br/>vulnerability findings from all scanners"]
-                RL["RamaLama<br/>Local LLM (air-gapped) that triages<br/>Wazuh alerts and DefectDojo findings<br/>to assist human operators"]
+            subgraph SOC ["Security Operations Center"]
+                WZ["Wazuh — SIEM / XDR"]
+                FL["Falco — Runtime Security"]
+                CS["CrowdSec — IPS"]
+                DD["DefectDojo — Vuln Tracking"]
+                RL["RamaLama — AI Triage"]
             end
 
             subgraph LGV ["Observability — LGV Stack"]
-                VC["Vector<br/>High-performance log pipeline (Rust);<br/>collects, transforms, and routes<br/>all log data from host + containers"]
-                LK["Loki<br/>Log aggregation engine; indexes<br/>metadata only for cost-efficient<br/>long-term storage on MinIO"]
-                PR["Prometheus<br/>Scrapes /metrics endpoints from all<br/>containers and the host; stores<br/>time-series data for alerting"]
-                GF["Grafana<br/>Unified dashboards querying Loki (logs),<br/>Prometheus (metrics), and Wazuh<br/>(security events) in one pane"]
+                VC["Vector — Log Pipeline"]
+                LK["Loki — Log Store"]
+                PR["Prometheus — Metrics"]
+                GF["Grafana — Dashboards"]
             end
 
-            subgraph SCAN ["Vulnerability Scanning Suite (scheduled / CI)"]
-                TV["Trivy — image & filesystem CVE scanner"]
-                GP["Grype — secondary CVE scanner (Anchore feed)"]
-                DL["Dockle — image CIS benchmark linter"]
-                CV["Checkov — IaC policy-as-code scanner"]
-                TS["Terrascan — IaC scanner with OPA policies"]
-                GL["Gitleaks — Git history secret detector"]
+            subgraph SCAN ["Vulnerability Scanning"]
+                TV["Trivy"]
+                GP["Grype"]
+                DL["Dockle"]
+                CV["Checkov"]
+                TS["Terrascan"]
+                GL["Gitleaks"]
             end
 
             subgraph INFRA ["Strategic Infrastructure"]
-                HB["Harbor<br/>Pull-through cache / local registry;<br/>mirrors external images for air-gap<br/>and runs Trivy on every push"]
-                CA["Step-CA<br/>Internal ACME-compatible PKI that<br/>issues *.example.local TLS certs<br/>to Traefik automatically"]
-                MO["MinIO<br/>S3-compatible object store backing<br/>Loki log retention and backups"]
+                HB["Harbor — Registry / Cache"]
+                CA["Step-CA — Internal PKI"]
+                MO["MinIO — S3 Storage"]
             end
         end
     end
 
     %% ── User Access Flow ──
-    USER -- "HTTPS request<br/>(*.example.local)" --> TR
-    TR -- "ForwardAuth middleware<br/>checks session / MFA" --> IAM
-    IAM -. "auth OK → pass-through" .-> TR
-    TR -- "proxies to backend" --> HP & DG & GF & WZ & DD
+    USER -- "HTTPS *.example.local" --> TR
+    TR -- "ForwardAuth (MFA check)" --> IAM
+    IAM -. "auth OK" .-> TR
+    TR -- "proxy" --> HP & DG & GF & WZ & DD
 
-    %% ── TLS & Registry Infrastructure ──
-    CA -- "issues ACME certs<br/>(auto-renewed)" --> TR
-    HB -- "serves pinned container<br/>images (digest-verified)" --> Podman
+    %% ── Infrastructure ──
+    CA -- "ACME certs" --> TR
+    HB -- "pinned images" --> Podman
 
-    %% ── Host Logs → Vector Pipeline ──
-    JD -- "system + unit logs" --> VC
-    AD -- "syscall audit events" --> VC
-    TU -- "update status events" --> VC
+    %% ── Host → Vector ──
+    JD -- "system logs" --> VC
+    AD -- "audit events" --> VC
+    TU -- "update status" --> VC
 
-    %% ── Vector Log Routing (fan-out) ──
-    VC -- "structured logs<br/>(indexed by labels)" --> LK
-    VC -- "security-relevant logs<br/>(auth failures, alerts)" --> WZ
+    %% ── Vector fan-out ──
+    VC -- "structured logs" --> LK
+    VC -- "security logs" --> WZ
 
     %% ── Runtime Security ──
-    FL -- "eBPF syscall alerts<br/>(container context)" --> VC
-    CS -- "reads access logs<br/>from Traefik" --> TR
-    CS -. "pushes ban decisions<br/>to Traefik bouncer" .-> TR
+    FL -- "syscall alerts" --> VC
+    CS -- "reads access logs" --> TR
+    CS -. "ban decisions" .-> TR
 
-    %% ── Observability Queries ──
-    LK -- "log query API" --> GF
-    PR -- "metrics query API" --> GF
-    MO -- "S3 storage backend<br/>for log chunks" --> LK
+    %% ── Observability ──
+    LK -- "log queries" --> GF
+    PR -- "metric queries" --> GF
+    MO -- "S3 backend" --> LK
     PR -- "scrapes /metrics" --> Podman
+    WZ -- "security events" --> GF
 
-    %% ── Vulnerability Scan Results ──
-    TV & GP & DL -- "image scan<br/>findings (SARIF/JSON)" --> DD
-    CV & TS -- "IaC misconfig<br/>findings" --> DD
-    GL -- "exposed secret<br/>findings" --> DD
+    %% ── Scan Results ──
+    TV & GP & DL -- "image findings" --> DD
+    CV & TS -- "IaC findings" --> DD
+    GL -- "secret findings" --> DD
 
     %% ── SOC Correlation ──
-    DD -. "high-severity findings<br/>forwarded as alerts" .-> WZ
-    RL -. "queries alerts for<br/>AI-assisted triage" .-> WZ
-    RL -. "queries findings for<br/>prioritization advice" .-> DD
-    WZ -- "security events" --> GF
+    DD -. "high-sev alerts" .-> WZ
+    RL -. "triage queries" .-> WZ
+    RL -. "finding queries" .-> DD
+
+    %% ── Colour Classes ──
+    classDef user fill:#64748b,stroke:#334155,color:#fff
+    classDef mgmt fill:#3b82f6,stroke:#1e40af,color:#fff
+    classDef auth fill:#8b5cf6,stroke:#5b21b6,color:#fff
+    classDef soc fill:#ef4444,stroke:#991b1b,color:#fff
+    classDef obs fill:#22c55e,stroke:#166534,color:#fff
+    classDef scan fill:#f59e0b,stroke:#92400e,color:#fff
+    classDef infra fill:#06b6d4,stroke:#0e7490,color:#fff
+    classDef host fill:#78716c,stroke:#44403c,color:#fff
+
+    class USER user
+    class TR,HP,DG mgmt
+    class IAM auth
+    class WZ,FL,CS,DD,RL soc
+    class VC,LK,PR,GF obs
+    class TV,GP,DL,CV,TS,GL scan
+    class HB,CA,MO infra
+    class JD,AD,TU host
 ```
 
-> **Reading the diagram:** Solid arrows (`→`) represent active data flows during normal operation. Dashed arrows (`⇢`) represent on-demand, advisory, or conditional flows (e.g., AI triage queries, alert forwarding).
+> **Reading the diagram:** Solid arrows (`→`) show active data flows. Dashed arrows (`⇢`) show on-demand or conditional flows (AI triage, alert forwarding). Node colours indicate category:
+> 🔵 Management &middot; 🟣 Identity &middot; 🔴 SOC &middot; 🟢 Observability &middot; 🟡 Scanning &middot; 🩵 Infrastructure &middot; ⚫ Host
 
 ---
 

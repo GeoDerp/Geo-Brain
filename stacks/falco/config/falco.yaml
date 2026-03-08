@@ -1,0 +1,50 @@
+# Falco Configuration
+# Ref: https://falco.org/docs/reference/daemon/config-options/
+
+# Engine configuration — use modern eBPF
+engine:
+  kind: modern_ebpf
+
+# Output settings
+stdout_output:
+  enabled: true
+
+file_output:
+  enabled: true
+  keep_alive: false
+  filename: /var/log/falco/events.json
+
+json_output: true
+json_include_output_property: true
+json_include_tags_property: true
+
+http_output:
+  enabled: true
+  url: "http://vector:8686/falco"
+  user_agent: "falco/0.43.0"
+
+# Log level
+log_level: info
+log_stderr: true
+log_syslog: false
+
+# Rules
+rules_files:
+  - /etc/falco/falco_rules.yaml
+  - /etc/falco/falco_rules.local.yaml
+
+# Priority filter — only emit notices and above
+priority: notice
+
+# Buffered outputs for performance
+buffered_outputs: true
+
+# Metrics endpoint for Prometheus
+metrics:
+  enabled: true
+  interval: 30s
+  output_rule: true
+  resource_utilization_enabled: true
+
+# Watch config for hot-reload
+watch_config_files: true

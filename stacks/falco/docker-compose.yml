@@ -13,6 +13,7 @@ services:
     command: ["falco", "-o", "engine.kind=modern_ebpf"]
     networks:
       - security-net
+      - monitoring-net
     deploy:
       resources:
         limits:
@@ -35,3 +36,5 @@ services:
 networks:
   security-net:
     driver: bridge
+  monitoring-net:
+    external: true

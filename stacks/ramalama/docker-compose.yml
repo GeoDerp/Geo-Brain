@@ -13,6 +13,8 @@ services:
     command: serve phi3:mini
     networks:
       - secure-backbone
+      - wazuh-net
+      - vulnerability-net
     deploy:
       resources:
         limits:
@@ -30,9 +32,13 @@ services:
       - "homepage.name=RamaLama (Air-gapped LLM)"
       - "homepage.icon=ramalama.png"
       - "homepage.description=Local Security Analysis"
-      - "homepage.href=http://${DOMAIN}:8084"
+      - "homepage.href=https://ramalama.${DOMAIN}"
     user: "1000:1000"
 
 networks:
   secure-backbone:
     internal: true # No egress for air-gap reliability
+  wazuh-net:
+    external: true
+  vulnerability-net:
+    external: true

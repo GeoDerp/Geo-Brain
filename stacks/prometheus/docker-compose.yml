@@ -3,6 +3,7 @@ services:
     image: prom/prometheus:v3.1.0
     container_name: prometheus
     restart: always
+    user: "65534:65534"
     volumes:
       - ./config:/etc/prometheus:z
       - ./data:/prometheus:Z
@@ -15,6 +16,10 @@ services:
       - 9090:9090
     networks:
       - monitoring-net
+      - proxy-net
+      - security-net
+      - wazuh-net
+      - storage-net
     deploy:
       resources:
         limits:
@@ -32,8 +37,16 @@ services:
       - "homepage.name=Prometheus"
       - "homepage.icon=prometheus.png"
       - "homepage.description=Metrics Monitoring"
-      - "homepage.href=http://${DOMAIN}:9090"
+      - "homepage.href=https://prometheus.${DOMAIN}"
 
 networks:
   monitoring-net:
     driver: bridge
+  proxy-net:
+    external: true
+  security-net:
+    external: true
+  wazuh-net:
+    external: true
+  storage-net:
+    external: true

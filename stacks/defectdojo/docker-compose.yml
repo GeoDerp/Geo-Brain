@@ -7,10 +7,11 @@ services:
       - defectdojo-db
       - defectdojo-redis
     environment:
-      - DD_DATABASE_URL=postgres://defectdojo:defectdojo@defectdojo-db:5432/defectdojo
+      - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
       - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
     networks:
       - vulnerability-net
+      - proxy-net
     deploy:
       resources:
         limits:
@@ -28,7 +29,7 @@ services:
       - "homepage.name=DefectDojo"
       - "homepage.icon=defectdojo.png"
       - "homepage.description=Vulnerability Management"
-      - "homepage.href=http://${DOMAIN}:8080"
+      - "homepage.href=https://defectdojo.${DOMAIN}"
 
   defectdojo-db:
     image: postgres:15-alpine
@@ -36,8 +37,8 @@ services:
     restart: always
     environment:
       - POSTGRES_DB=defectdojo
-      - POSTGRES_USER=defectdojo
-      - POSTGRES_PASSWORD=defectdojo # TODO: Move to .env/Vault
+      - POSTGRES_USER=${DEFECTDOJO_DB_USER:-defectdojo}
+      - POSTGRES_PASSWORD=${DEFECTDOJO_DB_PASSWORD}
     volumes:
       - ./data/database:/var/lib/postgresql/data:Z
     networks:
@@ -47,6 +48,11 @@ services:
         limits:
           memory: 512M
           cpus: '0.3'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DEFECTDOJO_DB_USER:-defectdojo}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   defectdojo-redis:
     image: valkey/valkey:7.2.12
@@ -59,7 +65,14 @@ services:
         limits:
           memory: 256M
           cpus: '0.2'
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   vulnerability-net:
     driver: bridge
+  proxy-net:
+    external: true

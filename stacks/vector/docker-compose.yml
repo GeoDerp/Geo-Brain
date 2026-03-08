@@ -3,12 +3,15 @@ services:
     image: timberio/vector:0.44.0-debian
     container_name: vector
     restart: always
+    user: "1000:1000"
     volumes:
       - ./config:/etc/vector:z
       - /var/log:/var/log:ro
       - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/var/run/docker.sock:ro # For container logs
     networks:
       - monitoring-net
+      - wazuh-net
+      - security-net
     deploy:
       resources:
         limits:
@@ -29,4 +32,8 @@ services:
 
 networks:
   monitoring-net:
+    external: true
+  wazuh-net:
+    external: true
+  security-net:
     external: true

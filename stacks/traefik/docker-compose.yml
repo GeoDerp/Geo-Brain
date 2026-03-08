@@ -3,23 +3,24 @@ services:
     image: traefik:v3.3.4
     container_name: traefik
     restart: always
+    user: "1000:1000"
     ports:
       - 80:80
       - 443:443
     volumes:
       - ./config:/etc/traefik:z
+      - ./data/logs:/var/log/traefik:Z
       - ${PODMAN_SOCK}:/var/run/docker.sock:ro
-    command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--ping=true"
     networks:
       - proxy-net
       - identity-net
       - mgmt-net
       - monitoring-net
+      - security-net
+      - wazuh-net
+      - vulnerability-net
+      - harbor-net
+      - user-net
     deploy:
       resources:
         limits:
@@ -37,7 +38,7 @@ services:
       - "homepage.name=Traefik"
       - "homepage.icon=traefik.png"
       - "homepage.description=Edge Proxy"
-      - "homepage.href=http://traefik.${DOMAIN}"
+      - "homepage.href=https://traefik.${DOMAIN}"
 
 networks:
   proxy-net:
@@ -50,4 +51,14 @@ networks:
   mgmt-net:
     external: true
   monitoring-net:
+    external: true
+  security-net:
+    external: true
+  wazuh-net:
+    external: true
+  vulnerability-net:
+    external: true
+  harbor-net:
+    external: true
+  user-net:
     external: true

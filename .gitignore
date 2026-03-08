@@ -2,8 +2,8 @@
 .env.local
 .env.*.local
 .env.secrets
-*.key
-*.pem
+
+# SSL/TLS Certificates & Private Keys
 
 # Stack data and runtime directories
 stacks/*/data/
@@ -21,4 +21,5 @@ stacks/*/logs/
 
 # User-specific stacks (ignored)
 stacks/user/
-.env
+
+/.env

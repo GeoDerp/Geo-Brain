@@ -3,6 +3,7 @@ services:
     image: ghcr.io/gethomepage/homepage:v0.9.13
     container_name: homepage
     restart: always
+    user: "1000:1000"
     ports:
       - 3000:3000
     volumes:
@@ -27,7 +28,7 @@ services:
       - "homepage.name=Dashboard"
       - "homepage.icon=homepage.png"
       - "homepage.description=Service Dashboard"
-      - "homepage.href=http://${DOMAIN}:3000"
+      - "homepage.href=https://home.${DOMAIN}"
 
 networks:
   mgmt-net:

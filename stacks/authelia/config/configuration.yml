@@ -1,0 +1,76 @@
+# Authelia Configuration
+# Ref: https://www.authelia.com/configuration/
+
+theme: dark
+
+server:
+  address: "tcp://0.0.0.0:9091"
+
+log:
+  level: info
+  format: json
+
+totp:
+  issuer: "geo-brain"
+  period: 30
+  skew: 1
+
+authentication_backend:
+  # Use Kanidm as LDAP backend
+  ldap:
+    address: "ldaps://kanidm:8443"
+    implementation: custom
+    start_tls: false
+    base_dn: "dc=example,dc=local"
+    users_filter: "(&(|({username_attribute}={input})({mail_attribute}={input}))(objectClass=person))"
+    groups_filter: "(member={dn})"
+    attributes:
+      username: "uid"
+      display_name: "displayName"
+      mail: "mail"
+      group_name: "cn"
+    user: "uid=authelia_svc,dc=example,dc=local"
+    password: "${AUTHELIA_LDAP_PASSWORD}"
+
+access_control:
+  default_policy: deny
+  rules:
+    # Public endpoints
+    - domain: "home.${DOMAIN}"
+      policy: one_factor
+
+    # Admin services — require two-factor
+    - domain:
+        - "grafana.${DOMAIN}"
+        - "wazuh.${DOMAIN}"
+        - "defectdojo.${DOMAIN}"
+        - "dockge.${DOMAIN}"
+        - "harbor.${DOMAIN}"
+      policy: two_factor
+
+    # User apps
+    - domain: "silverbullet.${DOMAIN}"
+      policy: one_factor
+
+session:
+  name: authelia_session
+  same_site: lax
+  inactivity: 5m
+  expiration: 1h
+  remember_me: 1M
+  cookies:
+    - domain: "${DOMAIN}"
+      authelia_url: "https://auth.${DOMAIN}"
+
+regulation:
+  max_retries: 3
+  find_time: 2m
+  ban_time: 5m
+
+storage:
+  local:
+    path: /config/db.sqlite3
+
+notifier:
+  filesystem:
+    filename: /config/notification.txt

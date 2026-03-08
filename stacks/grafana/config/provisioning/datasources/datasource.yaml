@@ -10,3 +10,12 @@ datasources:
     type: loki
     url: http://loki:3100
     access: proxy
+  - name: Wazuh (OpenSearch)
+    type: grafana-opensearch-datasource
+    url: https://wazuh-indexer:9200
+    access: proxy
+    jsonData:
+      database: "wazuh-alerts-*"
+      flavor: opensearch
+      version: "2.x"
+      tlsSkipVerify: true

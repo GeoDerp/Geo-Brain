@@ -3,6 +3,7 @@ services:
     image: grafana/loki:3.4.1
     container_name: loki
     restart: always
+    user: "10001:10001"
     ports:
       - 3100:3100
     volumes:

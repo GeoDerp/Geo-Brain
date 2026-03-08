@@ -3,14 +3,65 @@ sources:
     type: journald
   podman_logs:
     type: docker_logs
+  falco_alerts:
+    type: http_server
+    address: "0.0.0.0:8686"
+    path: "/falco"
+    encoding: json
+  internal_metrics:
+    type: internal_metrics
 
-sinks:
-  loki:
-    type: loki
+transforms:
+  # Tag security-relevant logs for Wazuh forwarding
+  classify_logs:
+    type: remap
     inputs:
       - journald
       - podman_logs
+    source: |
+      .labels.host = get_env_var!("HOSTNAME")
+      .labels.pipeline = "vector"
+      if contains(to_string(.MESSAGE) ?? "", r'(authentication|failed|denied|unauthorized|error|CVE|alert)') ?? false {
+        .labels.security = "true"
+      }
+
+  # Normalize Falco events
+  falco_normalize:
+    type: remap
+    inputs:
+      - falco_alerts
+    source: |
+      .labels.source = "falco"
+      .labels.security = "true"
+      .labels.host = get_env_var!("HOSTNAME")
+
+sinks:
+  # All logs → Loki
+  loki:
+    type: loki
+    inputs:
+      - classify_logs
+      - falco_normalize
     endpoint: http://loki:3100
     labels:
-      host: "${HOSTNAME:-geo-brain}"
-      source: vector
+      host: "{{ labels.host }}"
+      source: "{{ labels.source }}"
+      pipeline: vector
+
+  # Security logs → Wazuh Manager (syslog)
+  wazuh:
+    type: socket
+    inputs:
+      - classify_logs
+      - falco_normalize
+    mode: tcp
+    address: "wazuh-manager:1514"
+    encoding:
+      codec: json
+
+  # Vector internal metrics → Prometheus
+  vector_metrics:
+    type: prometheus_exporter
+    inputs:
+      - internal_metrics
+    address: "0.0.0.0:9598"

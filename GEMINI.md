@@ -12,6 +12,7 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 
 ## Mandates & Standards
 - **STIG Compliance:** All configurations must align with DISA STIGs for Linux and Container Security.
+- **Tool Selection:** All tools added as a stack must be DISA STIG compliant, highly relied upon (industry-backed), and regularly scanned/maintained.
 - **Rootless:** All containers MUST run as rootless. Exceptions (e.g., Falco eBPF) must be explicitly labeled with `security.stig.bypass_privileged=true`.
 - **Reliability:** Every service must define `deploy.resources.limits` and `healthcheck`.
 - **Network Isolation:** Applications reside on dedicated Podman networks. No inter-stack communication unless explicitly defined.

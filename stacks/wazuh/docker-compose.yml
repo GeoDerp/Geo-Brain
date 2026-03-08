@@ -60,7 +60,7 @@ services:
     container_name: wazuh-dashboard
     restart: always
     ports:
-      - 443:5601
+      - 5601:5601
     depends_on:
       - wazuh-indexer
       - wazuh-manager
@@ -69,6 +69,7 @@ services:
       - INDEXER_URL=https://wazuh-indexer:9200
     networks:
       - wazuh-net
+      - monitoring-net
     deploy:
       resources:
         limits:
@@ -86,9 +87,11 @@ services:
       - "homepage.name=Wazuh Dashboard"
       - "homepage.icon=wazuh.png"
       - "homepage.description=Security Monitoring Dashboard"
-      - "homepage.href=https://${DOMAIN}:443"
+      - "homepage.href=https://wazuh.${DOMAIN}"
 
 networks:
   wazuh-net:
     driver: bridge
     internal: false # Needs to receive logs from external agents
+  monitoring-net:
+    external: true

@@ -9,8 +9,29 @@ scrape_configs:
 
   - job_name: 'vector'
     static_configs:
-      - targets: ['vector:9090']
+      - targets: ['vector:9598']
 
   - job_name: 'loki'
     static_configs:
       - targets: ['loki:3100']
+
+  - job_name: 'traefik'
+    static_configs:
+      - targets: ['traefik:8082']
+
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+
+  - job_name: 'minio'
+    metrics_path: /minio/v2/metrics/cluster
+    static_configs:
+      - targets: ['minio:9000']
+
+  - job_name: 'crowdsec'
+    static_configs:
+      - targets: ['crowdsec:6060']
+
+  - job_name: 'wazuh-indexer'
+    static_configs:
+      - targets: ['wazuh-indexer:9200']
