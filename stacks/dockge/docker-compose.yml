@@ -3,7 +3,7 @@ services:
     image: louislam/dockge:1.4.2
     container_name: dockge
     restart: always
-    user: "1000:1000"
+    user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       - 5001:5001
     volumes:

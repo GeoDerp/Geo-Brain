@@ -50,8 +50,9 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - **BunkerWeb (WAF):** L7 Web Application Firewall with ModSecurity + OWASP CRS, rate limiting, DDoS protection, and CrowdSec integration. Sits in front of Traefik.
 
 ## Tooling & Automation
-- **`deploy.sh`:** STIG-compliant wrapper that validates image pinning, resource limits, and network isolation before execution.
-- **`init-node.sh`:** Multi-OS bootstrap script for MicroOS/CoreOS; configures `auditd`, `subuids`, and `vm.max_map_count`.
+- **`init-node.sh`:** Thin wrapper that handles SSH agent setup, argument parsing, and pre-flight checks, then delegates to the Ansible playbook. Accepts `--host`, `--user`, `--key`, `--port`, `--yes` flags; omitted options are prompted interactively.
+- **`ansible/init-node.yml`:** Ansible playbook that provisions the remote homelab node (Podman, `podman.socket`, `auditd`, SELinux, firewalld, subuids, linger, sysctl), then registers a local `podman system connection` for remote access. Confirms major changes (package installs, firewall rules, SELinux, podman-remote registration) unless `--yes` / `-e auto_yes=true` is passed.
+- **`deploy.sh`:** STIG-compliant deployment wrapper. Validates image pinning, resource limits, and network isolation locally, then syncs and deploys stacks to the remote node via SSH. Falls back to local deployment if no remote is configured.
 - **`scripts/sast/sast-scan.sh`:** Automated security scanning using Trivy, Checkov, Gitleaks, and Semgrep.
 
 ## Health Monitoring

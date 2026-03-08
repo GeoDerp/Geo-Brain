@@ -23,3 +23,5 @@ stacks/*/logs/
 stacks/user/
 
 /.env
+.env
+

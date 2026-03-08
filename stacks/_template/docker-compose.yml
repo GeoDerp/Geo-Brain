@@ -1,0 +1,62 @@
+# =============================================================================
+# Stack Name: <STACK_NAME>
+# Description: <Brief description of the service>
+# License: <License identifier>
+# =============================================================================
+# Usage:
+#   1. Copy this directory:  cp -r _template stacks/<your-stack-name>
+#   2. Update image, ports, volumes, and labels below.
+#   3. Add any required secrets to .env-template and your local .env.
+#   4. Deploy:  ./deploy.sh <your-stack-name> up
+#
+# DISA STIG / GEMINI.md Checklist:
+#   [x] Image pinned to exact version (no :latest)
+#   [x] deploy.resources.limits defined (memory + cpus)
+#   [x] healthcheck defined
+#   [x] Runs rootless via ${PUID}:${PGID}
+#   [x] Dedicated network (no inter-stack unless justified)
+#   [x] STIG compliance labels present
+#   [x] No hardcoded secrets (all from .env)
+# =============================================================================
+
+services:
+  <service-name>:
+    image: <registry>/<image>:<pinned-version>
+    container_name: <service-name>
+    restart: always
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "${<SERVICE>_PORT:-<default-host-port>}:<container-port>"
+    volumes:
+      - ./data:/data:Z
+      # - ./config:/config:z    # Uncomment if the service needs config mounts
+    environment:
+      - EXAMPLE_VAR=${EXAMPLE_VAR:-default_value}
+    networks:
+      - <stack>-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.3'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:<container-port>/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=<role>"
+      # Uncomment and customise for Homepage dashboard integration:
+      # - "homepage.group=<Group>"
+      # - "homepage.name=<Display Name>"
+      # - "homepage.icon=<icon>.png"
+      # - "homepage.description=<Short description>"
+      # - "homepage.href=https://<subdomain>.${DOMAIN}"
+
+networks:
+  <stack>-net:
+    driver: bridge
+    # If this stack needs to talk to Traefik, replace with:
+    # proxy-net:
+    #   external: true

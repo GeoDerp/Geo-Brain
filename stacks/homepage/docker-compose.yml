@@ -3,7 +3,7 @@ services:
     image: ghcr.io/gethomepage/homepage:v0.9.13
     container_name: homepage
     restart: always
-    user: "1000:1000"
+    user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       - 3000:3000
     volumes:

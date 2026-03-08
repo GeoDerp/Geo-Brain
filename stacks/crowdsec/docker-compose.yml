@@ -3,7 +3,7 @@ services:
     image: crowdsecurity/crowdsec:v1.7.6
     container_name: crowdsec
     restart: always
-    user: "1000:1000"
+    user: "${PUID:-1000}:${PGID:-1000}"
     environment:
       - COLLECTIONS=crowdsecurity/linux crowdsecurity/podman crowdsecurity/traefik
     ports:

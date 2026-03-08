@@ -8,9 +8,9 @@ services:
     volumes:
       - ./models:/root/.local/share/ramalama/models:ro
     environment:
-      - RAMALAMA_MODEL=phi3:mini
-      - RAMALAMA_TRANSPORT=local
-    command: serve phi3:mini
+      - RAMALAMA_MODEL=${RAMALAMA_MODEL:-phi3:mini}
+      - RAMALAMA_TRANSPORT=${RAMALAMA_TRANSPORT:-local}
+    command: serve ${RAMALAMA_MODEL:-phi3:mini}
     networks:
       - secure-backbone
       - wazuh-net
@@ -33,7 +33,7 @@ services:
       - "homepage.icon=ramalama.png"
       - "homepage.description=Local Security Analysis"
       - "homepage.href=https://ramalama.${DOMAIN}"
-    user: "1000:1000"
+    user: "${PUID:-1000}:${PGID:-1000}"
 
 networks:
   secure-backbone:

@@ -1,0 +1,500 @@
+---
+# =============================================================================
+# brain-ssof: Remote Node Initialization
+# =============================================================================
+# Replaces init-node.sh — provisions a remote homelab node and configures
+# local podman-remote access.
+#
+# Usage (via wrapper script):
+#   Interactive:       ./init-node.sh
+#   With pre-filled:   ./init-node.sh --host 10.0.0.5 --user geo --key ~/.ssh/id_ed25519
+#   Non-interactive:   ./init-node.sh --host 10.0.0.5 --yes
+#
+# Direct Ansible (advanced):
+#   ansible-playbook ansible/init-node.yml
+#   ansible-playbook ansible/init-node.yml -e auto_yes=true
+#
+# Phase 1: SSH into the remote node — install packages, enable services,
+#           configure SELinux, firewalld, rootless subuids, linger, sysctl.
+# Phase 2: Register a local podman system connection for podman-remote.
+# Phase 3: Verify the connection and persist config to .env.
+# =============================================================================
+
+
+# =============================================================================
+#   Phase 0 — Gather Connection Details (Interactive Prompts)
+# =============================================================================
+- name: "Phase 0: Gather Connection Details"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  # CLI overrides: init-node.sh passes -e cli_remote_host=... etc.
+  # vars_prompt is skipped for any field already set via extra vars.
+  vars_prompt:
+    - name: remote_host
+      prompt: "\n  Homelab IP address"
+      default: "{{ cli_remote_host | default('') }}"
+      private: false
+
+    - name: target_user
+      prompt: "  SSH user on homelab"
+      default: "{{ cli_target_user | default(lookup('env', 'USER')) }}"
+      private: false
+
+    - name: ssh_key_path
+      prompt: "  Path to SSH private key"
+      default: "{{ cli_ssh_key_path | default('~/.ssh/id_ed25519') }}"
+      private: false
+
+    - name: ssh_port
+      prompt: "  SSH port"
+      default: "{{ cli_ssh_port | default('22') }}"
+      private: false
+
+    - name: become_pass
+      prompt: "  Remote sudo password"
+      private: true
+
+  tasks:
+    - name: Fail if no host provided
+      ansible.builtin.fail:
+        msg: "Homelab IP address is required."
+      when: remote_host | default('') | length == 0
+
+    - name: Expand SSH key path
+      ansible.builtin.set_fact:
+        ssh_key: "{{ ssh_key_path | expanduser }}"
+
+    - name: Validate SSH key exists
+      ansible.builtin.stat:
+        path: "{{ ssh_key }}"
+      register: key_stat
+
+    - name: Fail if SSH key not found
+      ansible.builtin.fail:
+        msg: "SSH key not found: {{ ssh_key }}"
+      when: not key_stat.stat.exists
+
+    - name: Display connection info
+      ansible.builtin.debug:
+        msg: |-
+          brain-ssof: Remote Node Initialization
+            Target: {{ target_user }}@{{ remote_host }}:{{ ssh_port }}
+            Key:    {{ ssh_key }}
+
+    - name: Add remote host to dynamic inventory
+      ansible.builtin.add_host:
+        name: "{{ remote_host }}"
+        groups: homelab
+        ansible_user: "{{ target_user }}"
+        ansible_port: "{{ ssh_port }}"
+        ansible_ssh_private_key_file: "{{ ssh_key }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
+        ansible_python_interpreter: auto
+        ansible_become_password: "{{ become_pass }}"
+        # Carried through for Phase 2/3
+        brain_remote_host: "{{ remote_host }}"
+        brain_target_user: "{{ target_user }}"
+        brain_ssh_key: "{{ ssh_key }}"
+        brain_ssh_port: "{{ ssh_port }}"
+
+
+# =============================================================================
+#   Phase 1 — Remote Node Provisioning
+# =============================================================================
+- name: "Phase 1: Remote Node Provisioning"
+  hosts: homelab
+  gather_facts: true
+  become: false
+
+  vars:
+    auto_yes: false
+    required_packages:
+      - podman
+      - audit
+      - openssh-server
+      - policycoreutils
+      - firewalld
+    selinux_packages:
+      - selinux-policy
+      - selinux-policy-targeted
+      - libselinux-utils
+      - policycoreutils
+    firewall_services:
+      - ssh
+      - http
+      - https
+    project_dir: brain-ssof
+
+  tasks:
+    # ----- Detect OS type from /etc/os-release VARIANT_ID -----
+    - name: Read /etc/os-release
+      ansible.builtin.slurp:
+        src: /etc/os-release
+      register: os_release_raw
+
+    - name: Parse os-release fields
+      ansible.builtin.set_fact:
+        os_release: >-
+          {{ dict(
+               (os_release_raw.content | b64decode).splitlines()
+               | select('match', '^[A-Z_]+=')
+               | map('regex_replace', '^([^=]+)=(.*)', '\1=\2')
+               | map('split', '=', 1)
+             ) }}
+
+    - name: Detect OS variant
+      ansible.builtin.set_fact:
+        os_id: "{{ os_release.get('ID', '') | replace('\"', '') }}"
+        os_variant_id: "{{ os_release.get('VARIANT_ID', '') | replace('\"', '') }}"
+        os_pretty_name: "{{ os_release.get('PRETTY_NAME', '') | replace('\"', '') }}"
+
+    - name: Classify OS type
+      ansible.builtin.set_fact:
+        is_microos: "{{ os_id == 'opensuse-microos' or os_variant_id == 'microos' }}"
+        is_coreos: "{{ os_id == 'fedora' and os_variant_id == 'coreos' }}"
+        is_standard_fedora: "{{ os_id == 'fedora' and os_variant_id != 'coreos' }}"
+        is_ostree: "{{ os_variant_id in ['coreos', 'microos'] }}"
+
+    - name: Display remote system information
+      ansible.builtin.debug:
+        msg: |-
+          Remote System Information
+          -------------------------
+          OS:          {{ os_pretty_name }}
+          ID:          {{ os_id }}
+          Variant:     {{ os_variant_id | default('none', true) }}
+          Kernel:      {{ ansible_kernel }}
+          User:        {{ ansible_user_id }} (UID {{ ansible_user_uid }})
+          SELinux:     {{ ansible_selinux.status | default('unavailable') }} {{ ansible_selinux.mode | default('') }}
+          OS type:     {{ 'MicroOS (transactional)' if is_microos | bool else ('CoreOS (rpm-ostree)' if is_coreos | bool else 'Standard Fedora (dnf)') }}
+
+    # =================================================================
+    #  1. Install Required Packages
+    # =================================================================
+    - name: "Confirm: Install packages ({{ required_packages | join(', ') }})"
+      ansible.builtin.pause:
+        prompt: >-
+          [1/10] Will install: {{ required_packages | join(', ') }}
+          via {{ 'rpm-ostree' if is_coreos | bool else ('transactional-update' if is_microos | bool else 'dnf') }}.
+          Press ENTER to continue or Ctrl+C → A to abort
+      when: not (auto_yes | bool)
+
+    - name: "[1/10] Install required packages (dnf)"
+      become: true
+      ansible.builtin.dnf:
+        name: "{{ required_packages }}"
+        state: present
+      when: is_standard_fedora | bool
+
+    - name: "[1/10] Install required packages (rpm-ostree — CoreOS)"
+      become: true
+      ansible.builtin.command:
+        cmd: "rpm-ostree install --idempotent {{ required_packages | join(' ') }}"
+      register: rpm_ostree_result
+      changed_when: "'Installing' in (rpm_ostree_result.stdout | default(''))"
+      when: is_coreos | bool
+
+    - name: "[1/10] Install required packages (transactional-update — MicroOS)"
+      become: true
+      ansible.builtin.command:
+        cmd: "transactional-update pkg install -y {{ required_packages | join(' ') }}"
+      register: tu_result
+      changed_when: "'installing' in (tu_result.stdout | default('') | lower)"
+      when: is_microos | bool
+
+    # =================================================================
+    #  2. Install Compose Support
+    # =================================================================
+    - name: Check for compose support
+      ansible.builtin.command:
+        cmd: podman compose version
+      register: compose_check
+      changed_when: false
+      failed_when: false
+
+    - name: "[2/10] Install podman-compose (dnf)"
+      become: true
+      ansible.builtin.dnf:
+        name: podman-compose
+        state: present
+      when:
+        - compose_check.rc != 0
+        - is_standard_fedora | bool
+
+    - name: "[2/10] Install podman-compose (rpm-ostree)"
+      become: true
+      ansible.builtin.command:
+        cmd: "rpm-ostree install --idempotent podman-compose"
+      register: compose_ostree
+      changed_when: "'Installing' in (compose_ostree.stdout | default(''))"
+      when:
+        - compose_check.rc != 0
+        - is_coreos | bool
+
+    # =================================================================
+    #  3. Rootless UID/GID Mapping (subuids/subgids)
+    # =================================================================
+    - name: Check subuid mapping
+      ansible.builtin.command:
+        cmd: "grep -q {{ ansible_user_id }} /etc/subuid"
+      register: subuid_check
+      changed_when: false
+      failed_when: false
+
+    - name: "[3/10] Configure rootless UID/GID mapping"
+      become: true
+      ansible.builtin.command:
+        cmd: >-
+          usermod
+          --add-subuids 100000-165535
+          --add-subgids 100000-165535
+          {{ ansible_user_id }}
+      when: subuid_check.rc != 0
+
+    # =================================================================
+    #  4. Enable Podman Socket (rootless)
+    # =================================================================
+    - name: "[4/10] Enable podman socket (rootless)"
+      ansible.builtin.systemd:
+        name: podman.socket
+        scope: user
+        state: started
+        enabled: true
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
+
+    # =================================================================
+    #  5. Enable Audit Daemon
+    # =================================================================
+    - name: "[5/10] Enable audit daemon (auditd)"
+      become: true
+      ansible.builtin.systemd:
+        name: auditd
+        state: started
+        enabled: true
+
+    # =================================================================
+    #  6. Configure Firewall Rules
+    # =================================================================
+    - name: Check firewalld status
+      ansible.builtin.command:
+        cmd: systemctl is-active firewalld
+      register: firewalld_active
+      changed_when: false
+      failed_when: false
+
+    - name: "Confirm: Open firewall ports (ssh, http, https)"
+      ansible.builtin.pause:
+        prompt: >-
+          [6/10] Will permanently allow services: {{ firewall_services | join(', ') }} in firewalld.
+          Press ENTER to continue or Ctrl+C → A to abort
+      when:
+        - firewalld_active.stdout == 'active'
+        - not (auto_yes | bool)
+
+    - name: "[6/10] Allow firewall services (ssh, http, https)"
+      become: true
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop: "{{ firewall_services }}"
+      when: firewalld_active.stdout == 'active'
+
+    - name: "[6/10] Firewalld not active — skipping"
+      ansible.builtin.debug:
+        msg: "WARNING: firewalld is not active — skipping firewall configuration."
+      when: firewalld_active.stdout != 'active'
+
+    # =================================================================
+    #  7. SELinux
+    # =================================================================
+    - name: "Confirm: SELinux enforcement changes"
+      ansible.builtin.pause:
+        prompt: >-
+          [7/10] Will set SELinux to enforcing mode (current: {{ ansible_selinux.mode | default(ansible_selinux.status | default('disabled')) }}).
+          This may require a reboot. Press ENTER to continue or Ctrl+C → A to abort
+      when:
+        - ansible_selinux.mode | default('') != 'enforcing'
+        - not (auto_yes | bool)
+
+    - name: "[7/10] Install SELinux packages (dnf)"
+      become: true
+      ansible.builtin.dnf:
+        name: "{{ selinux_packages }}"
+        state: present
+      when:
+        - ansible_selinux.status | default('disabled') in ['disabled', 'Missing selinux Python library']
+        - is_standard_fedora | bool
+
+    - name: "[7/10] Set SELinux to enforcing"
+      become: true
+      ansible.posix.selinux:
+        policy: targeted
+        state: enforcing
+      register: selinux_result
+      when: ansible_selinux.status | default('disabled') not in ['disabled', 'Missing selinux Python library']
+
+    - name: "[7/10] Enable SELinux in config (currently disabled/unavailable)"
+      become: true
+      ansible.builtin.lineinfile:
+        path: /etc/selinux/config
+        regexp: '^SELINUX='
+        line: 'SELINUX=enforcing'
+        create: true
+        mode: "0644"
+      when: ansible_selinux.status | default('disabled') == 'disabled'
+
+    - name: Note reboot needed for SELinux
+      ansible.builtin.debug:
+        msg: "SELinux change requires a reboot to take effect."
+      when: >-
+        (selinux_result is defined and selinux_result.reboot_required | default(false))
+        or ansible_selinux.status | default('disabled') == 'disabled'
+
+    # =================================================================
+    #  8. Sysctl — vm.max_map_count
+    # =================================================================
+    - name: "[8/10] Set vm.max_map_count=262144 (Wazuh/Elasticsearch)"
+      become: true
+      ansible.posix.sysctl:
+        name: vm.max_map_count
+        value: "262144"
+        sysctl_file: /etc/sysctl.d/99-wazuh.conf
+        reload: true
+        state: present
+
+    # =================================================================
+    #  9. Enable Login Linger
+    # =================================================================
+    - name: Check linger status
+      ansible.builtin.command:
+        cmd: "loginctl show-user {{ ansible_user_id }} --property=Linger"
+      register: linger_check
+      changed_when: false
+      failed_when: false
+
+    - name: "[9/10] Enable login linger for {{ ansible_user_id }}"
+      become: true
+      ansible.builtin.command:
+        cmd: "loginctl enable-linger {{ ansible_user_id }}"
+      when: "'Linger=yes' not in (linger_check.stdout | default(''))"
+      changed_when: true
+
+    # =================================================================
+    #  10. Project Directory
+    # =================================================================
+    - name: "[10/10] Create project directory ~/{{ project_dir }}"
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/{{ project_dir }}"
+        state: directory
+        mode: "0755"
+
+
+# =============================================================================
+#   Phase 2 & 3 — Local podman-remote Setup & Verification
+# =============================================================================
+- name: "Phase 2 & 3: Local podman-remote Setup & Verification"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    auto_yes: false
+    connection_name: homelab
+    project_dir: brain-ssof
+
+  tasks:
+    - name: Pull connection variables from remote host facts
+      ansible.builtin.set_fact:
+        remote_host: "{{ hostvars[groups['homelab'][0]].brain_remote_host }}"
+        target_user: "{{ hostvars[groups['homelab'][0]].brain_target_user }}"
+        ssh_key: "{{ hostvars[groups['homelab'][0]].brain_ssh_key }}"
+        ssh_port: "{{ hostvars[groups['homelab'][0]].brain_ssh_port }}"
+        remote_uid: "{{ hostvars[groups['homelab'][0]].ansible_user_uid }}"
+
+    - name: Compute remote socket path
+      ansible.builtin.set_fact:
+        remote_sock: "/run/user/{{ remote_uid }}/podman/podman.sock"
+
+    - name: Display podman-remote connection details
+      ansible.builtin.debug:
+        msg: |-
+          Register Podman Remote Connection
+          -----------------------------------
+          Connection name: {{ connection_name }}
+          Socket path:     {{ remote_sock }}
+          URI:             ssh://{{ target_user }}@{{ remote_host }}:{{ ssh_port }}{{ remote_sock }}
+
+    - name: "Confirm: Register podman-remote connection"
+      ansible.builtin.pause:
+        prompt: >-
+          Will register local podman connection '{{ connection_name }}'
+          pointing to ssh://{{ target_user }}@{{ remote_host }}:{{ ssh_port }}{{ remote_sock }}.
+          Press ENTER to continue or Ctrl+C → A to abort
+      when: not (auto_yes | bool)
+
+    - name: "Remove existing podman connection '{{ connection_name }}'"
+      ansible.builtin.command:
+        cmd: "podman system connection remove {{ connection_name }}"
+      changed_when: true
+      failed_when: false
+
+    - name: "Register podman remote connection '{{ connection_name }}'"
+      ansible.builtin.command:
+        cmd: >-
+          podman system connection add
+          --identity {{ ssh_key }}
+          {{ connection_name }}
+          ssh://{{ target_user }}@{{ remote_host }}:{{ ssh_port }}{{ remote_sock }}
+      changed_when: true
+
+    - name: "Set '{{ connection_name }}' as default connection"
+      ansible.builtin.command:
+        cmd: "podman system connection default {{ connection_name }}"
+      changed_when: true
+
+    - name: Verify podman-remote connection
+      ansible.builtin.command:
+        cmd: "podman --connection {{ connection_name }} info --format '{{ '{{' }}.Host.Os{{ '}}' }}'"
+      register: verify_result
+      changed_when: false
+      failed_when: false
+
+    - name: Display verification result
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'Connection OK (Remote OS: ' ~ verify_result.stdout ~ ')'
+             if verify_result.rc == 0
+             else 'WARNING: podman-remote connection test failed. Debug: podman --connection '
+                  ~ connection_name ~ ' info' }}
+
+    - name: "Persist connection config to .env"
+      ansible.builtin.blockinfile:
+        path: "{{ playbook_dir }}/../.env"
+        create: true
+        mode: "0600"
+        marker: "# {mark} Homelab Remote Connection (written by ansible/init-node.yml)"
+        block: |
+          REMOTE_HOST={{ remote_host }}
+          REMOTE_USER={{ target_user }}
+          SSH_KEY={{ ssh_key }}
+          SSH_PORT={{ ssh_port }}
+          CONNECTION_NAME={{ connection_name }}
+          REMOTE_PROJECT_DIR={{ project_dir }}
+
+    - name: Setup complete
+      ansible.builtin.debug:
+        msg: |-
+          =========================================
+            Setup Complete
+          =========================================
+            Remote:     {{ target_user }}@{{ remote_host }}
+            Connection: {{ connection_name }}
+            Config:     .env
+
+            Test:       podman --connection {{ connection_name }} ps
+            Deploy:     ./deploy.sh <stack-name> up

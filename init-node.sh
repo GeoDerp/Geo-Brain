@@ -1,125 +1,88 @@
 #!/usr/bin/env bash
-# init-node.sh: Initialize an openSUSE MicroOS or Fedora CoreOS node for remote Podman deployments.
-# Usage: ./init-node.sh (Run on the target node)
+# init-node.sh: Provision a remote homelab node via Ansible.
+# Usage: ./init-node.sh [--host IP] [--user USER] [--key PATH] [--port PORT] [--yes]
+#
+# Thin wrapper that handles SSH agent setup, argument parsing, and pre-flight
+# checks, then delegates provisioning to ansible/init-node.yml.
 
-set -e
+set -euo pipefail
 
-# Identification
-OS_ID=$(grep "^ID=" /etc/os-release | cut -d'=' -f2 | tr -d '"')
-VARIANT_ID=$(grep "^VARIANT_ID=" /etc/os-release | cut -d'=' -f2 | tr -d '"')
-USER=$(whoami)
-UID_VAL=$(id -u)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLAYBOOK="${SCRIPT_DIR}/ansible/init-node.yml"
 
-echo ">>> Initializing node for brain-ssof (STIG Homelab)..."
+# --- Configuration ---
+REMOTE_HOST=""
+REMOTE_USER=""
+SSH_KEY=""
+SSH_PORT="22"
+AUTO_YES=""
 
-# 1. OS Validation & Configuration
-if [[ "$OS_ID" == "opensuse-microos" ]]; then
-    echo ">>> Detected openSUSE MicroOS..."
-    PKG_MGR="transactional-update pkg install"
-    REBOOT_CMD="sudo transactional-update reboot"
-elif [[ "$VARIANT_ID" == "coreos" ]]; then
-    echo ">>> Detected Fedora CoreOS..."
-    PKG_MGR="rpm-ostree install"
-    REBOOT_CMD="sudo systemctl reboot"
-elif [[ "$OS_ID" == "fedora" ]]; then
-    echo ">>> Detected Fedora (Standard/Server)..."
-    PKG_MGR="dnf install"
-    REBOOT_CMD="sudo reboot"
-else
-    echo "[WARNING] Unknown OS: $OS_ID. Manual package installation required."
-    PKG_MGR="echo [MANUAL] Install:"
-    REBOOT_CMD="reboot"
-fi
-
-# 2. Package Installation (Check and warn)
-check_pkg() {
-    if ! rpm -q "$1" &> /dev/null; then
-        echo "[REQUIRED] Package '$1' is missing."
-        echo "Run: sudo $PKG_MGR $1 && $REBOOT_CMD"
-        return 1
-    fi
-    return 0
-}
-
-# Core packages required for the project
-# Note: podman-compose might be in a different repo for CoreOS (use 'podman compose' plugin if possible)
-PACKAGES=("podman" "audit" "openssh" "policycoreutils" "firewalld")
-MISSING=0
-for pkg in "${PACKAGES[@]}"; do
-    check_pkg "$pkg" || MISSING=$((MISSING+1))
+# --- Argument Parsing ---
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --host) REMOTE_HOST="$2"; shift 2 ;;
+        --user) REMOTE_USER="$2"; shift 2 ;;
+        --key)  SSH_KEY="$2"; shift 2 ;;
+        --port) SSH_PORT="$2"; shift 2 ;;
+        --yes)  AUTO_YES=1; shift ;;
+        -h|--help)
+            echo "Usage: $0 [--host IP] [--user USER] [--key PATH] [--port PORT] [--yes]"
+            echo ""
+            echo "Provisions a remote homelab node and configures local podman-remote access."
+            echo "Omitted options will be prompted interactively by the Ansible playbook."
+            echo ""
+            echo "  --yes    Skip confirmation prompts for major changes"
+            exit 0 ;;
+        *) echo "[ERROR] Unknown option: $1"; exit 1 ;;
+    esac
 done
 
-# Special check for podman-compose or the podman compose plugin
-if ! podman help compose &> /dev/null && ! command -v podman-compose &> /dev/null; then
-    echo "[REQUIRED] Neither 'podman compose' plugin nor 'podman-compose' found."
-    echo "On MicroOS: sudo transactional-update pkg install podman-compose && sudo transactional-update reboot"
-    echo "On CoreOS: sudo rpm-ostree install podman-compose && sudo systemctl reboot"
-    MISSING=$((MISSING+1))
+# --- Pre-flight: Check Ansible ---
+if ! command -v ansible-playbook &>/dev/null; then
+    echo "[ERROR] ansible-playbook not found. Install ansible-core:"
+    echo "    pip install ansible-core"
+    echo "    # or: dnf install ansible-core"
+    exit 1
 fi
 
-if [ $MISSING -gt 0 ]; then
-    echo "[CRITICAL] $MISSING required package(s) or plugin(s) are missing. Fix them before continuing."
+if [[ ! -f "$PLAYBOOK" ]]; then
+    echo "[ERROR] Playbook not found: $PLAYBOOK"
+    exit 1
 fi
 
-# 3. Rootless Configuration (subuid/subgid)
-if ! grep -q "$USER" /etc/subuid; then
-    echo "[FIXING] Configuring subuids for $USER..."
-    sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 "$USER"
-fi
-
-# 4. Podman Socket for Remote Access
-echo ">>> Enabling podman.socket for rootless usage..."
-# Ensure the user runtime directory exists
-export XDG_RUNTIME_DIR="/run/user/$UID_VAL"
-systemctl --user enable --now podman.socket
-
-# 5. Security Services (auditd)
-if systemctl is-active --quiet auditd; then
-    echo ">>> auditd is active."
-else
-    echo ">>> Starting auditd..."
-    sudo systemctl enable --now auditd || echo "[ERROR] auditd failed to start."
-fi
-
-# 6. Firewalld Configuration
-if systemctl is-active --quiet firewalld; then
-    echo ">>> Configuring firewalld for remote access..."
-    sudo firewall-cmd --permanent --add-service=ssh
-    sudo firewall-cmd --permanent --add-service=http
-    sudo firewall-cmd --permanent --add-service=https
-    sudo firewall-cmd --reload
-fi
-
-# 7. SELinux Check
-if [[ $(getenforce) == "Enforcing" ]]; then
-    echo ">>> SELinux is ENFORCING (Correct)."
-else
-    echo "[WARNING] SELinux is NOT Enforcing. Check /etc/selinux/config."
-fi
-
-# 8. Sysctl for rootless and high-load apps
-if [[ $(sysctl -n kernel.unprivileged_userns_clone 2>/dev/null) == "1" ]]; then
-    echo ">>> kernel.unprivileged_userns_clone is enabled."
-fi
-
-# Wazuh/Indexer/Elasticsearch requirement
-if [[ $(sysctl -n vm.max_map_count) -lt 262144 ]]; then
-    echo "[FIXING] Setting vm.max_map_count=262144 for Wazuh..."
-    sudo sysctl -w vm.max_map_count=262144
-    echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.d/99-wazuh.conf
-fi
-
-# 9. Pre-create mandatory networks
-echo ">>> Pre-creating mandatory Podman networks..."
-MANDATORY_NETS=("proxy-net" "identity-net" "mgmt-net" "monitoring-net" "security-net" "wazuh-net" "vulnerability-net" "harbor-net" "storage-net" "pki-net" "user-net")
-for net in "${MANDATORY_NETS[@]}"; do
-    if ! podman network exists "$net"; then
-        echo "[FIXING] Creating network: $net..."
-        podman network create --label "security.stig.compliance=true" "$net"
+# --- Expand SSH key tilde early (for agent loading) ---
+if [[ -n "$SSH_KEY" ]]; then
+    SSH_KEY="${SSH_KEY/#\~/$HOME}"
+    if [[ ! -f "$SSH_KEY" ]]; then
+        echo "[ERROR] SSH key not found: $SSH_KEY"
+        exit 1
     fi
-done
+fi
 
-# 10. Summary
-echo ">>> node initialization complete."
-echo ">>> Remote access URI: unix:///run/user/$UID_VAL/podman/podman.sock"
-echo ">>> SSH Access: podman --remote --url ssh://$USER@$(hostname -f)/run/user/$UID_VAL/podman/podman.sock"
+# --- SSH Agent / Passphrase Handling ---
+if [[ -n "$SSH_KEY" ]]; then
+    if [[ -z "${SSH_AUTH_SOCK:-}" ]] || ! ssh-add -l &>/dev/null; then
+        echo ">>> Starting ssh-agent..."
+        eval "$(ssh-agent -s)"
+    fi
+    if ! ssh-add -l 2>/dev/null | grep -qF "$SSH_KEY"; then
+        echo ">>> Adding SSH key to agent (enter passphrase if prompted)..."
+        ssh-add "$SSH_KEY"
+    fi
+fi
+
+# --- Build Ansible Extra Vars ---
+EXTRA_VARS=()
+[[ -n "$REMOTE_HOST" ]] && EXTRA_VARS+=(-e "cli_remote_host=$REMOTE_HOST")
+[[ -n "$REMOTE_USER" ]] && EXTRA_VARS+=(-e "cli_target_user=$REMOTE_USER")
+[[ -n "$SSH_KEY" ]]     && EXTRA_VARS+=(-e "cli_ssh_key_path=$SSH_KEY")
+[[ "$SSH_PORT" != "22" ]] && EXTRA_VARS+=(-e "cli_ssh_port=$SSH_PORT")
+[[ -n "$AUTO_YES" ]]    && EXTRA_VARS+=(-e "auto_yes=true")
+
+# --- Run Playbook ---
+echo ">>> brain-ssof: Remote Node Initialization"
+echo "    Playbook: ${PLAYBOOK}"
+[[ -n "$REMOTE_HOST" ]] && echo "    Target:   ${REMOTE_USER:-$USER}@${REMOTE_HOST}:${SSH_PORT}"
+echo ""
+
+exec ansible-playbook "$PLAYBOOK" ${EXTRA_VARS[@]+"${EXTRA_VARS[@]}"}

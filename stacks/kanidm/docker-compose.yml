@@ -3,7 +3,7 @@ services:
     image: kanidm/server:1.9.1
     container_name: kanidm
     restart: always
-    user: "1000:1000"
+    user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       - "8443:8443"
     volumes:

@@ -40,8 +40,8 @@ This educational resource is designed to help both newcomers and experienced pra
 ## Directory Structure
 
 - **`.env`**: The global environment variables file containing the primary `DOMAIN` configuration.
-- **`deploy.sh`**: A wrapper script to validate and deploy stacks reliably via `podman-compose`.
-- **`init-node.sh`**: Bootstraps the host node (eg. openSUSE MicroOS) for remote Podman access and security auditing.
+- **`deploy.sh`**: A wrapper script to validate and deploy stacks reliably via `podman-compose`. Automatically detects whether to deploy locally or to a remote node (configured by `init-node.sh`).
+- **`init-node.sh`**: Provisions a remote homelab node via SSH (Podman, `podman.socket`, `auditd`, firewalld, networks)  using ansible playbook and configures the local workstation for `podman-remote` access.
 - **`stacks/`**: Contains the Docker Compose files and respective data/configuration directories for each application.
 - **`stacks/user/`**: (Git-ignored) A dedicated directory for user-specific stacks. Applications placed here will not be committed to the repository, allowing for local experimentation or personal tools (e.g., note-taking, private dashboards) while still leveraging the `deploy.sh` and `init-node.sh` infrastructure.
 - **`scripts/`**: Houses utility scripts, including security auditing tools (`sast/`).
@@ -55,7 +55,7 @@ The infrastructure is broken down into modular stacks, all utilizing rootless Po
 - **Security Operations Center (SOC):** Wazuh, Falco, DefectDojo, **RamaLama (AI Analysis)**
 - **Core Security Infrastructure:** Vaultwarden (Secrets), Kanidm (Identity), Step-CA (Internal PKI), Harbor (Registry), CrowdSec (Intrusion Prevention)
 
-### Optional Stacks
+### Optional Stacks (WIP)
 
 These stacks are **not deployed by default** and serve as drop-in enhancements for specific use cases:
 
@@ -89,17 +89,46 @@ By default, the stacks are templated with placeholders. Before deploying to prod
 
 ## Deployment Instructions
 
-### 1. Node Initialization
+### Prerequisites
 
-Run the initialization script on your target openSUSE MicroOS machine. This configures the `podman.socket`, sets up rootless sub-U/G IDs, and ensures security compliance (e.g., `auditd`).
+- A remote homelab node running **openSUSE MicroOS**, **Fedora CoreOS**, or **Fedora Server**.
+- **SSH key-based authentication** configured for the remote node.
+- **Podman** installed on your local workstation (for `podman system connection`).
+- **Ansible** installed on your local workstation (required by `init-node.sh` for initial provisioning only):
+  ```bash
+  # Fedora / RHEL
+  sudo dnf install ansible-core
+
+  # pip (any distro)
+  pip install ansible-core
+
+  # Also install the required collection
+  ansible-galaxy collection install ansible.posix
+  ```
+
+### 1. Initialize the Homelab Node
+
+Run `init-node.sh` from your **local workstation** (not on the remote node). It will:
+
+1. **Prompt** for the homelab's IP address, SSH user, and SSH key path (or accept them via flags).
+2. **SSH into the remote node** and provision it — installing Podman, enabling `podman.socket`, configuring `auditd`, `firewalld`, SELinux, rootless `subuids`, `vm.max_map_count`, user linger, and the mandatory Podman networks.
+3. **Register a local `podman system connection`** so your workstation can talk to the remote node via `podman-remote`.
+4. **Save connection details** to `.env` for use by `deploy.sh`.
 
 ```bash
-sudo ./init-node.sh
+# Interactive (prompts for IP, user, key)
+./init-node.sh
+
+# Or pass flags directly
+./init-node.sh --host 192.168.1.100 --user geo --key ~/.ssh/id_ed25519
+
+# Verify the connection
+podman --connection homelab ps
 ```
 
 ### 2. Deploy a Stack
 
-The `deploy.sh` wrapper simplifies deploying and managing individual stacks. It automatically sources the global `.env` file and executes the corresponding `podman-compose` command.
+Once `init-node.sh` has configured the remote connection, `deploy.sh` automatically syncs stack files to the remote node and runs `podman compose` via SSH.
 
 **Usage:**
 ```bash
@@ -108,15 +137,23 @@ The `deploy.sh` wrapper simplifies deploying and managing individual stacks. It 
 
 **Examples:**
 ```bash
-# Bring up the 'homepage' stack in the background
+# Bring up the 'homepage' stack on the remote node
 ./deploy.sh homepage up
 
-# View logs for 'vaultwarden'
-./deploy.sh vaultwarden logs
+# View logs for 'wazuh'
+./deploy.sh wazuh logs
 
 # Tear down the 'dockge' stack
 ./deploy.sh dockge down
+
+# Deploy all base infrastructure stacks
+./deploy.sh base up
+
+# Run STIG validation only (no deployment)
+./deploy.sh harbor check
 ```
+
+> **Local mode fallback:** If `REMOTE_HOST` is not set in `.env` (i.e., `init-node.sh` hasn't been run), `deploy.sh` operates locally against the current machine.
 
 ---
 
