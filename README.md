@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./docs/logo.svg" alt="GEO-Brain SSOF Logo" width="128"/>
+</p>
+
 # GEO-Brain SSOF: Single Node Homelab
 
 This repository serves as the Single Source of Truth (SSOT) for a DISA STIG compliant, single-node homelab. It leverages Podman (rootless by default) and Docker Compose to manage an Infrastructure-as-Code application stack.

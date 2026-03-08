@@ -168,9 +168,28 @@ graph TD
 
 ## Core Infrastructure
 
-### openSUSE MicroOS
+### openSUSE MicroOS / Fedora CoreOS
 
-**What it is:** openSUSE MicroOS is an immutable, container-optimized Linux distribution designed for single-purpose servers.
+**What they are:** 
+- **openSUSE MicroOS:** An immutable, container-optimized Linux distribution designed for single-purpose servers.
+- **Fedora CoreOS:** An automatically-updating, minimal, container-focused operating system designed for running containerized workloads securely and at scale.
+
+**Why they're used:**
+- **Immutable Filesystem:** Both provide read-only root filesystems that prevent unauthorized modifications, enhancing security posture.
+- **Transactional Updates:** 
+  - MicroOS uses `transactional-update` for atomic updates with automatic rollback capability.
+  - CoreOS uses `rpm-ostree` for atomic upgrades with rollback support.
+- **Minimal Attack Surface:** Ship with only essential packages, reducing potential vulnerabilities.
+- **STIG Alignment:** Their hardened nature aligns well with DISA Security Technical Implementation Guides (STIGs).
+- **Auto-Updates:** Fedora CoreOS provides automatic updates by default, reducing operational burden.
+- **Ignition:** CoreOS uses Ignition for declarative, first-boot configuration, enabling immutable infrastructure patterns.
+
+**Key Shared Features:**
+- Automatic rollback on failed updates
+- Containerized workload focus
+- SELinux support for mandatory access control
+- Minimal maintenance overhead
+
 
 **Why it's used:**
 - **Immutable Filesystem:** The read-only root filesystem prevents unauthorized modifications, enhancing security posture.

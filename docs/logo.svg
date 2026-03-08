@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="geo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F2BBA7"/>
+      <stop offset="50%" stop-color="#E8A087"/>
+      <stop offset="100%" stop-color="#D4836B"/>
+    </linearGradient>
+    <linearGradient id="geo-grad2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#F2BBA7" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#D4836B" stop-opacity="0.9"/>
+    </linearGradient>
+    <clipPath id="brain-clip">
+      <!-- Brain silhouette - left hemisphere -->
+      <path d="
+        M 128 32
+        C 108 32, 88 38, 76 52
+        C 60 70, 52 90, 50 108
+        C 47 130, 52 148, 44 162
+        C 36 176, 38 194, 52 206
+        C 62 214, 72 218, 82 220
+        C 92 222, 104 224, 116 222
+        C 122 221, 126 218, 128 214
+        L 128 32
+        Z
+      "/>
+      <!-- Brain silhouette - right hemisphere -->
+      <path d="
+        M 128 32
+        C 148 32, 168 38, 180 52
+        C 196 70, 204 90, 206 108
+        C 209 130, 204 148, 212 162
+        C 220 176, 218 194, 204 206
+        C 194 214, 184 218, 174 220
+        C 164 222, 152 224, 140 222
+        C 134 221, 130 218, 128 214
+        L 128 32
+        Z
+      "/>
+    </clipPath>
+  </defs>
+
+  <!-- Subtle outer glow -->
+  <ellipse cx="128" cy="134" rx="82" ry="100" fill="#E8A087" opacity="0.08"/>
+
+  <!-- Brain outline shape -->
+  <g>
+    <!-- Left hemisphere -->
+    <path d="
+      M 128 32
+      C 108 32, 88 38, 76 52
+      C 60 70, 52 90, 50 108
+      C 47 130, 52 148, 44 162
+      C 36 176, 38 194, 52 206
+      C 62 214, 72 218, 82 220
+      C 92 222, 104 224, 116 222
+      C 122 221, 126 218, 128 214
+      L 128 32 Z
+    " fill="url(#geo-grad)" opacity="0.15"/>
+
+    <!-- Right hemisphere -->
+    <path d="
+      M 128 32
+      C 148 32, 168 38, 180 52
+      C 196 70, 204 90, 206 108
+      C 209 130, 204 148, 212 162
+      C 220 176, 218 194, 204 206
+      C 194 214, 184 218, 174 220
+      C 164 222, 152 224, 140 222
+      C 134 221, 130 218, 128 214
+      L 128 32 Z
+    " fill="url(#geo-grad)" opacity="0.15"/>
+  </g>
+
+  <!-- Geometric overlapping shapes (the GEO icon pattern) clipped to brain -->
+  <g clip-path="url(#brain-clip)">
+    <!-- Large rotated rectangle 1 -->
+    <rect x="60" y="60" width="90" height="90" rx="4"
+          transform="rotate(-15 105 105)"
+          fill="url(#geo-grad)" opacity="0.55" stroke="#D4836B" stroke-width="1.5"/>
+
+    <!-- Large rotated rectangle 2 (overlapping) -->
+    <rect x="100" y="80" width="90" height="90" rx="4"
+          transform="rotate(15 145 125)"
+          fill="url(#geo-grad2)" opacity="0.55" stroke="#D4836B" stroke-width="1.5"/>
+
+    <!-- Smaller accent parallelogram 1 -->
+    <polygon points="80,100 120,85 135,130 95,145"
+             fill="#E8A087" opacity="0.4" stroke="#D4836B" stroke-width="1"/>
+
+    <!-- Smaller accent parallelogram 2 -->
+    <polygon points="140,95 180,110 165,155 125,140"
+             fill="#E8A087" opacity="0.4" stroke="#D4836B" stroke-width="1"/>
+
+    <!-- Central diamond accent -->
+    <polygon points="128,80 155,128 128,176 101,128"
+             fill="#F2BBA7" opacity="0.35" stroke="#D4836B" stroke-width="1.2"/>
+  </g>
+
+  <!-- Brain fissure lines (sulci) for brain recognition -->
+  <g fill="none" stroke="#C07058" stroke-width="2" stroke-linecap="round" opacity="0.6">
+    <!-- Central fissure -->
+    <line x1="128" y1="36" x2="128" y2="218"/>
+
+    <!-- Left hemisphere sulci -->
+    <path d="M 70,80 Q 90,90 110,78"/>
+    <path d="M 56,120 Q 80,135 115,118"/>
+    <path d="M 52,160 Q 78,172 112,158"/>
+    <path d="M 65,195 Q 88,205 118,196"/>
+
+    <!-- Right hemisphere sulci -->
+    <path d="M 186,80 Q 166,90 146,78"/>
+    <path d="M 200,120 Q 176,135 141,118"/>
+    <path d="M 204,160 Q 178,172 144,158"/>
+    <path d="M 191,195 Q 168,205 138,196"/>
+  </g>
+
+  <!-- Brain outline stroke -->
+  <g fill="none" stroke="#C07058" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Left hemisphere outline -->
+    <path d="
+      M 128 32
+      C 108 32, 88 38, 76 52
+      C 60 70, 52 90, 50 108
+      C 47 130, 52 148, 44 162
+      C 36 176, 38 194, 52 206
+      C 62 214, 72 218, 82 220
+      C 92 222, 104 224, 116 222
+      C 122 221, 126 218, 128 214
+    "/>
+    <!-- Right hemisphere outline -->
+    <path d="
+      M 128 32
+      C 148 32, 168 38, 180 52
+      C 196 70, 204 90, 206 108
+      C 209 130, 204 148, 212 162
+      C 220 176, 218 194, 204 206
+      C 194 214, 184 218, 174 220
+      C 164 222, 152 224, 140 222
+      C 134 221, 130 218, 128 214
+    "/>
+  </g>
+
+  <!-- Small geometric node accents at brain features -->
+  <g fill="#D4836B" opacity="0.7">
+    <rect x="72" y="72" width="6" height="6" rx="1" transform="rotate(20 75 75)"/>
+    <rect x="170" y="72" width="6" height="6" rx="1" transform="rotate(-20 173 75)"/>
+    <rect x="56" y="140" width="5" height="5" rx="1" transform="rotate(30 58.5 142.5)"/>
+    <rect x="193" y="140" width="5" height="5" rx="1" transform="rotate(-30 195.5 142.5)"/>
+    <rect x="68" y="198" width="5" height="5" rx="1" transform="rotate(15 70.5 200.5)"/>
+    <rect x="181" y="198" width="5" height="5" rx="1" transform="rotate(-15 183.5 200.5)"/>
+  </g>
+</svg>
