@@ -1,14 +1,24 @@
 services:
   wazuh-indexer:
-    image: wazuh/wazuh-indexer:4.14.3
+    image: docker.io/wazuh/wazuh-indexer:4.14.3
     container_name: wazuh-indexer
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       - OPENSEARCH_JAVA_OPTS=${WAZUH_INDEXER_JAVA_OPTS:--Xms512m -Xmx512m}
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - discovery.type=single-node
+      - plugins.security.disabled=true
     volumes:
-      - ./data/indexer:/var/lib/opensearch/data:Z
+      - ${DATA_DIR}/wazuh/indexer:/var/lib/opensearch/data:Z
+      - ./config/indexer/opensearch.yml:/usr/share/opensearch/config/opensearch.yml:ro
     networks:
-      - wazuh-net
+      wazuh-net:
+        aliases:
+          - wazuh.indexer
     deploy:
       resources:
         limits:
@@ -16,9 +26,10 @@ services:
           cpus: '0.5'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9200"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 5
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=indexer"
@@ -27,17 +38,30 @@ services:
       - "homepage.icon=wazuh.png"
 
   wazuh-manager:
-    image: wazuh/wazuh-manager:4.14.3
+    image: docker.io/wazuh/wazuh-manager:4.14.3
     container_name: wazuh-manager
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
+      - CHOWN
+      - SETUID
+      - SETGID
+      - FOWNER
     ports:
       - 1514:1514
       - 1515:1515
       - 55000:55000
     volumes:
-      - ./data/manager:/var/ossec/data:Z
+      - ${DATA_DIR}/wazuh/manager:/var/ossec/data:Z
+      - ./config/manager/filebeat.yml:/etc/filebeat/filebeat.yml:ro
     networks:
-      - wazuh-net
+      wazuh-net:
+        aliases:
+          - wazuh.manager
     deploy:
       resources:
         limits:
@@ -45,9 +69,10 @@ services:
           cpus: '0.5'
     healthcheck:
       test: ["CMD", "/var/ossec/bin/wazuh-control", "status"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=manager"
@@ -56,9 +81,13 @@ services:
       - "homepage.icon=wazuh.png"
 
   wazuh-dashboard:
-    image: wazuh/wazuh-dashboard:4.14.3
+    image: docker.io/wazuh/wazuh-dashboard:4.14.3
     container_name: wazuh-dashboard
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - 5601:5601
     depends_on:
@@ -66,10 +95,11 @@ services:
       - wazuh-manager
     environment:
       - WAZUH_MANAGER_URL=http://wazuh-manager
-      - INDEXER_URL=https://wazuh-indexer:9200
+      - INDEXER_URL=http://wazuh-indexer:9200
     networks:
       - wazuh-net
       - monitoring-net
+      - proxy-net
     deploy:
       resources:
         limits:
@@ -77,10 +107,17 @@ services:
           cpus: '0.5'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5601"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wazuh.rule=Host(`wazuh.${DOMAIN}`)"
+      - "traefik.http.routers.wazuh.entrypoints=websecure"
+      - "traefik.http.routers.wazuh.tls=true"
+      - "traefik.http.routers.wazuh.middlewares=authelia@file,security-headers@file"
+      - "traefik.http.services.wazuh.loadbalancer.server.port=5601"
       - "security.stig.compliance=true"
       - "security.stig.role=dashboard"
       - "homepage.group=SOC"
@@ -91,7 +128,8 @@ services:
 
 networks:
   wazuh-net:
-    driver: bridge
-    internal: false # Needs to receive logs from external agents
+    external: true
   monitoring-net:
+    external: true
+  proxy-net:
     external: true

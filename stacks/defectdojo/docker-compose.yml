@@ -1,8 +1,12 @@
 services:
   defectdojo-django:
-    image: defectdojo/defectdojo-django:2.55.4
+    image: docker.io/defectdojo/defectdojo-django:2.55.4
     container_name: defectdojo-django
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       - defectdojo-db
       - defectdojo-redis
@@ -19,10 +23,17 @@ services:
           cpus: '1.0'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthcheck"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.defectdojo.rule=Host(`defectdojo.${DOMAIN}`)"
+      - "traefik.http.routers.defectdojo.entrypoints=websecure"
+      - "traefik.http.routers.defectdojo.tls=true"
+      - "traefik.http.routers.defectdojo.middlewares=authelia@file,security-headers@file"
+      - "traefik.http.services.defectdojo.loadbalancer.server.port=8080"
       - "security.stig.compliance=true"
       - "security.stig.role=vulnerability-mgmt"
       - "homepage.group=SOC"
@@ -32,15 +43,19 @@ services:
       - "homepage.href=https://defectdojo.${DOMAIN}"
 
   defectdojo-db:
-    image: postgres:15-alpine
+    image: docker.io/library/postgres:15-alpine
     container_name: defectdojo-db
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       - POSTGRES_DB=defectdojo
       - POSTGRES_USER=${DEFECTDOJO_DB_USER:-defectdojo}
       - POSTGRES_PASSWORD=${DEFECTDOJO_DB_PASSWORD}
     volumes:
-      - ./data/database:/var/lib/postgresql/data:Z
+      - ${DATA_DIR}/defectdojo/database:/var/lib/postgresql/data:Z
     networks:
       - vulnerability-net
     deploy:
@@ -50,14 +65,26 @@ services:
           cpus: '0.3'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DEFECTDOJO_DB_USER:-defectdojo}"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=database"
 
   defectdojo-redis:
-    image: valkey/valkey:7.2.12
+    image: docker.io/valkey/valkey:7.2.12
     container_name: defectdojo-redis
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
     networks:
       - vulnerability-net
     deploy:
@@ -67,12 +94,16 @@ services:
           cpus: '0.2'
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=cache"
 
 networks:
   vulnerability-net:
-    driver: bridge
+    external: true
   proxy-net:
     external: true

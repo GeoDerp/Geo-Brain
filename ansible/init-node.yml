@@ -7,7 +7,7 @@
 #
 # Usage (via wrapper script):
 #   Interactive:       ./init-node.sh
-#   With pre-filled:   ./init-node.sh --host 10.0.0.5 --user geo --key ~/.ssh/id_ed25519
+#   With pre-filled:   ./init-node.sh --host 10.0.0.5 --user admin --key ~/.ssh/id_ed25519
 #   Non-interactive:   ./init-node.sh --host 10.0.0.5 --yes
 #
 # Direct Ansible (advanced):

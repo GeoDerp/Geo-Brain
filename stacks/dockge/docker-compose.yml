@@ -1,19 +1,25 @@
 services:
   dockge:
-    image: louislam/dockge:1.4.2
+    image: docker.io/louislam/dockge:1.4.2
     container_name: dockge
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     user: "${PUID:-1000}:${PGID:-1000}"
+    userns_mode: keep-id
     ports:
       - 5001:5001
     volumes:
       - ${PODMAN_SOCK}:/var/run/docker.sock
-      - ./data:/app/data:z
+      - ${DATA_DIR}/dockge:/app/data:z
       - ../:/app/stacks:z
     environment:
       - DOCKGE_STACKS_DIR=/app/stacks
     networks:
       - mgmt-net
+      - proxy-net
     deploy:
       resources:
         limits:
@@ -21,10 +27,17 @@ services:
           cpus: '0.3'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5001"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dockge.rule=Host(`dockge.${DOMAIN}`)"
+      - "traefik.http.routers.dockge.entrypoints=websecure"
+      - "traefik.http.routers.dockge.tls=true"
+      - "traefik.http.routers.dockge.middlewares=authelia@file,security-headers@file"
+      - "traefik.http.services.dockge.loadbalancer.server.port=5001"
       - "security.stig.compliance=true"
       - "security.stig.role=management"
       - "homepage.group=Management"
@@ -35,4 +48,6 @@ services:
 
 networks:
   mgmt-net:
-    driver: bridge
+    external: true
+  proxy-net:
+    external: true

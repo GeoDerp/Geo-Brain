@@ -1,17 +1,27 @@
 services:
   grafana:
-    image: grafana/grafana:11.5.1
+    image: docker.io/grafana/grafana:11.5.1
     container_name: grafana
     restart: always
-    user: "472:472"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    user: "${PUID:-1000}:${PGID:-1000}"
+    userns_mode: keep-id
     ports:
       - 3001:3000
     volumes:
-      - ./data:/var/lib/grafana:Z
+      - ${DATA_DIR}/grafana:/var/lib/grafana:Z
       - ./config/provisioning:/etc/grafana/provisioning:z
     networks:
       - monitoring-net
       - wazuh-net
+      - proxy-net
     deploy:
       resources:
         limits:
@@ -19,10 +29,17 @@ services:
           cpus: '0.3'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls=true"
+      - "traefik.http.routers.grafana.middlewares=authelia@file,security-headers@file"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
       - "security.stig.compliance=true"
       - "security.stig.role=visualization"
       - "homepage.group=Observability"
@@ -35,4 +52,6 @@ networks:
   monitoring-net:
     external: true
   wazuh-net:
+    external: true
+  proxy-net:
     external: true

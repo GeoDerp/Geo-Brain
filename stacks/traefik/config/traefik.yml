@@ -17,8 +17,6 @@ entryPoints:
     address: ":443"
     http:
       tls: {}
-      middlewares:
-        - crowdsec@file
   metrics:
     address: ":8082"
 

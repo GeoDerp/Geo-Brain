@@ -61,7 +61,7 @@ These stacks are **not deployed by default** and serve as drop-in enhancements f
 
 - **Pangolin (Zero-Trust Tunnel Proxy):** Identity-aware reverse proxy and WireGuard VPN for secure remote access without exposing ports or requiring a public IP. Replaces Traefik + Authelia when tunnel-based access is needed. *(AGPL-3.0, fosrl/pangolin)*
 - **BunkerWeb (L7 WAF & DDoS Protection):** Next-generation Web Application Firewall based on NGINX with integrated ModSecurity + OWASP Core Rule Set, rate limiting, anti-bot challenges, IP blacklists, DNSBL, and CrowdSec integration. Sits in front of Traefik as an L7 security perimeter. *(AGPL-3.0, bunkerity/bunkerweb)*
-
+- **Keycloak (Identity Management):** Open-source identity and access management platform providing OIDC/SAML authentication, user federation, and multi-factor authentication. Designed to eventually replace Kanidm as the primary identity provider for the homelab. *(AGPL-3.0, keycloak/keycloak)* **[WIP]**
 > **Note:** Pangolin bundles its own Traefik instance and **cannot** run alongside the existing Traefik stack. BunkerWeb requires Traefik to move to internal-only ports when deployed as the external-facing WAF.
 
 ---
@@ -93,6 +93,7 @@ By default, the stacks are templated with placeholders. Before deploying to prod
 
 - A remote homelab node running **openSUSE MicroOS**, **Fedora CoreOS**, or **Fedora Server**.
 - **SSH key-based authentication** configured for the remote node.
+- **TLS certificates** generated or provided before deployment — see **[certs/README.md](./certs/README.md)** for instructions.
 - **Podman** installed on your local workstation (for `podman system connection`).
 - **Ansible** installed on your local workstation (required by `init-node.sh` for initial provisioning only):
   ```bash
@@ -120,7 +121,7 @@ Run `init-node.sh` from your **local workstation** (not on the remote node). It 
 ./init-node.sh
 
 # Or pass flags directly
-./init-node.sh --host 192.168.1.100 --user geo --key ~/.ssh/id_ed25519
+./init-node.sh --host 10.0.0.5 --user admin --key ~/.ssh/id_ed25519
 
 # Verify the connection
 podman --connection homelab ps
@@ -202,4 +203,156 @@ Ensure you have the required tools installed, then run:
 ```
 
 ---
+
+## Post-Deployment: Service URLs
+
+After a successful `./deploy.sh all up`, the following web interfaces are available. Replace `${DOMAIN}` with your configured domain (default: `brain.home.local`).
+
+### Via Traefik (HTTPS Reverse Proxy)
+
+These services are routed through Traefik and accessible by hostname. Requires DNS or `/etc/hosts` entries pointing `*.${DOMAIN}` to the homelab node IP.
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| **Homepage** | `https://home.${DOMAIN}` | Centralized dashboard |
+| **Traefik** | `https://traefik.${DOMAIN}` | Reverse proxy dashboard |
+| **Authelia** | `https://auth.${DOMAIN}` | SSO / 2FA portal |
+| **Grafana** | `https://grafana.${DOMAIN}` | Metrics & log visualization |
+| **Wazuh** | `https://wazuh.${DOMAIN}` | SIEM / XDR dashboard |
+| **DefectDojo** | `https://defectdojo.${DOMAIN}` | Vulnerability management |
+| **Harbor** | `https://harbor.${DOMAIN}` | Container registry |
+| **Kanidm** | `https://kanidm.${DOMAIN}` | Identity management |
+| **MinIO** | `https://minio.${DOMAIN}` | S3 object storage console |
+| **Dockge** | `https://dockge.${DOMAIN}` | Stack management UI |
+| **Step-CA** | `https://ca.${DOMAIN}` | Internal PKI / CA |
+| **SilverBullet** | `https://silverbullet.${DOMAIN}` | Note-taking (user stack) |
+| **Moodle** | `https://moodle.${DOMAIN}` | LMS (user stack) |
+
+### Direct Access (by Port)
+
+These services are reachable directly on the node IP without Traefik. Useful for initial setup or when DNS is not yet configured.
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| **Homepage** | `http://<NODE_IP>:3000` | Dashboard |
+| **Grafana** | `http://<NODE_IP>:3001` | Metrics UI |
+| **Dockge** | `http://<NODE_IP>:5001` | Stack manager |
+| **Wazuh Dashboard** | `http://<NODE_IP>:5601` | SIEM UI |
+| **CrowdSec LAPI** | `http://<NODE_IP>:8180` | Bouncer API |
+| **RamaLama** | `http://<NODE_IP>:8084` | LLM inference API |
+| **Kanidm** | `https://<NODE_IP>:8443` | IDM (native TLS) |
+| **MinIO API** | `http://<NODE_IP>:9000` | S3 API endpoint |
+| **MinIO Console** | `http://<NODE_IP>:9001` | MinIO web UI |
+| **Authelia** | `http://<NODE_IP>:9091` | Auth portal |
+| **Prometheus** | `http://<NODE_IP>:9092` | Metrics query UI |
+| **Step-CA** | `https://<NODE_IP>:9443` | CA API (native TLS) |
+| **SilverBullet** | `http://<NODE_IP>:3002` | Notes (user stack) |
+| **Loki** | `http://<NODE_IP>:3100` | Log push/query API |
+
+---
+
+## Setup Requirements Beyond `.env`
+
+Modifying `.env` is necessary but not sufficient. The following steps must be completed before or during first deployment.
+
+### 1. TLS Certificates (Required Before First Deploy)
+
+Traefik and Kanidm **will not start** without TLS certificates. Generate or provide them before running `deploy.sh`:
+
+```bash
+# Option A: Generate self-signed certs for the homelab
+./scripts/gen-selfsigned-certs.sh
+
+# Option B: Generate, deploy to remote, and trust on both hosts
+./scripts/gen-selfsigned-certs.sh --all
+```
+
+See [certs/README.md](certs/README.md) for full details and manual certificate placement.
+
+### 2. DNS or `/etc/hosts` Configuration
+
+For Traefik hostname routing to work, the node must be resolvable. Add entries to `/etc/hosts` on every client machine (or configure a local DNS server):
+
+```
+# Replace with your node's actual IP and configured DOMAIN
+192.168.1.45  home.brain.home.local traefik.brain.home.local auth.brain.home.local
+192.168.1.45  grafana.brain.home.local wazuh.brain.home.local defectdojo.brain.home.local
+192.168.1.45  harbor.brain.home.local kanidm.brain.home.local minio.brain.home.local
+192.168.1.45  dockge.brain.home.local ca.brain.home.local prometheus.brain.home.local
+192.168.1.45  silverbullet.brain.home.local moodle.brain.home.local ramalama.brain.home.local
+```
+
+### 3. Trust the CA Certificate (If Self-Signed)
+
+Browsers will reject self-signed certificates until the CA is trusted. After generating certs:
+
+```bash
+# Fedora / RHEL
+sudo cp certs/ca.crt /etc/pki/ca-trust/source/anchors/brain-ssof-ca.crt
+sudo update-ca-trust
+
+# Debian / Ubuntu
+sudo cp certs/ca.crt /usr/local/share/ca-certificates/brain-ssof-ca.crt
+sudo update-ca-certificates
+
+# macOS
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain certs/ca.crt
+```
+
+Import `certs/ca.crt` into your browser's certificate store if it doesn't honor the system trust store.
+
+### 4. CrowdSec Bouncer Key
+
+The CrowdSec–Traefik integration requires a bouncer API key generated from the running CrowdSec container:
+
+```bash
+# After CrowdSec is up:
+./deploy.sh crowdsec up
+
+# SSH into the node and generate the key:
+ssh geo@<NODE_IP> 'podman exec crowdsec cscli bouncers add traefik-bouncer -o raw'
+
+# Paste the output into .env as CROWDSEC_BOUNCER_API_KEY, then redeploy Traefik:
+./deploy.sh traefik up
+```
+
+### 5. Kanidm Initial Admin Setup
+
+Kanidm requires bootstrapping the admin account after first start:
+
+```bash
+# After Kanidm is running:
+ssh geo@<NODE_IP> 'podman exec kanidm kanidmd recover-account admin'
+```
+
+This prints a one-time password for the `admin` account. Use it to log in at `https://kanidm.${DOMAIN}` and complete initial configuration (create users, groups, OIDC clients for Authelia).
+
+### 6. Harbor Admin Login
+
+Harbor's admin password is set via `HARBOR_ADMIN_PASSWORD` in `.env`. After first deploy, log in at `https://harbor.${DOMAIN}` with username `admin` and the configured password to set up projects and robot accounts.
+
+### 7. Wazuh Initial Credentials
+
+Wazuh Dashboard default credentials are `admin` / `admin`. Change them immediately after first login at `https://wazuh.${DOMAIN}` (port 5601).
+
+### 8. DefectDojo First Login
+
+DefectDojo creates a default admin user on first run. Check the container logs for the auto-generated password:
+
+```bash
+ssh geo@<NODE_IP> 'podman logs defectdojo-django 2>&1 | grep -i "admin password"'
+```
+
+### 9. Data Directory Permissions
+
+Ensure the persistent data directory exists and is owned by the Podman user on the remote node:
+
+```bash
+ssh geo@<NODE_IP> 'sudo mkdir -p /var/brain-ssof && sudo chown 1000:1000 /var/brain-ssof'
+```
+
+`init-node.sh` handles this automatically, but verify if provisioning was done manually.
+
+---
+
 **Note:** Ensure all data persistence directories (`./data`) have appropriate permissions (e.g., `1000:1000`) to match the user namespace mapping within the rootless Podman containers.

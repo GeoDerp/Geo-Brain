@@ -4,6 +4,9 @@
 .env.secrets
 
 # SSL/TLS Certificates & Private Keys
+certs/*
+!certs/README.md
+stacks/traefik/config/certs/
 
 # Stack data and runtime directories
 stacks/*/data/

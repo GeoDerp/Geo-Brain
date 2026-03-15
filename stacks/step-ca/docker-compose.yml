@@ -3,11 +3,20 @@ services:
     image: docker.io/smallstep/step-ca:0.28.2
     container_name: step-ca
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    userns_mode: keep-id
     user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       - "9443:9000"
     volumes:
-      - ./data/step:/home/step:z
+      - ${DATA_DIR}/step-ca/step:/home/step:z
     environment:
       - DOCKER_STEPCA_INIT_NAME=${STEPCA_CA_NAME:-${DOMAIN} CA}
       - DOCKER_STEPCA_INIT_DNS_NAMES=ca.${DOMAIN},localhost
@@ -21,20 +30,29 @@ services:
           cpus: '0.2'
     healthcheck:
       test: ["CMD", "step", "ca", "health"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.step-ca.rule=Host(`ca.${DOMAIN}`)"
+      - "traefik.http.routers.step-ca.entrypoints=websecure"
+      - "traefik.http.routers.step-ca.tls=true"
+      - "traefik.http.routers.step-ca.middlewares=security-headers@file"
+      - "traefik.http.services.step-ca.loadbalancer.server.port=9000"
+      - "traefik.http.services.step-ca.loadbalancer.server.scheme=https"
+      - "traefik.http.services.step-ca.loadbalancer.serverstransport=insecure-skip-verify@file"
       - "security.stig.compliance=true"
       - "security.stig.role=pki"
       - "homepage.group=Security"
       - "homepage.name=Step CA"
       - "homepage.icon=step-ca.png"
       - "homepage.description=Internal Certificate Authority"
-      - "homepage.href=https://ca.${DOMAIN}:9443"
+      - "homepage.href=https://ca.${DOMAIN}"
 
 networks:
   pki-net:
-    driver: bridge
+    external: true
   proxy-net:
     external: true

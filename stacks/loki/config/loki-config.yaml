@@ -12,6 +12,7 @@ common:
       bucketnames: loki-data
       access_key_id: ${MINIO_ROOT_USER:-minioadmin}
       secret_access_key: ${MINIO_ROOT_PASSWORD}
+      s3forcepathstyle: true
   replication_factor: 1
   ring:
     instance_addr: 127.0.0.1
@@ -39,4 +40,4 @@ limits_config:
 
 compactor:
   working_directory: /loki/compactor
-  shared_store: s3
+  delete_request_store: s3

@@ -17,7 +17,9 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - **Reliability:** Every service must define `deploy.resources.limits` and `healthcheck`.
 - **Network Isolation:** Applications reside on dedicated Podman networks. No inter-stack communication unless explicitly defined.
 - **Air-gap Preparedness:** All images are pinned to specific versions/digests. No `:latest` tags.
+- **Data Separation:** Persistent data lives under `${DATA_DIR}` (default `/var/brain-ssof`) on a large partition. Config files stay relative (`./config`) for rsync portability. New stacks mount data as `${DATA_DIR}/<stack-name>/...`.
 - **Single Source of Truth:** All infrastructure state is defined in this repository. Manual changes on the host are forbidden.
+- **HTTPS Only:** All HTTP endpoints MUST be encrypted with TLS. Plain HTTP is only allowed for local bootstrap redirects to HTTPS.
 
 ## Application Stack 
 
@@ -54,6 +56,7 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - **`ansible/init-node.yml`:** Ansible playbook that provisions the remote homelab node (Podman, `podman.socket`, `auditd`, SELinux, firewalld, subuids, linger, sysctl), then registers a local `podman system connection` for remote access. Confirms major changes (package installs, firewall rules, SELinux, podman-remote registration) unless `--yes` / `-e auto_yes=true` is passed.
 - **`deploy.sh`:** STIG-compliant deployment wrapper. Validates image pinning, resource limits, and network isolation locally, then syncs and deploys stacks to the remote node via SSH. Falls back to local deployment if no remote is configured.
 - **`scripts/sast/sast-scan.sh`:** Automated security scanning using Trivy, Checkov, Gitleaks, and Semgrep.
+- **`gen-selfsigned-certs.sh`:** Generates required certificate/key bundles with normalized filenames for required stacks (Traefik, Kanidm). Also supports importing existing certificates and converting them to the required filenames and bundle formats.
 
 ## Health Monitoring
 - Monitor `transactional-update` (MicroOS) or `rpm-ostree` (CoreOS) status.

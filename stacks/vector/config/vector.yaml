@@ -21,7 +21,8 @@ transforms:
     source: |
       .labels.host = get_env_var!("HOSTNAME")
       .labels.pipeline = "vector"
-      if contains(to_string(.MESSAGE) ?? "", r'(authentication|failed|denied|unauthorized|error|CVE|alert)') ?? false {
+      msg = to_string(.MESSAGE) ?? ""
+      if match(msg, r'(?i)(authentication|failed|denied|unauthorized|error|CVE|alert)') ?? false {
         .labels.security = "true"
       }
 
@@ -43,6 +44,8 @@ sinks:
       - classify_logs
       - falco_normalize
     endpoint: http://loki:3100
+    encoding:
+      codec: json
     labels:
       host: "{{ labels.host }}"
       source: "{{ labels.source }}"

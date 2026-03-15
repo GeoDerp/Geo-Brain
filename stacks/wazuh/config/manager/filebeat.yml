@@ -1,0 +1,20 @@
+filebeat.modules:
+  - module: wazuh
+    alerts:
+      enabled: true
+    archives:
+      enabled: false
+
+setup.template.json.enabled: true
+setup.template.json.path: /etc/filebeat/wazuh-template.json
+setup.template.json.name: wazuh
+setup.template.overwrite: true
+setup.ilm.enabled: false
+
+output.elasticsearch:
+  hosts:
+    - "http://wazuh.indexer:9200"
+  index: "wazuh-alerts-4.x-%{+yyyy.MM.dd}"
+  ssl.verification_mode: none
+
+logging.level: info

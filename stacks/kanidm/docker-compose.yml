@@ -1,26 +1,48 @@
 services:
   kanidm:
-    image: kanidm/server:1.9.1
+    image: docker.io/kanidm/server:1.9.1
     container_name: kanidm
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    userns_mode: keep-id
     user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       - "8443:8443"
     volumes:
-      - ./data:/data:Z
+      - ${DATA_DIR}/kanidm:/data:Z
+      - ${DATA_DIR}/kanidm/certs/kanidm-chain.crt:/data/chain.pem:ro
+      - ${DATA_DIR}/kanidm/certs/kanidm.key:/data/key.pem:ro
+      - ./config/server.toml:/data/server.toml:z
     networks:
       - identity-net
+      - proxy-net
     deploy:
       resources:
         limits:
           memory: 1G
           cpus: '0.5'
     healthcheck:
-      test: ["CMD", "curl", "-f", "https://localhost:8443/healthcheck"]
-      interval: 30s
+      test: ["CMD", "curl", "-fk", "https://localhost:8443/status"]
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kanidm.rule=Host(`kanidm.${DOMAIN}`)"
+      - "traefik.http.routers.kanidm.entrypoints=websecure"
+      - "traefik.http.routers.kanidm.tls=true"
+      - "traefik.http.routers.kanidm.middlewares=security-headers@file"
+      - "traefik.http.services.kanidm.loadbalancer.server.port=8443"
+      - "traefik.http.services.kanidm.loadbalancer.server.scheme=https"
+      - "traefik.http.services.kanidm.loadbalancer.serverstransport=insecure-skip-verify@file"
       - "security.stig.compliance=true"
       - "security.stig.role=identity-provider"
       - "homepage.group=Identity"
@@ -31,4 +53,6 @@ services:
 
 networks:
   identity-net:
-    driver: bridge
+    external: true
+  proxy-net:
+    external: true

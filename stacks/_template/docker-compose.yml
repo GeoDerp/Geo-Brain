@@ -28,7 +28,7 @@ services:
     ports:
       - "${<SERVICE>_PORT:-<default-host-port>}:<container-port>"
     volumes:
-      - ./data:/data:Z
+      - ${DATA_DIR}/<service-name>:/data:Z
       # - ./config:/config:z    # Uncomment if the service needs config mounts
     environment:
       - EXAMPLE_VAR=${EXAMPLE_VAR:-default_value}
@@ -41,9 +41,10 @@ services:
           cpus: '0.3'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:<container-port>/health"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=<role>"

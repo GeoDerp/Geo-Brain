@@ -1,19 +1,28 @@
 services:
   prometheus:
-    image: prom/prometheus:v3.1.0
+    image: docker.io/prom/prometheus:v3.1.0
     container_name: prometheus
     restart: always
-    user: "65534:65534"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    user: "${PUID:-1000}:${PGID:-1000}"
+    userns_mode: keep-id
     volumes:
       - ./config:/etc/prometheus:z
-      - ./data:/prometheus:Z
+      - ${DATA_DIR}/prometheus:/prometheus:Z
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/console_templates'
     ports:
-      - 9090:9090
+      - 9092:9090
     networks:
       - monitoring-net
       - proxy-net
@@ -27,9 +36,10 @@ services:
           cpus: '0.5'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=metrics-storage"
@@ -41,7 +51,7 @@ services:
 
 networks:
   monitoring-net:
-    driver: bridge
+    external: true
   proxy-net:
     external: true
   security-net:

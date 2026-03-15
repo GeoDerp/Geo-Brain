@@ -1,18 +1,21 @@
 services:
   crowdsec:
-    image: crowdsecurity/crowdsec:v1.7.6
+    image: docker.io/crowdsecurity/crowdsec:v1.7.6
     container_name: crowdsec
     restart: always
-    user: "${PUID:-1000}:${PGID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
-      - COLLECTIONS=crowdsecurity/linux crowdsecurity/podman crowdsecurity/traefik
+      - COLLECTIONS=crowdsecurity/linux crowdsecurity/traefik
     ports:
       - "8180:8080" # LAPI for bouncers
     volumes:
-      - ./data/config:/etc/crowdsec:z
-      - ./data/data:/var/lib/crowdsec/data:z
+      - ${DATA_DIR}/crowdsec/config:/etc/crowdsec:z
+      - ${DATA_DIR}/crowdsec/data:/var/lib/crowdsec/data:z
       - /var/log:/var/log:ro # Read host logs
-      - ../traefik/data/logs:/var/log/traefik:ro # Read Traefik access logs
+      - ${DATA_DIR}/traefik/logs:/data/traefik-logs:ro # Read Traefik access logs
     networks:
       - security-net
       - proxy-net
@@ -23,9 +26,10 @@ services:
           cpus: '0.3'
     healthcheck:
       test: ["CMD", "cscli", "version"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=ips"

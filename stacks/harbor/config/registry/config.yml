@@ -1,0 +1,10 @@
+version: 0.1
+log:
+  level: info
+storage:
+  filesystem:
+    rootdirectory: /storage
+  delete:
+    enabled: true
+http:
+  addr: :5000

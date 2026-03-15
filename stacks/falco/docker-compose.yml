@@ -1,6 +1,6 @@
 services:
   falco:
-    image: falcosecurity/falco:0.43.0
+    image: docker.io/falcosecurity/falco:0.43.0
     container_name: falco
     restart: always
     privileged: true
@@ -21,9 +21,10 @@ services:
           cpus: '0.5'
     healthcheck:
       test: ["CMD", "/usr/bin/falco-healthcheck"] # Falco has a built-in healthcheck script in newer versions
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=runtime-security"
@@ -35,6 +36,6 @@ services:
 
 networks:
   security-net:
-    driver: bridge
+    external: true
   monitoring-net:
     external: true

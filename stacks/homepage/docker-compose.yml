@@ -3,7 +3,12 @@ services:
     image: ghcr.io/gethomepage/homepage:v0.9.13
     container_name: homepage
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     user: "${PUID:-1000}:${PGID:-1000}"
+    userns_mode: keep-id
     ports:
       - 3000:3000
     volumes:
@@ -11,6 +16,7 @@ services:
       - ${PODMAN_SOCK}:/var/run/docker.sock:ro
     networks:
       - mgmt-net
+      - proxy-net
     deploy:
       resources:
         limits:
@@ -18,10 +24,17 @@ services:
           cpus: '0.3'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.homepage.rule=Host(`home.${DOMAIN}`)"
+      - "traefik.http.routers.homepage.entrypoints=websecure"
+      - "traefik.http.routers.homepage.tls=true"
+      - "traefik.http.routers.homepage.middlewares=authelia@file,security-headers@file"
+      - "traefik.http.services.homepage.loadbalancer.server.port=3000"
       - "security.stig.compliance=true"
       - "security.stig.role=dashboard"
       - "homepage.group=Management"
@@ -32,4 +45,6 @@ services:
 
 networks:
   mgmt-net:
+    external: true
+  proxy-net:
     external: true

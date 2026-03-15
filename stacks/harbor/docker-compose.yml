@@ -1,10 +1,18 @@
 services:
   harbor-log:
-    image: goharbor/harbor-log:v2.14.2
+    image: docker.io/goharbor/harbor-log:v2.14.2
     container_name: harbor-log
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
     volumes:
-      - ./data/log:/var/log/harbor/:z
+      - ${DATA_DIR}/harbor/log:/var/log/harbor/:z
     networks:
       - harbor-net
     deploy:
@@ -14,19 +22,26 @@ services:
           cpus: '0.2'
     healthcheck:
       test: ["CMD-SHELL", "test -d /var/log/harbor"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=log"
 
   harbor-db:
-    image: goharbor/harbor-db:v2.14.2
+    image: docker.io/goharbor/harbor-db:v2.14.2
     container_name: harbor-db
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      - POSTGRES_PASSWORD=${HARBOR_DB_PASSWORD}
     volumes:
-      - ./data/database:/var/lib/postgresql/data:Z
+      - ${DATA_DIR}/harbor/database:/var/lib/postgresql/data:Z
     networks:
       - harbor-net
     deploy:
@@ -36,19 +51,28 @@ services:
           cpus: '0.3'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=database"
 
   harbor-redis:
-    image: goharbor/redis-photon:v2.14.2
+    image: docker.io/goharbor/redis-photon:v2.14.2
     container_name: harbor-redis
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
     volumes:
-      - ./data/redis:/data:Z
+      - ${DATA_DIR}/harbor/redis:/data:Z
     networks:
       - harbor-net
     deploy:
@@ -58,26 +82,54 @@ services:
           cpus: '0.2'
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=cache"
 
   harbor-core:
-    image: goharbor/harbor-core:v2.14.2
+    image: docker.io/goharbor/harbor-core:v2.14.2
     container_name: harbor-core
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - 8082:8080
     volumes:
-      - ./data/core:/data:z
+      - ${DATA_DIR}/harbor/core:/data:z
       - ./config/core:/etc/harbor:z
     depends_on:
       - harbor-log
       - harbor-db
       - harbor-redis
+    environment:
+      - CONFIG_PATH=/etc/harbor/app.conf
+      - LOG_LEVEL=info
+      - EXT_ENDPOINT=https://harbor.${DOMAIN}
+      - CORE_URL=http://harbor-core:8080
+      - PORTAL_URL=http://harbor-portal:8080
+      - REGISTRY_URL=http://registry:5000
+      - TOKEN_SERVICE_URL=http://harbor-core:8080/service/token
+      - HARBOR_ADMIN_PASSWORD=${HARBOR_ADMIN_PASSWORD}
+      - CORE_SECRET=${HARBOR_CORE_SECRET}
+      - JOBSERVICE_SECRET=${HARBOR_JOBSERVICE_SECRET}
+      - _REDIS_URL_REG=redis://harbor-redis:6379/1
+      - _REDIS_URL_CORE=redis://harbor-redis:6379/0
+      - REGISTRY_CREDENTIAL_USERNAME=harbor_registry_user
+      - REGISTRY_CREDENTIAL_PASSWORD=${HARBOR_REGISTRY_PASSWORD}
+      - DATABASE_TYPE=postgresql
+      - POSTGRESQL_HOST=harbor-db
+      - POSTGRESQL_PORT=5432
+      - POSTGRESQL_USERNAME=postgres
+      - POSTGRESQL_PASSWORD=${HARBOR_DB_PASSWORD}
+      - POSTGRESQL_DATABASE=registry
+      - POSTGRESQL_SSLMODE=disable
+      - REGISTRY_STORAGE_PROVIDER_NAME=filesystem
     networks:
       - harbor-net
       - proxy-net
@@ -88,10 +140,17 @@ services:
           cpus: '0.5'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v2.0/ping"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.harbor.rule=Host(`harbor.${DOMAIN}`)"
+      - "traefik.http.routers.harbor.entrypoints=websecure"
+      - "traefik.http.routers.harbor.tls=true"
+      - "traefik.http.routers.harbor.middlewares=authelia@file,security-headers@file"
+      - "traefik.http.services.harbor.loadbalancer.server.port=8080"
       - "security.stig.compliance=true"
       - "security.stig.role=core"
       - "homepage.group=Security"
@@ -101,9 +160,15 @@ services:
       - "homepage.href=https://harbor.${DOMAIN}"
 
   harbor-portal:
-    image: goharbor/harbor-portal:v2.14.2
+    image: docker.io/goharbor/harbor-portal:v2.14.2
     container_name: harbor-portal
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - ./config/portal/nginx.conf:/etc/nginx/nginx.conf:ro
     networks:
       - harbor-net
     deploy:
@@ -113,17 +178,33 @@ services:
           cpus: '0.2'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=ui"
 
   harbor-jobservice:
-    image: goharbor/harbor-jobservice:v2.14.2
+    image: docker.io/goharbor/harbor-jobservice:v2.14.2
     container_name: harbor-jobservice
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - ./config/jobservice:/etc/jobservice:z
+    depends_on:
+      - harbor-core
+    environment:
+      - CORE_URL=http://harbor-core:8080
+      - CORE_SECRET=${HARBOR_CORE_SECRET}
+      - JOBSERVICE_SECRET=${HARBOR_JOBSERVICE_SECRET}
+      - REGISTRY_URL=http://registry:5000
+      - REGISTRY_CREDENTIAL_USERNAME=harbor_registry_user
+      - REGISTRY_CREDENTIAL_PASSWORD=${HARBOR_REGISTRY_PASSWORD}
     networks:
       - harbor-net
     deploy:
@@ -133,17 +214,33 @@ services:
           cpus: '0.3'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/stats"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=job-worker"
 
   registry:
-    image: goharbor/registry-photon:v2.14.2
+    image: docker.io/goharbor/registry-photon:v2.14.2
     container_name: registry
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    volumes:
+      - ./config/registry:/etc/registry:z
+      - ${DATA_DIR}/harbor/registry:/storage:Z
+    depends_on:
+      - harbor-core
+    environment:
+      - REGISTRY_HTTP_SECRET=${HARBOR_CORE_SECRET}
     networks:
       - harbor-net
     deploy:
@@ -153,15 +250,16 @@ services:
           cpus: '0.3'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=registry"
 
 networks:
   harbor-net:
-    driver: bridge
+    external: true
   proxy-net:
     external: true

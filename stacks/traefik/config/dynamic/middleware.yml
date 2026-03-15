@@ -1,9 +1,10 @@
-# Traefik Dynamic Configuration
+# Traefik Dynamic Configuration — Middlewares & Transports
+# Routers/services are defined via Docker labels on each compose service.
 # Ref: https://doc.traefik.io/traefik/reference/dynamic-configuration/file/
 
 http:
   middlewares:
-    # Authelia ForwardAuth middleware — applied to all protected services
+    # Authelia ForwardAuth middleware — applied to protected services via labels
     authelia:
       forwardAuth:
         address: "http://authelia:9091/api/authz/forward-auth"
@@ -14,14 +15,15 @@ http:
           - Remote-Email
           - Remote-Name
 
-    # CrowdSec bouncer middleware (via plugin or manual)
-    crowdsec:
-      plugin:
-        crowdsec-bouncer-traefik-plugin:
-          enabled: true
-          crowdsecLapiScheme: http
-          crowdsecLapiHost: "crowdsec:8080"
-          crowdsecLapiKey: "${CROWDSEC_BOUNCER_API_KEY}"
+    # CrowdSec bouncer middleware — requires Traefik plugin installation
+    # Uncomment after installing crowdsec-bouncer-traefik-plugin
+    # crowdsec:
+    #   plugin:
+    #     crowdsec-bouncer-traefik-plugin:
+    #       enabled: true
+    #       crowdsecLapiScheme: http
+    #       crowdsecLapiHost: "crowdsec:8080"
+    #       crowdsecLapiKey: '{{env "CROWDSEC_BOUNCER_API_KEY"}}'
 
     # Security headers
     security-headers:
@@ -35,110 +37,6 @@ http:
         customFrameOptionsValue: "SAMEORIGIN"
         referrerPolicy: "strict-origin-when-cross-origin"
 
-  routers:
-    # Grafana
-    grafana:
-      rule: "Host(`grafana.{{env \"DOMAIN\"}}`)"
-      service: grafana
-      entryPoints:
-        - websecure
-      middlewares:
-        - authelia
-        - security-headers
-      tls: {}
-
-    # Wazuh Dashboard
-    wazuh:
-      rule: "Host(`wazuh.{{env \"DOMAIN\"}}`)"
-      service: wazuh
-      entryPoints:
-        - websecure
-      middlewares:
-        - authelia
-        - security-headers
-      tls: {}
-
-    # DefectDojo
-    defectdojo:
-      rule: "Host(`defectdojo.{{env \"DOMAIN\"}}`)"
-      service: defectdojo
-      entryPoints:
-        - websecure
-      middlewares:
-        - authelia
-        - security-headers
-      tls: {}
-
-    # Homepage Dashboard
-    homepage:
-      rule: "Host(`home.{{env \"DOMAIN\"}}`)"
-      service: homepage
-      entryPoints:
-        - websecure
-      middlewares:
-        - authelia
-        - security-headers
-      tls: {}
-
-    # Dockge
-    dockge:
-      rule: "Host(`dockge.{{env \"DOMAIN\"}}`)"
-      service: dockge
-      entryPoints:
-        - websecure
-      middlewares:
-        - authelia
-        - security-headers
-      tls: {}
-
-    # Harbor
-    harbor:
-      rule: "Host(`harbor.{{env \"DOMAIN\"}}`)"
-      service: harbor
-      entryPoints:
-        - websecure
-      middlewares:
-        - authelia
-        - security-headers
-      tls: {}
-
-    # SilverBullet
-    silverbullet:
-      rule: "Host(`silverbullet.{{env \"DOMAIN\"}}`)"
-      service: silverbullet
-      entryPoints:
-        - websecure
-      middlewares:
-        - authelia
-        - security-headers
-      tls: {}
-
-  services:
-    grafana:
-      loadBalancer:
-        servers:
-          - url: "http://grafana:3000"
-    wazuh:
-      loadBalancer:
-        servers:
-          - url: "https://wazuh-dashboard:5601"
-    defectdojo:
-      loadBalancer:
-        servers:
-          - url: "http://defectdojo-django:8080"
-    homepage:
-      loadBalancer:
-        servers:
-          - url: "http://homepage:3000"
-    dockge:
-      loadBalancer:
-        servers:
-          - url: "http://dockge:5001"
-    harbor:
-      loadBalancer:
-        servers:
-          - url: "http://harbor-core:8080"
-    silverbullet:
-      loadBalancer:
-        servers:
-          - url: "http://silverbullet:3000"
+  serversTransports:
+    insecure-skip-verify:
+      insecureSkipVerify: true

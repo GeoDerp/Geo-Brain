@@ -1,19 +1,28 @@
 services:
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-01-20T14-44-14Z
+    image: docker.io/minio/minio:RELEASE.2025-02-28T09-55-16Z
     container_name: minio
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
     command: server /data --console-address ":9001"
     environment:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
     volumes:
-      - ./data:/data:Z
+      - ${DATA_DIR}/minio:/data:Z
     ports:
       - 9000:9000
       - 9001:9001
     networks:
       - storage-net
+      - proxy-net
     deploy:
       resources:
         limits:
@@ -21,10 +30,17 @@ services:
           cpus: '0.5'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.minio-console.rule=Host(`minio.${DOMAIN}`)"
+      - "traefik.http.routers.minio-console.entrypoints=websecure"
+      - "traefik.http.routers.minio-console.tls=true"
+      - "traefik.http.routers.minio-console.middlewares=security-headers@file"
+      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
       - "security.stig.compliance=true"
       - "security.stig.role=storage"
       - "homepage.group=Infrastructure"
@@ -35,4 +51,6 @@ services:
 
 networks:
   storage-net:
-    driver: bridge
+    external: true
+  proxy-net:
+    external: true

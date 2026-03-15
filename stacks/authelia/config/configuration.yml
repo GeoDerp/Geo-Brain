@@ -18,8 +18,10 @@ totp:
 authentication_backend:
   # Use Kanidm as LDAP backend
   ldap:
-    address: "ldaps://kanidm:8443"
+    address: "ldaps://kanidm:3636"
     implementation: custom
+    tls:
+      skip_verify: true
     start_tls: false
     base_dn: "${LDAP_BASE_DN}"
     users_filter: "(&(|({username_attribute}={input})({mail_attribute}={input}))(objectClass=person))"
@@ -30,7 +32,7 @@ authentication_backend:
       mail: "mail"
       group_name: "cn"
     user: "uid=authelia_svc,${LDAP_BASE_DN}"
-    password: "${AUTHELIA_LDAP_PASSWORD}"
+    password: "${LDAP_BIND_PASSWORD}"
 
 access_control:
   default_policy: deny

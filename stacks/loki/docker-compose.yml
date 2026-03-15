@@ -1,15 +1,27 @@
 services:
   loki:
-    image: grafana/loki:3.4.1
+    image: docker.io/grafana/loki:3.4.1
     container_name: loki
     restart: always
-    user: "10001:10001"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    user: "${PUID:-1000}:${PGID:-1000}"
+    userns_mode: keep-id
     ports:
       - 3100:3100
     volumes:
       - ./config:/etc/loki:z
-      - ./data:/loki:Z
-    command: -config.file=/etc/loki/loki-config.yaml
+      - ${DATA_DIR}/loki:/loki:Z
+    command: -config.file=/etc/loki/loki-config.yaml -config.expand-env=true
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
     networks:
       - monitoring-net
       - storage-net
@@ -20,9 +32,10 @@ services:
           cpus: '0.5'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3100/ready"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=log-storage"

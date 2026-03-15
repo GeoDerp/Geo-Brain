@@ -71,7 +71,7 @@
 #           cpus: '0.5'
 #     healthcheck:
 #       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
-#       interval: 30s
+#       interval: 5m
 #       timeout: 10s
 #       retries: 3
 #     labels:

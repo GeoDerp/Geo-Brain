@@ -20,7 +20,7 @@
 #           cpus: '0.5'
 #     healthcheck:
 #       test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/auth/check"]
-#       interval: 30s
+#       interval: 5m
 #       timeout: 10s
 #       retries: 3
 #     labels:
@@ -55,7 +55,7 @@
 #           cpus: '0.3'
 #     healthcheck:
 #       test: ["CMD", "cat", "/proc/net/udp"]
-#       interval: 30s
+#       interval: 5m
 #       timeout: 10s
 #       retries: 3
 #     labels:

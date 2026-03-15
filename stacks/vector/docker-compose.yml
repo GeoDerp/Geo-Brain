@@ -1,9 +1,18 @@
 services:
   vector:
-    image: timberio/vector:0.44.0-debian
+    image: docker.io/timberio/vector:0.44.0-debian
     container_name: vector
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
     user: "${PUID:-1000}:${PGID:-1000}"
+    userns_mode: keep-id
     volumes:
       - ./config:/etc/vector:z
       - /var/log:/var/log:ro
@@ -19,9 +28,10 @@ services:
           cpus: '0.2'
     healthcheck:
       test: ["CMD", "vector", "--version"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=log-aggregator"

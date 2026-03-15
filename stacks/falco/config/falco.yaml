@@ -5,6 +5,13 @@
 engine:
   kind: modern_ebpf
 
+# Plugins
+plugins:
+  - name: container
+    library_path: libcontainer.so
+load_plugins:
+  - container
+
 # Output settings
 stdout_output:
   enabled: true

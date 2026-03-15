@@ -1,15 +1,25 @@
 services:
   traefik:
-    image: traefik:v3.3.4
+    image: docker.io/library/traefik:v3.3.4
     container_name: traefik
     restart: always
-    user: "${PUID:-1000}:${PGID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
     ports:
       - 80:80
       - 443:443
     volumes:
       - ./config:/etc/traefik:z
-      - ./data/logs:/var/log/traefik:Z
+      - ./config/certs:/etc/traefik/certs:ro
+      - ${DATA_DIR}/traefik/logs:/var/log/traefik:Z
       - ${PODMAN_SOCK}:/var/run/docker.sock:ro
     networks:
       - proxy-net
@@ -21,6 +31,8 @@ services:
       - vulnerability-net
       - harbor-net
       - user-net
+      - pki-net
+      - storage-net
     deploy:
       resources:
         limits:
@@ -28,10 +40,17 @@ services:
           cpus: '0.3'
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN}`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls=true"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.middlewares=authelia@file,security-headers@file"
       - "security.stig.compliance=true"
       - "security.stig.role=proxy"
       - "homepage.group=Management"
@@ -42,10 +61,7 @@ services:
 
 networks:
   proxy-net:
-    driver: bridge
-    labels:
-      - "security.stig.compliance=true"
-      - "security.stig.role=proxy-network"
+    external: true
   identity-net:
     external: true
   mgmt-net:
@@ -61,4 +77,8 @@ networks:
   harbor-net:
     external: true
   user-net:
+    external: true
+  pki-net:
+    external: true
+  storage-net:
     external: true
