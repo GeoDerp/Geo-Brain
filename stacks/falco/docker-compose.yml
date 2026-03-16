@@ -9,7 +9,7 @@ services:
       - /dev:/host/dev:ro
       - /proc:/host/proc:ro
       - /etc:/host/etc:ro
-      - ./config/falco.yaml:/etc/falco/falco.yaml:ro
+      - ./config/falco.yaml:/etc/falco/falco.yaml:ro,U
     command: ["falco", "-o", "engine.kind=modern_ebpf"]
     networks:
       - security-net

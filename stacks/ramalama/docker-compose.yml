@@ -11,12 +11,11 @@ services:
     ports:
       - 8084:8080
     volumes:
-      - ${DATA_DIR}/ramalama/models:/tmp/.local/share/ramalama/models:ro
-      - ${DATA_DIR}/ramalama/cache:/tmp/.cache:Z
+      - ${DATA_DIR}/ramalama:/var/lib/ramalama:Z
     environment:
       - RAMALAMA_MODEL=${RAMALAMA_MODEL:-phi3:mini}
-      - RAMALAMA_TRANSPORT=${RAMALAMA_TRANSPORT:-local}
-      - HOME=/tmp
+      - RAMALAMA_TRANSPORT=${RAMALAMA_TRANSPORT:-ollama}
+      - HOME=/var/lib/ramalama
     command: ["ramalama", "serve", "${RAMALAMA_MODEL:-phi3:mini}"]
     networks:
       - secure-backbone

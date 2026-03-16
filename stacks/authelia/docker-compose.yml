@@ -14,7 +14,7 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     userns_mode: keep-id
     volumes:
-      - ./config:/config:z
+      - ./config:/config:z,U
     environment:
       - X_AUTHELIA_CONFIG_FILTERS=expand-env
       - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_JWT_SECRET}

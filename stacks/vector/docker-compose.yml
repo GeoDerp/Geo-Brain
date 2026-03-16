@@ -14,8 +14,9 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     userns_mode: keep-id
     volumes:
-      - ./config:/etc/vector:z
+      - ./config:/etc/vector:z,U
       - /var/log:/var/log:ro
+      - vector-data:/var/lib/vector:z,U
       - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/var/run/docker.sock:ro # For container logs
     networks:
       - monitoring-net
@@ -47,3 +48,7 @@ networks:
     external: true
   security-net:
     external: true
+
+volumes:
+  vector-data:
+

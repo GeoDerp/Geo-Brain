@@ -12,10 +12,10 @@ services:
     ports:
       - "8180:8080" # LAPI for bouncers
     volumes:
-      - ${DATA_DIR}/crowdsec/config:/etc/crowdsec:z
-      - ${DATA_DIR}/crowdsec/data:/var/lib/crowdsec/data:z
+      - ${DATA_DIR}/crowdsec/config:/etc/crowdsec:z,U
+      - ${DATA_DIR}/crowdsec/data:/var/lib/crowdsec/data:z,U
       - /var/log:/var/log:ro # Read host logs
-      - ${DATA_DIR}/traefik/logs:/data/traefik-logs:ro # Read Traefik access logs
+      - ${DATA_DIR}/traefik/logs:/data/traefik-logs:ro,U # Read Traefik access logs
     networks:
       - security-net
       - proxy-net

@@ -17,9 +17,9 @@ services:
       - 80:80
       - 443:443
     volumes:
-      - ./config:/etc/traefik:z
-      - ./config/certs:/etc/traefik/certs:ro
-      - ${DATA_DIR}/traefik/logs:/var/log/traefik:Z
+      - ./config:/etc/traefik:z,U
+      - ./config/certs:/etc/traefik/certs:ro,U
+      - ${DATA_DIR}/traefik/logs:/var/log/traefik:Z,U
       - ${PODMAN_SOCK}:/var/run/docker.sock:ro
     networks:
       - proxy-net

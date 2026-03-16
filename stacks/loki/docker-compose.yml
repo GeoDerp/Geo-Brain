@@ -16,8 +16,8 @@ services:
     ports:
       - 3100:3100
     volumes:
-      - ./config:/etc/loki:z
-      - ${DATA_DIR}/loki:/loki:Z
+      - ./config:/etc/loki:z,U
+      - ${DATA_DIR}/loki:/loki:Z,U
     command: -config.file=/etc/loki/loki-config.yaml -config.expand-env=true
     environment:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
@@ -31,7 +31,7 @@ services:
           memory: 1G
           cpus: '0.5'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3100/ready"]
+      test: ["CMD", "loki", "--version"]
       interval: 5m
       timeout: 10s
       retries: 3

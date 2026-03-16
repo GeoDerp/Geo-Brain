@@ -23,7 +23,7 @@ authentication_backend:
     tls:
       skip_verify: true
     start_tls: false
-    base_dn: "${LDAP_BASE_DN}"
+    base_dn: "dc=kanidm,${LDAP_BASE_DN}"
     users_filter: "(&(|({username_attribute}={input})({mail_attribute}={input}))(objectClass=person))"
     groups_filter: "(member={dn})"
     attributes:
@@ -31,7 +31,7 @@ authentication_backend:
       display_name: "displayName"
       mail: "mail"
       group_name: "cn"
-    user: "uid=authelia_svc,${LDAP_BASE_DN}"
+    user: "authelia_svc@kanidm.${DOMAIN}"
     password: "${LDAP_BIND_PASSWORD}"
 
 access_control:

@@ -16,8 +16,8 @@ services:
     ports:
       - 3001:3000
     volumes:
-      - ${DATA_DIR}/grafana:/var/lib/grafana:Z
-      - ./config/provisioning:/etc/grafana/provisioning:z
+      - ${DATA_DIR}/grafana:/var/lib/grafana:Z,U
+      - ./config/provisioning:/etc/grafana/provisioning:z,U
     networks:
       - monitoring-net
       - wazuh-net

@@ -28,7 +28,7 @@ services:
     ports:
       - "${<SERVICE>_PORT:-<default-host-port>}:<container-port>"
     volumes:
-      - ${DATA_DIR}/<service-name>:/data:Z
+      - ${DATA_DIR}/<service-name>:/data:Z,U
       # - ./config:/config:z    # Uncomment if the service needs config mounts
     environment:
       - EXAMPLE_VAR=${EXAMPLE_VAR:-default_value}

@@ -16,10 +16,10 @@ services:
     ports:
       - "8443:8443"
     volumes:
-      - ${DATA_DIR}/kanidm:/data:Z
-      - ${DATA_DIR}/kanidm/certs/kanidm-chain.crt:/data/chain.pem:ro
-      - ${DATA_DIR}/kanidm/certs/kanidm.key:/data/key.pem:ro
-      - ./config/server.toml:/data/server.toml:z
+      - ${DATA_DIR}/kanidm:/data:Z,U
+      - ${DATA_DIR}/kanidm/certs/kanidm-chain.crt:/data/chain.pem:ro,U
+      - ${DATA_DIR}/kanidm/certs/kanidm.key:/data/key.pem:ro,U
+      - ./config/server.toml:/data/server.toml:z,U
     networks:
       - identity-net
       - proxy-net
@@ -29,7 +29,7 @@ services:
           memory: 1G
           cpus: '0.5'
     healthcheck:
-      test: ["CMD", "curl", "-fk", "https://localhost:8443/status"]
+      test: ["CMD", "/sbin/kanidmd", "version"]
       interval: 5m
       timeout: 10s
       retries: 3

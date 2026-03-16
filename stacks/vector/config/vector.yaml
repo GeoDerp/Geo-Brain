@@ -22,7 +22,7 @@ transforms:
       .labels.host = get_env_var!("HOSTNAME")
       .labels.pipeline = "vector"
       msg = to_string(.MESSAGE) ?? ""
-      if match(msg, r'(?i)(authentication|failed|denied|unauthorized|error|CVE|alert)') ?? false {
+      if match(msg, r'(?i)(authentication|failed|denied|unauthorized|error|CVE|alert)') {
         .labels.security = "true"
       }
 

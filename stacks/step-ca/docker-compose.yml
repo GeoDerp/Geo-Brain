@@ -3,10 +3,6 @@ services:
     image: docker.io/smallstep/step-ca:0.28.2
     container_name: step-ca
     restart: always
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
     read_only: true
     tmpfs:
       - /tmp
@@ -16,7 +12,7 @@ services:
     ports:
       - "9443:9000"
     volumes:
-      - ${DATA_DIR}/step-ca/step:/home/step:z
+      - ${DATA_DIR}/step-ca/step:/home/step:z,U
     environment:
       - DOCKER_STEPCA_INIT_NAME=${STEPCA_CA_NAME:-${DOMAIN} CA}
       - DOCKER_STEPCA_INIT_DNS_NAMES=ca.${DOMAIN},localhost

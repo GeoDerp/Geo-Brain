@@ -12,7 +12,7 @@ services:
     ports:
       - 3000:3000
     volumes:
-      - ./config:/app/config:z
+      - ./config:/app/config:z,U
       - ${PODMAN_SOCK}:/var/run/docker.sock:ro
     networks:
       - mgmt-net
@@ -23,7 +23,7 @@ services:
           memory: 512M
           cpus: '0.3'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000"]
       interval: 5m
       timeout: 10s
       retries: 3

@@ -14,8 +14,8 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     userns_mode: keep-id
     volumes:
-      - ./config:/etc/prometheus:z
-      - ${DATA_DIR}/prometheus:/prometheus:Z
+      - ./config:/etc/prometheus:z,U
+      - ${DATA_DIR}/prometheus:/prometheus:Z,U
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -35,7 +35,7 @@ services:
           memory: 1G
           cpus: '0.5'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9090/-/healthy"]
       interval: 5m
       timeout: 10s
       retries: 3

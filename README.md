@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="./docs/logo.svg" alt="GEO-Brain SSOF Logo" width="128"/>
+  <img src="./docs/logo.svg" alt="admin-Brain SSOF Logo" width="128"/>
 </p>
 
-# GEO-Brain SSOF: Single Node Homelab
+# admin-Brain SSOF: Single Node Homelab
 
 This repository serves as the Single Source of Truth (SSOT) for a DISA STIG compliant, single-node homelab. It leverages Podman (rootless by default) and Docker Compose to manage an Infrastructure-as-Code application stack.
 
@@ -206,7 +206,7 @@ Ensure you have the required tools installed, then run:
 
 ## Post-Deployment: Service URLs
 
-After a successful `./deploy.sh all up`, the following web interfaces are available. Replace `${DOMAIN}` with your configured domain (default: `brain.home.local`).
+After a successful `./deploy.sh all up`, the following web interfaces are available. Replace `${DOMAIN}` with your configured domain (default: `brain.lan`).
 
 ### Via Traefik (HTTPS Reverse Proxy)
 
@@ -271,16 +271,7 @@ See [certs/README.md](certs/README.md) for full details and manual certificate p
 
 ### 2. DNS or `/etc/hosts` Configuration
 
-For Traefik hostname routing to work, the node must be resolvable. Add entries to `/etc/hosts` on every client machine (or configure a local DNS server):
-
-```
-# Replace with your node's actual IP and configured DOMAIN
-192.168.1.45  home.brain.home.local traefik.brain.home.local auth.brain.home.local
-192.168.1.45  grafana.brain.home.local wazuh.brain.home.local defectdojo.brain.home.local
-192.168.1.45  harbor.brain.home.local kanidm.brain.home.local minio.brain.home.local
-192.168.1.45  dockge.brain.home.local ca.brain.home.local prometheus.brain.home.local
-192.168.1.45  silverbullet.brain.home.local moodle.brain.home.local ramalama.brain.home.local
-```
+For Traefik hostname routing to work, the node must be resolvable. Use wildcard domains, or add entries to `/etc/hosts` on every client machine:
 
 ### 3. Trust the CA Certificate (If Self-Signed)
 
@@ -310,7 +301,7 @@ The CrowdSec–Traefik integration requires a bouncer API key generated from the
 ./deploy.sh crowdsec up
 
 # SSH into the node and generate the key:
-ssh geo@<NODE_IP> 'podman exec crowdsec cscli bouncers add traefik-bouncer -o raw'
+ssh admin@<NODE_IP> 'podman exec crowdsec cscli bouncers add traefik-bouncer -o raw'
 
 # Paste the output into .env as CROWDSEC_BOUNCER_API_KEY, then redeploy Traefik:
 ./deploy.sh traefik up
@@ -322,10 +313,14 @@ Kanidm requires bootstrapping the admin account after first start:
 
 ```bash
 # After Kanidm is running:
-ssh geo@<NODE_IP> 'podman exec kanidm kanidmd recover-account admin'
+ssh admin@<NODE_IP> 'podman exec kanidm kanidmd recover-account -c /data/server.toml idm_admin'
 ```
 
-This prints a one-time password for the `admin` account. Use it to log in at `https://kanidm.${DOMAIN}` and complete initial configuration (create users, groups, OIDC clients for Authelia).
+This prints a one-time password for the `idm_admin` account. Log in at `https://kanidm.${DOMAIN}`.
+To enable the rest of the proxy infrastructure, you must immediately create the Authelia service account:
+1. Navigate to **Persons** and create a new user named `authelia_svc`.
+2. Set its password to the `AUTHELIA_LDAP_PASSWORD` defined in your `.env` file.
+3. Authelia will automatically connect and Traefik will begin routing traffic to the dashboards.
 
 ### 6. Harbor Admin Login
 
@@ -340,7 +335,7 @@ Wazuh Dashboard default credentials are `admin` / `admin`. Change them immediate
 DefectDojo creates a default admin user on first run. Check the container logs for the auto-generated password:
 
 ```bash
-ssh geo@<NODE_IP> 'podman logs defectdojo-django 2>&1 | grep -i "admin password"'
+ssh admin@<NODE_IP> 'podman logs defectdojo-django 2>&1 | grep -i "admin password"'
 ```
 
 ### 9. Data Directory Permissions
@@ -348,10 +343,44 @@ ssh geo@<NODE_IP> 'podman logs defectdojo-django 2>&1 | grep -i "admin password"
 Ensure the persistent data directory exists and is owned by the Podman user on the remote node:
 
 ```bash
-ssh geo@<NODE_IP> 'sudo mkdir -p /var/brain-ssof && sudo chown 1000:1000 /var/brain-ssof'
+ssh admin@<NODE_IP> 'sudo mkdir -p /var/brain-ssof && sudo chown 1000:1000 /var/brain-ssof'
 ```
 
 `init-node.sh` handles this automatically, but verify if provisioning was done manually.
+
+---
+
+## Deploying User Stacks
+
+To keep your personal, uncommitted stacks separate from the core infrastructure, place them inside the `stacks/user/` directory (which is ignored by Git).
+
+1. Create a directory for your stack: `mkdir -p stacks/user/mystack`
+2. Create your `docker-compose.yml` inside it.
+3. Deploy it using the `deploy.sh` script by prefixing the target with `user/`:
+
+```bash
+./deploy.sh user/mystack up
+```
+
+Alternatively, you can redeploy all user stacks at once:
+
+```bash
+./deploy.sh user up
+```
+
+## STIG & Security Validation
+
+The deployment wrapper (`deploy.sh`) automatically enforces STIG compliance checks before deploying any stack. It verifies image pinning, rootless execution, read-only filesystems, capability drops, health checks, and strict resource limits.
+
+You can run these validations manually without deploying to ensure your custom stacks meet the baseline requirements:
+
+```bash
+# Validate a specific stack
+./deploy.sh harbor check
+
+# Validate a user stack
+./deploy.sh user/mystack check
+```
 
 ---
 

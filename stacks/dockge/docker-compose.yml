@@ -12,9 +12,9 @@ services:
     ports:
       - 5001:5001
     volumes:
-      - ${PODMAN_SOCK}:/var/run/docker.sock
-      - ${DATA_DIR}/dockge:/app/data:z
-      - ../:/app/stacks:z
+      - ${PODMAN_SOCK}:/var/run/docker.sock:ro
+      - ${DATA_DIR}/dockge:/app/data:z,U
+      - ../:/app/stacks:z,U
     environment:
       - DOCKGE_STACKS_DIR=/app/stacks
     networks:

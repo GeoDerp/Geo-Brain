@@ -13,8 +13,8 @@ services:
       - discovery.type=single-node
       - plugins.security.disabled=true
     volumes:
-      - ${DATA_DIR}/wazuh/indexer:/var/lib/opensearch/data:Z
-      - ./config/indexer/opensearch.yml:/usr/share/opensearch/config/opensearch.yml:ro
+      - ${DATA_DIR}/wazuh/indexer:/var/lib/opensearch/data:Z,U
+      - ./config/indexer/opensearch.yml:/usr/share/opensearch/config/opensearch.yml:ro,U
     networks:
       wazuh-net:
         aliases:
@@ -43,20 +43,12 @@ services:
     restart: always
     security_opt:
       - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - DAC_OVERRIDE
-      - CHOWN
-      - SETUID
-      - SETGID
-      - FOWNER
     ports:
       - 1514:1514
       - 1515:1515
       - 55000:55000
     volumes:
-      - ${DATA_DIR}/wazuh/manager:/var/ossec/data:Z
+      - ${DATA_DIR}/wazuh/manager:/var/ossec/data:Z,U
       - ./config/manager/filebeat.yml:/etc/filebeat/filebeat.yml:ro
     networks:
       wazuh-net:
@@ -84,10 +76,6 @@ services:
     image: docker.io/wazuh/wazuh-dashboard:4.14.3
     container_name: wazuh-dashboard
     restart: always
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
     ports:
       - 5601:5601
     depends_on:

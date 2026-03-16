@@ -72,7 +72,7 @@ fi
 
 if [ -z "$STACK_NAME" ]; then
     echo "Usage: $0 [stack-name|all|base|user] [command (default: up)]"
-    echo "Commands: up, down, ps, logs, restart, check"
+    echo "Commands: up, down, ps, logs, restart, check, redeploy"
     echo "Mode: ${DEPLOY_MODE}"
     echo ""
     echo "Special targets:"
@@ -85,11 +85,53 @@ fi
 # --- Stack Discovery ---
 
 get_base_stacks() {
+    local ordered_stacks=(
+        "step-ca"
+        "traefik"
+        "bunkerweb"
+        "pangolin"
+        "kanidm"
+        "authelia"
+        "minio"
+        "loki"
+        "vector"
+        "prometheus"
+        "wazuh"
+        "falco"
+        "crowdsec"
+        "harbor"
+        "defectdojo"
+        "grafana"
+        "ramalama"
+        "dockge"
+        "homepage"
+    )
+
+    local found_stacks=()
     for dir in "$REPO_ROOT"/stacks/*/; do
         local name
         name="$(basename "$dir")"
         [[ "$name" == "_template" || "$name" == "user" ]] && continue
-        echo "$name"
+        if [[ -f "$dir/docker-compose.yml" ]] && ! grep -q '^[[:space:]]*services:' "$dir/docker-compose.yml"; then
+            continue
+        fi
+        found_stacks+=("$name")
+    done
+
+    # Output in the specified order
+    for stack in "${ordered_stacks[@]}"; do
+        for i in "${!found_stacks[@]}"; do
+            if [[ "${found_stacks[$i]}" == "$stack" ]]; then
+                echo "$stack"
+                unset 'found_stacks[i]'
+                break
+            fi
+        done
+    done
+
+    # Output any remaining stacks not in the hardcoded list
+    for stack in "${found_stacks[@]}"; do
+        echo "$stack"
     done
 }
 
@@ -187,7 +229,49 @@ ensure_remote_dirs() {
         unique=$(printf '%s\n' "${dirs[@]}" | sort -u | tr '\n' ' ')
         echo "    Ensuring volume directories on remote..."
         # shellcheck disable=SC2029
-        "${SSH_CMD[@]}" "mkdir -p $unique"
+        "${SSH_CMD[@]}" "for d in $unique; do mkdir -p \"\$d\" 2>/dev/null || true; done"
+    fi
+}
+
+# --- Render Config Templates ---
+# Expands ${VARIABLE} references in config files on the remote node.
+# Required because some apps (Kanidm, Authelia, Traefik dynamic config, Loki)
+# read config files directly and cannot expand environment variables natively.
+
+render_config_templates() {
+    local stack_dir="$1"
+
+    if [[ "$DEPLOY_MODE" == "remote" ]]; then
+        "${SSH_CMD[@]}" bash -s -- "${REMOTE_BASE}" "${stack_dir}" << 'RENDER_SCRIPT'
+RBASE="$1"
+SDIR="$2"
+ENVFILE="$HOME/${RBASE}/.env"
+CONFDIR="$HOME/${RBASE}/${SDIR}/config"
+
+cd "$CONFDIR" 2>/dev/null || exit 0
+set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
+command -v envsubst &>/dev/null || exit 0
+
+# Whitelist: only expand variables defined in .env (prevents clobbering app-specific patterns)
+VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${HARBOR_ADMIN_PASSWORD} ${HARBOR_CORE_SECRET} ${HARBOR_JOBSERVICE_SECRET} ${HARBOR_REGISTRY_PASSWORD} ${HARBOR_DB_PASSWORD} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD}'
+
+find . -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
+    if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
+        envsubst "$VARLIST" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
+    fi
+done
+RENDER_SCRIPT
+    else
+        # Local: expand in a temp copy to avoid modifying repo templates
+        local config_dir="$REPO_ROOT/$stack_dir/config"
+        [[ -d "$config_dir" ]] || return 0
+        command -v envsubst &>/dev/null || return 0
+        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${HARBOR_ADMIN_PASSWORD} ${HARBOR_CORE_SECRET} ${HARBOR_JOBSERVICE_SECRET} ${HARBOR_REGISTRY_PASSWORD} ${HARBOR_DB_PASSWORD} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD}'
+        find "$config_dir" -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
+            if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
+                envsubst "$varlist" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
+            fi
+        done
     fi
 }
 
@@ -251,13 +335,16 @@ run_compose() {
         if [[ "$cmd" == "up" || "$cmd" == "restart" ]]; then
             local compose_file="$REPO_ROOT/$stack_dir/docker-compose.yml"
 
-            echo "  [1/3] Creating remote volume directories..."
+            echo "  [1/4] Creating remote volume directories..."
             ensure_remote_dirs "$compose_file" "$stack_dir"
 
-            echo "  [2/3] Syncing config to remote (rsync)..."
+            echo "  [2/4] Syncing config to remote (rsync)..."
             rsync_to_remote "$stack_dir"
 
-            echo "  [3/3] Running podman compose $cmd on remote..."
+            echo "  [3/4] Rendering config templates..."
+            render_config_templates "$stack_dir"
+
+            echo "  [4/4] Running podman compose $cmd on remote..."
         else
             echo "  Running podman compose $cmd on remote..."
         fi
@@ -409,13 +496,19 @@ deploy_single() {
             check_security "$REPO_ROOT/$stack_dir" "$stack_name" || return 1
             run_compose "$stack_dir" "up" "-d"
             ;;
+        redeploy)
+            check_security "$REPO_ROOT/$stack_dir" "$stack_name" || return 1
+            echo ">>> Forcing recreation of containers for $stack_name..."
+            run_compose "$stack_dir" "down"
+            run_compose "$stack_dir" "up" "-d" "--force-recreate"
+            ;;
         down)    run_compose "$stack_dir" "down" ;;
         ps)      run_compose "$stack_dir" "ps" ;;
         logs)    run_compose "$stack_dir" "logs" "-f" ;;
         restart) run_compose "$stack_dir" "restart" ;;
         *)
             echo "[ERROR] Unknown command '$COMMAND'."
-            echo "Valid: up, down, ps, logs, restart, check"
+            echo "Valid: up, down, ps, logs, restart, check, redeploy"
             exit 1
             ;;
     esac
