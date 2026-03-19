@@ -356,7 +356,7 @@
         or ansible_selinux.status | default('disabled') == 'disabled'
 
     # =================================================================
-    #  8. Sysctl — vm.max_map_count
+    #  8. Sysctl — vm.max_map_count & Unprivileged Ports
     # =================================================================
     - name: "[8/10] Set vm.max_map_count=262144 (Wazuh/Elasticsearch)"
       become: true
@@ -364,6 +364,15 @@
         name: vm.max_map_count
         value: "262144"
         sysctl_file: /etc/sysctl.d/99-wazuh.conf
+        reload: true
+        state: present
+
+    - name: "[8/10] Set net.ipv4.ip_unprivileged_port_start=80 (Rootless Traefik)"
+      become: true
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_unprivileged_port_start
+        value: "80"
+        sysctl_file: /etc/sysctl.d/99-rootless.conf
         reload: true
         state: present
 

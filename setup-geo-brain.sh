@@ -106,6 +106,16 @@ setup_pki() {
      echo "✅ ACME provisioner added to Step-CA."
   fi
 
+  echo "Adding OIDC provisioner to Step-CA for Kanidm..."
+  if podman exec step-ca step ca provisioner list | grep -q '"name": "kanidm"'; then
+     echo "🔹 OIDC provisioner 'kanidm' already exists."
+  else
+     podman exec step-ca step ca provisioner add kanidm --type OIDC --client-id step-ca --client-secret "${STEPCA_OIDC_SECRET:-placeholder}" --configuration-endpoint https://idm.${DOMAIN}/oauth2/openid/step-ca/.well-known/openid-configuration --domain ${DOMAIN}
+     echo "Reloading Step-CA..."
+     podman kill -s SIGHUP step-ca
+     echo "✅ OIDC provisioner added to Step-CA."
+  fi
+
   echo "Injecting Step-CA Root Certificate into Traefik..."
   # Extract the root CA. We assume Step-CA volume is mounted at ${DATA_DIR}/step-ca/step
   # OR we can pull it via step cli inside the container

@@ -6,7 +6,7 @@
 # Usage:
 #   1. Copy this directory:  cp -r _template stacks/<your-stack-name>
 #   2. Update image, ports, volumes, and labels below.
-#   3. Add any required secrets to .env-template and your local .env.
+#   3. Add any required secrets as Podman secrets and reference them.
 #   4. Deploy:  ./deploy.sh <your-stack-name> up
 #
 # DISA STIG / GEMINI.md Checklist:
@@ -16,7 +16,8 @@
 #   [x] Runs rootless via ${PUID}:${PGID}
 #   [x] Dedicated network (no inter-stack unless justified)
 #   [x] STIG compliance labels present
-#   [x] No hardcoded secrets (all from .env)
+#   [x] read_only: true, cap_drop: ALL, and tmpfs mounted for STIG compliance
+#   [x] No hardcoded secrets (use podman secrets instead)
 # =============================================================================
 
 services:
@@ -25,13 +26,23 @@ services:
     container_name: <service-name>
     restart: always
     user: "${PUID:-1000}:${PGID:-1000}"
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+      - /run
     ports:
       - "${<SERVICE>_PORT:-<default-host-port>}:<container-port>"
     volumes:
       - ${DATA_DIR}/<service-name>:/data:Z,U
       # - ./config:/config:z    # Uncomment if the service needs config mounts
-    environment:
-      - EXAMPLE_VAR=${EXAMPLE_VAR:-default_value}
+    # Use secrets instead of environment variables for sensitive data
+    # environment:
+    #   - EXAMPLE_VAR=${EXAMPLE_VAR:-default_value}
+    # secrets:
+    #   - source: example_secret
+    #     target: /run/secrets/example_secret
     networks:
       - <stack>-net
     deploy:
@@ -48,12 +59,20 @@ services:
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=<role>"
+      # Declarative Zero-Trust Proxy labels (Traefik + Step-CA)
+      # - "traefik.enable=true"
+      # - "traefik.http.routers.<service-name>.rule=Host(`<subdomain>.${DOMAIN}`)"
+      # - "traefik.http.routers.<service-name>.tls.certresolver=stepca"
       # Uncomment and customise for Homepage dashboard integration:
       # - "homepage.group=<Group>"
       # - "homepage.name=<Display Name>"
       # - "homepage.icon=<icon>.png"
       # - "homepage.description=<Short description>"
       # - "homepage.href=https://<subdomain>.${DOMAIN}"
+
+# secrets:
+#   example_secret:
+#     external: true
 
 networks:
   <stack>-net:

@@ -35,3 +35,7 @@ scrape_configs:
   - job_name: 'wazuh-indexer'
     static_configs:
       - targets: ['wazuh-indexer:9200']
+
+  - job_name: 'podman-exporter'
+    static_configs:
+      - targets: ['podman-exporter:9882']

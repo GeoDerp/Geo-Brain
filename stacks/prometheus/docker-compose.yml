@@ -49,6 +49,40 @@ services:
       - "homepage.description=Metrics Monitoring"
       - "homepage.href=https://prometheus.${DOMAIN}"
 
+  podman-exporter:
+    image: quay.io/navidys/prometheus-podman-exporter:v1.14.1
+    container_name: podman-exporter
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    user: "${PUID:-1000}:${PGID:-1000}"
+    userns_mode: keep-id
+    environment:
+      - CONTAINER_HOST=unix:///run/podman/podman.sock
+    volumes:
+      - ${PODMAN_SOCK}:/run/podman/podman.sock:ro
+    ports:
+      - 9882:9882
+    networks:
+      - monitoring-net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9882/health"]
+      interval: 5m
+      timeout: 10s
+      retries: 3
+      start_period: 5m
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=metrics-exporter"
+
 networks:
   monitoring-net:
     external: true
