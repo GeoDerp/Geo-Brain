@@ -477,16 +477,15 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 
 ## Strategic Infrastructure
 
-### Kanidm / Authelia
+### Kanidm / Vaultwarden
 
 **What they are:** 
-- **Kanidm:** A modern, secure identity management system written in Rust.
-- **Authelia:** An open-source authentication and authorization server.
+- **Kanidm:** A modern, secure identity management system written in Rust. It serves as the absolute single source of truth for identity and OIDC SSO across the entire homelab.
+- **Vaultwarden:** An unofficial Bitwarden compatible server written in Rust. It exclusively handles secret storage.
 
 **Why they're used:**
-- **Centralized IAM:** Provides single sign-on (SSO) for all web interfaces.
-- **Multi-Factor Authentication:** Enforces MFA for enhanced security.
-- **Access Control:** Implements role-based access control (RBAC) for services.
+- **Centralized IAM:** Kanidm provides single sign-on (SSO) via OIDC for all web interfaces.
+- **Secret Management:** Vaultwarden stores and syncs all secrets (API keys, passwords), completely separated from the IAM platform.
 
 ---
 
@@ -495,9 +494,9 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 **What it is:** Harbor is an open-source container registry that provides security and compliance features.
 
 **Why it's used:**
-- **Local Registry:** Caches container images for air-gapped operation.
-- **Pull-Through Cache:** Mirrors external registries to reduce external dependencies.
-- **Vulnerability Scanning:** Integrates Trivy for automatic image scanning.
+- **Harbor-First Architecture:** Harbor is the primary gateway for all container images. It must run first, and all subsequent containers pull their images through Harbor.
+- **Pull-Through Cache:** Mirrors external registries to reduce external dependencies and provide an airgap-ready cache.
+- **Vulnerability Scanning:** Integrates Trivy for automatic image scanning before allowing deployment.
 
 ---
 
@@ -507,7 +506,7 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 
 **Why it's used:**
 - **Internal PKI:** Issues certificates for `*.example.local` domain.
-- **ACME Support:** Supports automatic certificate issuance via ACME protocol.
+- **Automated Traefik ACME:** Integrated directly with Traefik via the ACME protocol for zero-touch, automated certificate issuance across all dynamic user stacks.
 
 ---
 

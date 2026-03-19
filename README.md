@@ -61,7 +61,6 @@ These stacks are **not deployed by default** and serve as drop-in enhancements f
 
 - **Pangolin (Zero-Trust Tunnel Proxy):** Identity-aware reverse proxy and WireGuard VPN for secure remote access without exposing ports or requiring a public IP. Replaces Traefik + Authelia when tunnel-based access is needed. *(AGPL-3.0, fosrl/pangolin)*
 - **BunkerWeb (L7 WAF & DDoS Protection):** Next-generation Web Application Firewall based on NGINX with integrated ModSecurity + OWASP Core Rule Set, rate limiting, anti-bot challenges, IP blacklists, DNSBL, and CrowdSec integration. Sits in front of Traefik as an L7 security perimeter. *(AGPL-3.0, bunkerity/bunkerweb)*
-- **Keycloak (Identity Management):** Open-source identity and access management platform providing OIDC/SAML authentication, user federation, and multi-factor authentication. Designed to eventually replace Kanidm as the primary identity provider for the homelab. *(AGPL-3.0, keycloak/keycloak)* **[WIP]**
 > **Note:** Pangolin bundles its own Traefik instance and **cannot** run alongside the existing Traefik stack. BunkerWeb requires Traefik to move to internal-only ports when deployed as the external-facing WAF.
 
 ---

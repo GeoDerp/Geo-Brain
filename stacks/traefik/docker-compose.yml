@@ -20,7 +20,10 @@ services:
       - ./config:/etc/traefik:z,U
       - ./config/certs:/etc/traefik/certs:ro,U
       - ${DATA_DIR}/traefik/logs:/var/log/traefik:Z,U
+      - ${DATA_DIR}/traefik/acme:/etc/traefik/acme:Z,U
       - ${PODMAN_SOCK}:/var/run/docker.sock:ro
+    environment:
+      - LEGO_CA_CERTIFICATES=/etc/traefik/certs/root_ca.crt
     networks:
       - proxy-net
       - identity-net
@@ -49,6 +52,7 @@ services:
       - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN}`)"
       - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
       - "traefik.http.routers.traefik-dashboard.tls=true"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=stepca"
       - "traefik.http.routers.traefik-dashboard.service=api@internal"
       - "traefik.http.routers.traefik-dashboard.middlewares=authelia@file,security-headers@file"
       - "security.stig.compliance=true"

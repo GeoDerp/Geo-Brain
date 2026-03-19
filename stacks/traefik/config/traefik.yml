@@ -32,6 +32,14 @@ providers:
     directory: /etc/traefik/dynamic
     watch: true
 
+certificatesResolvers:
+  stepca:
+    acme:
+      email: admin@${DOMAIN}
+      caServer: https://step-ca:9000/acme/acme/directory
+      storage: /etc/traefik/acme/acme.json
+      tlsChallenge: {}
+
 metrics:
   prometheus:
     entryPoint: metrics
