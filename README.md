@@ -278,11 +278,11 @@ Browsers will reject self-signed certificates until the CA is trusted. After gen
 
 ```bash
 # Fedora / RHEL
-sudo cp certs/ca.crt /etc/pki/ca-trust/source/anchors/brain-ssof-ca.crt
+sudo cp certs/ca.crt /etc/pki/ca-trust/source/anchors/Geo-Brain-ca.crt
 sudo update-ca-trust
 
 # Debian / Ubuntu
-sudo cp certs/ca.crt /usr/local/share/ca-certificates/brain-ssof-ca.crt
+sudo cp certs/ca.crt /usr/local/share/ca-certificates/Geo-Brain-ca.crt
 sudo update-ca-certificates
 
 # macOS
@@ -342,7 +342,7 @@ ssh admin@<NODE_IP> 'podman logs defectdojo-django 2>&1 | grep -i "admin passwor
 Ensure the persistent data directory exists and is owned by the Podman user on the remote node:
 
 ```bash
-ssh admin@<NODE_IP> 'sudo mkdir -p /var/brain-ssof && sudo chown 1000:1000 /var/brain-ssof'
+ssh admin@<NODE_IP> 'sudo mkdir -p /var/Geo-Brain && sudo chown 1000:1000 /var/Geo-Brain'
 ```
 
 `init-node.sh` handles this automatically, but verify if provisioning was done manually.

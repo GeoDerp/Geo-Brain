@@ -21,9 +21,11 @@ services:
       - ./config/certs:/etc/traefik/certs:ro,U
       - ${DATA_DIR}/traefik/logs:/var/log/traefik:Z,U
       - ${DATA_DIR}/traefik/acme:/etc/traefik/acme:Z,U
-      - ${PODMAN_SOCK}:/var/run/docker.sock:ro
+      - ${PODMAN_SOCK}:/var/run/docker.sock:ro,z
     environment:
       - LEGO_CA_CERTIFICATES=/etc/traefik/certs/root_ca.crt
+      - DOCKER_API_VERSION=1.40
+      - DOMAIN=${DOMAIN}
     networks:
       - proxy-net
       - identity-net

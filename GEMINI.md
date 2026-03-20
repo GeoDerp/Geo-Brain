@@ -1,4 +1,4 @@
-# GEMINI Context: brain-ssof (Single Source of Truth)
+# GEMINI Context: Geo-Brain (Single Source of Truth)
 
 This repository serves as the Single Source of Truth (SSOT) for a DISA STIG compliant, single-node homelab. It manages infrastructure-as-code via Podman and Docker Compose.
 
@@ -17,7 +17,7 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - **Reliability:** Every service must define `deploy.resources.limits` and `healthcheck`.
 - **Network Isolation:** Applications reside on dedicated Podman networks. No inter-stack communication unless explicitly defined.
 - **Air-gap Preparedness:** All images are pinned to specific versions/digests. No `:latest` tags.
-- **Data Separation:** Persistent data lives under `${DATA_DIR}` (default `/var/brain-ssof`) on a large partition. Config files stay relative (`./config`) for rsync portability. New stacks mount data as `${DATA_DIR}/<stack-name>/...`.
+- **Data Separation:** Persistent data lives under `${DATA_DIR}` (default `/var/Geo-Brain`) on a large partition. Config files stay relative (`./config`) for rsync portability. New stacks mount data as `${DATA_DIR}/<stack-name>/...`.
 - **Single Source of Truth:** All infrastructure state is defined in this repository. Manual changes on the host are forbidden.
 - **HTTPS Only:** All HTTP endpoints MUST be encrypted with TLS. Plain HTTP is only allowed for local bootstrap redirects to HTTPS.
 

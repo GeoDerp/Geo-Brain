@@ -16,7 +16,7 @@ DOMAIN=${DOMAIN:-geo-brain.local}
 ADMIN_PASSWORD=${ADMIN_PASSWORD:-"ChangeMe123!"}
 MAX_RETRIES=15
 INITIAL_BACKOFF=2
-DATA_DIR=${DATA_DIR:-/var/brain-ssof}
+DATA_DIR=${DATA_DIR:-/var/Geo-Brain}
 
 echo "Starting Geo Brain post-deployment rootless bootstrapper..."
 
@@ -96,25 +96,25 @@ setup_pki() {
 
   echo "Adding ACME provisioner to Step-CA..."
   # Check if ACME provisioner exists
-  if podman exec step-ca step ca provisioner list | grep -q '"name": "acme"'; then
+  if podman exec step-ca step ca provisioner list --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt | grep -q '"name": "acme"'; then
      echo "🔹 ACME provisioner already exists."
   else
      # The step-ca container might run as a specific user, ensure we have rights.
-     podman exec step-ca step ca provisioner add acme --type ACME
+     podman exec step-ca step ca provisioner add acme --type ACME --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt
      echo "Reloading Step-CA..."
      podman kill -s SIGHUP step-ca
      echo "✅ ACME provisioner added to Step-CA."
   fi
 
   echo "Adding OIDC provisioner to Step-CA for Kanidm..."
-  if podman exec step-ca step ca provisioner list | grep -q '"name": "kanidm"'; then
-     echo "🔹 OIDC provisioner 'kanidm' already exists."
-  else
-     podman exec step-ca step ca provisioner add kanidm --type OIDC --client-id step-ca --client-secret "${STEPCA_OIDC_SECRET:-placeholder}" --configuration-endpoint https://idm.${DOMAIN}/oauth2/openid/step-ca/.well-known/openid-configuration --domain ${DOMAIN}
-     echo "Reloading Step-CA..."
-     podman kill -s SIGHUP step-ca
-     echo "✅ OIDC provisioner added to Step-CA."
-  fi
+  # if podman exec step-ca step ca provisioner list --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt | grep -q '"name": "kanidm"'; then
+  #    echo "🔹 OIDC provisioner 'kanidm' already exists."
+  # else
+  #    podman exec step-ca step ca provisioner add kanidm --type OIDC --client-id step-ca --client-secret "${STEPCA_OIDC_SECRET:-placeholder}" --configuration-endpoint https://kanidm.${DOMAIN}/oauth2/openid/step-ca/.well-known/openid-configuration --domain ${DOMAIN} --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt
+  #    echo "Reloading Step-CA..."
+  #    podman kill -s SIGHUP step-ca
+  #    echo "✅ OIDC provisioner added to Step-CA."
+  # fi
 
   echo "Injecting Step-CA Root Certificate into Traefik..."
   # Extract the root CA. We assume Step-CA volume is mounted at ${DATA_DIR}/step-ca/step
@@ -133,7 +133,7 @@ setup_identity() {
   echo "--- 3) Identity (Kanidm & Vaultwarden OIDC) ---"
   
   # Wait for Kanidm
-  wait_for_service "Kanidm" "curl -s -k -f https://idm.${DOMAIN}/status" || exit 1
+  wait_for_service "Kanidm" "curl -s -k -f https://kanidm.${DOMAIN}/status" || exit 1
   
   # Recover token (if it doesn't exist, we can't easily auto-gen here unless we know it's a fresh install, 
   # but let's assume kanidm is fresh and we can recover admin or we use a pre-set admin password).

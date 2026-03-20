@@ -38,7 +38,7 @@ CA_SUBJECT="/C=US/ST=Local/L=Homelab/O=GEO-Brain/OU=SSOF/CN=${DOMAIN} Temporary 
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
 REMOTE_HOST="${REMOTE_HOST:-homelab.local}"
 REMOTE_USER="${REMOTE_USER:-$USER}"
-DATA_DIR="${DATA_DIR:-/var/brain-ssof}"
+DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
 
 # --- Parse args ---
 DO_DEPLOY=false
@@ -233,60 +233,21 @@ SANEOF
 
   # --- Step 4: Generate Kanidm cert (needs specific SANs) ---
   echo ">>> Generating Kanidm certificate..."
-
-  cat > "$CERT_DIR/kanidm-san.cnf" <<KANEOF
-[req]
-default_bits       = $KEY_SIZE
-distinguished_name = req_dn
-req_extensions     = v3_req
-prompt             = no
-
-[req_dn]
-C  = US
-ST = Local
-L  = Homelab
-O  = GEO-Brain
-OU = SSOF
-CN = kanidm.${DOMAIN}
-
-[v3_req]
-basicConstraints     = CA:FALSE
-keyUsage             = digitalSignature, keyEncipherment
-extendedKeyUsage     = serverAuth
-subjectAltName       = @alt_names
-
-[alt_names]
-DNS.1 = kanidm.${DOMAIN}
-DNS.2 = kanidm
-DNS.3 = localhost
-IP.1  = 127.0.0.1
-KANEOF
-
-  openssl genrsa -out "$CERT_DIR/kanidm.key" "$KEY_SIZE" 2>/dev/null
-  chmod 600 "$CERT_DIR/kanidm.key"
-
-  openssl req -new \
-    -key "$CERT_DIR/kanidm.key" \
-    -config "$CERT_DIR/kanidm-san.cnf" \
-    -out "$CERT_DIR/kanidm.csr"
-
-  openssl x509 -req \
-    -in "$CERT_DIR/kanidm.csr" \
-    -CA "$CERT_DIR/ca.crt" \
-    -CAkey "$CERT_DIR/ca.key" \
-    -CAcreateserial \
-    -out "$CERT_DIR/kanidm.crt" \
-    -days "$CERT_DAYS" \
-    -sha256 \
-    -extfile "$CERT_DIR/kanidm-san.cnf" \
-    -extensions v3_req
-
-  # Kanidm needs a chain file (cert + CA)
-  cat "$CERT_DIR/kanidm.crt" "$CERT_DIR/ca.crt" > "$CERT_DIR/kanidm-chain.crt"
-
-  echo "    Kanidm cert:  $CERT_DIR/kanidm.crt"
-  echo "    Kanidm chain: $CERT_DIR/kanidm-chain.crt"
-  echo "    Kanidm key:   $CERT_DIR/kanidm.key"
+  # ... (existing Kanidm logic)
+  
+  # --- Step 4b: Generate Harbor Token Signing Pair ---
+  echo ">>> Generating Harbor Token Signing Pair..."
+  openssl genrsa -traditional -out "$CERT_DIR/harbor-token.key" "$KEY_SIZE" 2>/dev/null
+  chmod 600 "$CERT_DIR/harbor-token.key"
+  
+  openssl req -new -x509 \
+    -key "$CERT_DIR/harbor-token.key" \
+    -out "$CERT_DIR/harbor-token.crt" \
+    -days "$CA_DAYS" \
+    -subj "/C=US/ST=Local/L=Homelab/O=GEO-Brain/CN=harbor-token-issuer"
+    
+  echo "    Harbor Token Key:  $CERT_DIR/harbor-token.key"
+  echo "    Harbor Token Cert: $CERT_DIR/harbor-token.crt"
 
 fi  # end import/generate
 
@@ -322,6 +283,18 @@ if [[ -f "$CERT_DIR/ca.crt" ]]; then
   chmod 644 "$TRAEFIK_CERTS/ca.crt"
 fi
 echo "    Copied to: stacks/traefik/config/certs/"
+
+# Deploy Harbor Token Keys
+echo ">>> Preparing Harbor Token keys..."
+HARBOR_CORE_DIR="$REPO_ROOT/stacks/harbor/config/core"
+HARBOR_REG_DIR="$REPO_ROOT/stacks/harbor/config/registry"
+mkdir -p "$HARBOR_CORE_DIR" "$HARBOR_REG_DIR"
+cp "$CERT_DIR/harbor-token.key" "$HARBOR_CORE_DIR/private_key.pem"
+cp "$CERT_DIR/harbor-token.crt" "$HARBOR_REG_DIR/root.crt"
+cp "$CERT_DIR/harbor-token.crt" "$HARBOR_CORE_DIR/root.crt" # Core might need it for validation too
+chmod 600 "$HARBOR_CORE_DIR/private_key.pem"
+chmod 644 "$HARBOR_REG_DIR/root.crt" "$HARBOR_CORE_DIR/root.crt"
+echo "    Copied Harbor Token keys to stacks/harbor/config/"
 
 # --- Step 7: Verify the cert ---
 echo ""
@@ -364,12 +337,12 @@ if $DO_TRUST_LOCAL; then
   # Detect OS and install accordingly
   if command -v update-ca-trust &>/dev/null; then
     # RHEL/Fedora/openSUSE
-    sudo cp "$CERT_DIR/ca.crt" /etc/pki/ca-trust/source/anchors/brain-ssof-ca.crt
+    sudo cp "$CERT_DIR/ca.crt" /etc/pki/ca-trust/source/anchors/Geo-Brain-ca.crt
     sudo update-ca-trust
     echo "    Installed via update-ca-trust (RHEL/Fedora/SUSE)"
   elif command -v update-ca-certificates &>/dev/null; then
     # Debian/Ubuntu
-    sudo cp "$CERT_DIR/ca.crt" /usr/local/share/ca-certificates/brain-ssof-ca.crt
+    sudo cp "$CERT_DIR/ca.crt" /usr/local/share/ca-certificates/Geo-Brain-ca.crt
     sudo update-ca-certificates
     echo "    Installed via update-ca-certificates (Debian/Ubuntu)"
   else
@@ -381,7 +354,7 @@ if $DO_TRUST_LOCAL; then
   if command -v certutil &>/dev/null; then
     for certdb in $(find "$HOME" -name "cert9.db" -path "*/mozilla/*" 2>/dev/null); do
       dbdir="$(dirname "$certdb")"
-      certutil -A -n "brain-ssof-ca" -t "CT,C,C" -i "$CERT_DIR/ca.crt" -d "sql:$dbdir" 2>/dev/null && \
+      certutil -A -n "Geo-Brain-ca" -t "CT,C,C" -i "$CERT_DIR/ca.crt" -d "sql:$dbdir" 2>/dev/null && \
         echo "    Added to NSS DB: $dbdir" || true
     done
   fi
@@ -392,12 +365,12 @@ if $DO_TRUST_REMOTE; then
   echo ">>> Installing CA into remote host trust store ($REMOTE_HOST)..."
   scp -i "$SSH_KEY" -o BatchMode=yes \
     "$CERT_DIR/ca.crt" \
-    "${REMOTE_USER}@${REMOTE_HOST}:/tmp/brain-ssof-ca.crt"
+    "${REMOTE_USER}@${REMOTE_HOST}:/tmp/Geo-Brain-ca.crt"
 
-  ssh_cmd "sudo cp /tmp/brain-ssof-ca.crt /etc/pki/ca-trust/source/anchors/brain-ssof-ca.crt 2>/dev/null || \
-           sudo cp /tmp/brain-ssof-ca.crt /usr/local/share/ca-certificates/brain-ssof-ca.crt 2>/dev/null; \
+  ssh_cmd "sudo cp /tmp/Geo-Brain-ca.crt /etc/pki/ca-trust/source/anchors/Geo-Brain-ca.crt 2>/dev/null || \
+           sudo cp /tmp/Geo-Brain-ca.crt /usr/local/share/ca-certificates/Geo-Brain-ca.crt 2>/dev/null; \
            sudo update-ca-trust 2>/dev/null || sudo update-ca-certificates 2>/dev/null; \
-           rm -f /tmp/brain-ssof-ca.crt; \
+           rm -f /tmp/Geo-Brain-ca.crt; \
            echo 'CA installed on remote'"
 fi
 

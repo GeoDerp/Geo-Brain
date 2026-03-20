@@ -18,8 +18,12 @@ services:
       - DOCKER_STEPCA_INIT_DNS_NAMES=ca.${DOMAIN},localhost
       - DOCKER_STEPCA_INIT_SSH=true
     networks:
-      - pki-net
-      - proxy-net
+      pki-net:
+        aliases:
+          - ca.${DOMAIN}
+      proxy-net:
+        aliases:
+          - ca.${DOMAIN}
     deploy:
       resources:
         limits:

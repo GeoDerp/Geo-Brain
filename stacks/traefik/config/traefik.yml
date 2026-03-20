@@ -27,7 +27,6 @@ providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false
-    network: proxy-net
   file:
     directory: /etc/traefik/dynamic
     watch: true
@@ -36,7 +35,7 @@ certificatesResolvers:
   stepca:
     acme:
       email: admin@${DOMAIN}
-      caServer: https://step-ca:9000/acme/acme/directory
+      caServer: https://ca.brain.home.lan:9000/acme/acme/directory
       storage: /etc/traefik/acme/acme.json
       tlsChallenge: {}
 
@@ -47,7 +46,7 @@ metrics:
     addServicesLabels: true
 
 log:
-  level: INFO
+  level: DEBUG
 
 accessLog:
   filePath: /var/log/traefik/access.log

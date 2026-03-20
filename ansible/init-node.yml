@@ -1,6 +1,6 @@
 ---
 # =============================================================================
-# brain-ssof: Remote Node Initialization
+# Geo-Brain: Remote Node Initialization
 # =============================================================================
 # Replaces init-node.sh — provisions a remote homelab node and configures
 # local podman-remote access.
@@ -79,7 +79,7 @@
     - name: Display connection info
       ansible.builtin.debug:
         msg: |-
-          brain-ssof: Remote Node Initialization
+          Geo-Brain: Remote Node Initialization
             Target: {{ target_user }}@{{ remote_host }}:{{ ssh_port }}
             Key:    {{ ssh_key }}
 
@@ -125,7 +125,7 @@
       - ssh
       - http
       - https
-    project_dir: brain-ssof
+    project_dir: Geo-Brain
 
   tasks:
     # ----- Detect OS type from /etc/os-release VARIANT_ID -----
@@ -414,7 +414,7 @@
   vars:
     auto_yes: false
     connection_name: homelab
-    project_dir: brain-ssof
+    project_dir: Geo-Brain
 
   tasks:
     - name: Pull connection variables from remote host facts
