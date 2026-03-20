@@ -35,7 +35,7 @@ certificatesResolvers:
   stepca:
     acme:
       email: admin@${DOMAIN}
-      caServer: https://ca.brain.home.lan:9000/acme/acme/directory
+      caServer: https://ca.${DOMAIN}:9000/acme/acme/directory
       storage: /etc/traefik/acme/acme.json
       tlsChallenge: {}
 

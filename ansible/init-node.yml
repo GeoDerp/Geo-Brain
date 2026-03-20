@@ -176,7 +176,8 @@
     - name: "Confirm: Install packages ({{ required_packages | join(', ') }})"
       ansible.builtin.pause:
         prompt: >-
-          [1/10] Will install: {{ required_packages | join(', ') }}
+          =================================================
+          [CONFIRMATION 1/11] Will install: {{ required_packages | join(', ') }}
           via {{ 'rpm-ostree' if is_coreos | bool else ('transactional-update' if is_microos | bool else 'dnf') }}.
           Press ENTER to continue or Ctrl+C → A to abort
       when: not (auto_yes | bool)
@@ -288,7 +289,8 @@
     - name: "Confirm: Open firewall ports (ssh, http, https)"
       ansible.builtin.pause:
         prompt: >-
-          [6/10] Will permanently allow services: {{ firewall_services | join(', ') }} in firewalld.
+          =================================================
+          [CONFIRMATION 6/11] Will permanently allow services: {{ firewall_services | join(', ') }} in firewalld.
           Press ENTER to continue or Ctrl+C → A to abort
       when:
         - firewalld_active.stdout == 'active'
@@ -315,7 +317,8 @@
     - name: "Confirm: SELinux enforcement changes"
       ansible.builtin.pause:
         prompt: >-
-          [7/10] Will set SELinux to enforcing mode (current: {{ ansible_selinux.mode | default(ansible_selinux.status | default('disabled')) }}).
+          =================================================
+          [CONFIRMATION 7/11] Will set SELinux to enforcing mode (current: {{ ansible_selinux.mode | default(ansible_selinux.status | default('disabled')) }}).
           This may require a reboot. Press ENTER to continue or Ctrl+C → A to abort
       when:
         - ansible_selinux.mode | default('') != 'enforcing'
@@ -393,13 +396,13 @@
       when: "'Linger=yes' not in (linger_check.stdout | default(''))"
       changed_when: true
 
-    # =================================================================
-    #  10. Project Directory
-    # =================================================================
-    - name: "[10/10] Create project directory ~/{{ project_dir }}"
+    - name: "[11/11] Create persistent DATA_DIR (/var/Geo-Brain)"
+      become: true
       ansible.builtin.file:
-        path: "{{ ansible_env.HOME }}/{{ project_dir }}"
+        path: "/var/{{ project_dir }}"
         state: directory
+        owner: "{{ ansible_user_uid }}"
+        group: "{{ ansible_user_gid | default(ansible_user_uid) }}"
         mode: "0755"
 
 
@@ -441,7 +444,8 @@
     - name: "Confirm: Register podman-remote connection"
       ansible.builtin.pause:
         prompt: >-
-          Will register local podman connection '{{ connection_name }}'
+          =================================================
+          [CONFIRMATION] Will register local podman connection '{{ connection_name }}'
           pointing to ssh://{{ target_user }}@{{ remote_host }}:{{ ssh_port }}{{ remote_sock }}.
           Press ENTER to continue or Ctrl+C → A to abort
       when: not (auto_yes | bool)

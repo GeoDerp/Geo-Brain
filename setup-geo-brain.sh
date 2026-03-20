@@ -77,9 +77,16 @@ init_harbor() {
   
   create_secret "harbor_admin_password" "$ADMIN_PASSWORD"
 
-  # Enforce Harbor as primary registry in Podman (Rootless context requires user config)
+  # Enforce Harbor as primary registry and mirror in Podman (Rootless context requires user config)
   mkdir -p ~/.config/containers
   cat <<EOF > ~/.config/containers/registries.conf
+unqualified-search-registries = ["harbor.${DOMAIN}", "docker.io"]
+
+[[registry]]
+prefix = "docker.io"
+location = "harbor.${DOMAIN}/docker-hub-proxy"
+mirror-by-digest-only = false
+
 [[registry]]
 location = "harbor.${DOMAIN}"
 insecure = false
@@ -135,12 +142,18 @@ setup_identity() {
   # Wait for Kanidm
   wait_for_service "Kanidm" "curl -s -k -f https://kanidm.${DOMAIN}/status" || exit 1
   
-  # Recover token (if it doesn't exist, we can't easily auto-gen here unless we know it's a fresh install, 
-  # but let's assume kanidm is fresh and we can recover admin or we use a pre-set admin password).
-  # Assuming kanidm was initialized and we have a way to authenticate.
-  # For Kanidm, we usually need the recovery password. 
-  echo "🔹 Note: Kanidm automated OIDC client creation requires an active session or recovery token."
+  echo "🔹 Kanidm requires manual bootstrapping for the first-time setup."
+  echo "   Please run the following commands on the remote host to unblock Authelia and OIDC:"
+  echo ""
+  echo "   # 1. Recover admin account and set password"
+  echo "   podman exec kanidm kanidmd recover-account -c /data/server.toml idm_admin"
+  echo "   # 2. Create Authelia service account (use AUTHELIA_LDAP_PASSWORD from .env)"
+  echo "   #    (Use the recovered password to log in at https://kanidm.${DOMAIN})"
+  echo ""
   
+  echo "Press ENTER to acknowledge and continue the script..."
+  read -r
+
   # Vaultwarden OIDC client secret
   VAULTWARDEN_OIDC_SECRET=$(openssl rand -base64 32)
   create_secret "vaultwarden_oidc_secret" "$VAULTWARDEN_OIDC_SECRET"
@@ -153,7 +166,15 @@ setup_identity() {
   DOJO_OIDC_SECRET=$(openssl rand -base64 32)
   create_secret "dojo_oidc_secret" "$DOJO_OIDC_SECRET"
 
-  echo "✅ Identity secrets generated. (Manual Kanidm CLI commands or a Kanidm init script may be needed to register the clients)."
+  # MinIO OIDC
+  MINIO_OIDC_SECRET=$(openssl rand -base64 32)
+  create_secret "minio_oidc_secret" "$MINIO_OIDC_SECRET"
+
+  # Wazuh OIDC
+  WAZUH_OIDC_SECRET=$(openssl rand -base64 32)
+  create_secret "wazuh_oidc_secret" "$WAZUH_OIDC_SECRET"
+
+  echo "✅ Identity secrets generated and stored in Podman secrets."
 }
 
 # --- 4) Management/Proxy Wait ---

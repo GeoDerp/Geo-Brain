@@ -27,6 +27,15 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
     set +a
 fi
 
+if [[ "$COMMAND" == "up" ]]; then
+    if [[ ! -f "$REPO_ROOT/certs/ca.crt" ]] || [[ ! -f "$REPO_ROOT/certs/wildcard.crt" ]]; then
+        echo -e "\n[WARNING] Missing core certificates (ca.crt or wildcard.crt) in $REPO_ROOT/certs/."
+        echo "Did you forget to run: ./scripts/gen-selfsigned-certs.sh ?"
+        echo -n "Press ENTER to continue anyway, or Ctrl+C to abort..."
+        read -r
+    fi
+fi
+
 # --- SSH Agent / Passphrase Handling ---
 # Ensures the SSH key is loaded into an agent so remote operations
 # (podman --connection, rsync, SSH) work without repeated passphrase prompts.

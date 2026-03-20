@@ -331,6 +331,13 @@ if $DO_DEPLOY; then
 fi
 
 # --- Step 9: Trust CA on local machine ---
+if ! $DO_TRUST_LOCAL && [ -t 0 ]; then
+  read -p ">>> Do you want to install the CA into your local system trust store? (y/N): " -r
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    DO_TRUST_LOCAL=true
+  fi
+fi
+
 if $DO_TRUST_LOCAL; then
   echo ">>> Installing CA into local trust store..."
 
@@ -361,6 +368,13 @@ if $DO_TRUST_LOCAL; then
 fi
 
 # --- Step 10: Trust CA on remote host ---
+if ! $DO_TRUST_REMOTE && [ -t 0 ] && [ "$REMOTE_HOST" != "homelab.local" ]; then
+  read -p ">>> Do you want to install the CA into the remote host ($REMOTE_HOST) trust store? (y/N): " -r
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    DO_TRUST_REMOTE=true
+  fi
+fi
+
 if $DO_TRUST_REMOTE; then
   echo ">>> Installing CA into remote host trust store ($REMOTE_HOST)..."
   scp -i "$SSH_KEY" -o BatchMode=yes \

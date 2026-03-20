@@ -477,15 +477,22 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 
 ## Strategic Infrastructure
 
-### Kanidm / Vaultwarden
+### Kanidm
 
-**What they are:** 
-- **Kanidm:** A modern, secure identity management system written in Rust. It serves as the absolute single source of truth for identity and OIDC SSO across the entire homelab.
-- **Vaultwarden:** An unofficial Bitwarden compatible server written in Rust. It exclusively handles secret storage.
+**What it is:** Kanidm is a modern, secure identity management system written in Rust. It serves as the absolute single source of truth for identity, authentication, and authorization.
 
-**Why they're used:**
-- **Centralized IAM:** Kanidm provides single sign-on (SSO) via OIDC for all web interfaces.
-- **Secret Management:** Vaultwarden stores and syncs all secrets (API keys, passwords), completely separated from the IAM platform.
+**Why it's used:**
+- **Centralized IAM:** Kanidm provides Single Sign-On (SSO) via OpenID Connect (OIDC) for all supported web interfaces (Harbor, Wazuh, DefectDojo, MinIO, etc.).
+- **Role-Based Access Control (RBAC):** We define groups (like `system_admins`) in Kanidm. When an OIDC token is minted for an application like Harbor or DefectDojo, Kanidm passes these group memberships as "scopes" or "roles" within the JWT claims. The downstream application maps these claims to its internal admin tags. This means you grant administrative access centrally in Kanidm, rather than per-stack.
+- **Service Accounts:** It securely handles service-to-service authentication (e.g., Authelia validating user passwords against Kanidm's LDAP interface using a dedicated `authelia_svc` account).
+
+### Authelia
+
+**What it is:** Authelia is an authentication and authorization server that acts as a middleware companion to Traefik.
+
+**Why it's used:**
+- **MFA enforcement:** While Kanidm handles the primary identity, Authelia can enforce Two-Factor Authentication (2FA) for applications that do not natively support OIDC.
+- **Forward-Auth:** Traefik intercepts incoming requests and asks Authelia if the user is authorized. Authelia checks against Kanidm via LDAP. If authorized, Traefik lets the request through.
 
 ---
 
