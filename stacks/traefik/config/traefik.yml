@@ -1,6 +1,10 @@
 # Traefik Static Configuration
 # Ref: https://doc.traefik.io/traefik/reference/static-configuration/file/
 
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
 api:
   dashboard: true
   insecure: false

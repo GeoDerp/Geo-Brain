@@ -26,6 +26,9 @@ services:
     container_name: <service-name>
     restart: always
     user: "${PUID:-1000}:${PGID:-1000}"
+    userns_mode: keep-id
+    security_opt:
+      - no-new-privileges:true
     read_only: true
     cap_drop:
       - ALL
@@ -38,13 +41,15 @@ services:
       - ${DATA_DIR}/<service-name>:/data:Z,U
       # - ./config:/config:z    # Uncomment if the service needs config mounts
     # Use secrets instead of environment variables for sensitive data
-    # environment:
-    #   - EXAMPLE_VAR=${EXAMPLE_VAR:-default_value}
+    environment:
+      # - EXAMPLE_VAR=${EXAMPLE_VAR:-default_value}
+      # - DISABLE_TELEMETRY=true # Always disable telemetry in apps that support it
     # secrets:
     #   - source: example_secret
     #     target: /run/secrets/example_secret
     networks:
       - <stack>-net
+      # - proxy-net
     deploy:
       resources:
         limits:
@@ -59,10 +64,13 @@ services:
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=<role>"
-      # Declarative Zero-Trust Proxy labels (Traefik + Step-CA)
+      # Declarative Zero-Trust Proxy labels (Traefik)
       # - "traefik.enable=true"
       # - "traefik.http.routers.<service-name>.rule=Host(`<subdomain>.${DOMAIN}`)"
-      # - "traefik.http.routers.<service-name>.tls.certresolver=stepca"
+      # - "traefik.http.routers.<service-name>.entrypoints=websecure"
+      # - "traefik.http.routers.<service-name>.tls=true"
+      # - "traefik.http.routers.<service-name>.middlewares=authelia@file,security-headers@file"
+      # - "traefik.http.services.<service-name>.loadbalancer.server.port=<container-port>"
       # Uncomment and customise for Homepage dashboard integration:
       # - "homepage.group=<Group>"
       # - "homepage.name=<Display Name>"

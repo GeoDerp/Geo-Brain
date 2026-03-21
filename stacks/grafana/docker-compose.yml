@@ -18,6 +18,10 @@ services:
     volumes:
       - ${DATA_DIR}/grafana:/var/lib/grafana:Z,U
       - ./config/provisioning:/etc/grafana/provisioning:z,U
+    environment:
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_SECURITY_DISABLE_GRAVATAR=true
     networks:
       - monitoring-net
       - wazuh-net

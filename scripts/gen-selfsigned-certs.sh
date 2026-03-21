@@ -29,6 +29,12 @@ set -euo pipefail
 # --- Configuration ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [ -f "$REPO_ROOT/.env" ]; then
+  # shellcheck disable=SC2046
+  export $(grep -v '^#' "$REPO_ROOT/.env" | xargs)
+fi
+
 CERT_DIR="$REPO_ROOT/certs"
 DOMAIN="${DOMAIN:-example.local}"
 CA_DAYS=3650    # CA valid 10 years
@@ -40,7 +46,27 @@ REMOTE_HOST="${REMOTE_HOST:-homelab.local}"
 REMOTE_USER="${REMOTE_USER:-$USER}"
 DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
 
-# --- Parse args ---
+_SCRIPT_STARTED_AGENT=0
+cleanup() {
+    if [[ "$_SCRIPT_STARTED_AGENT" -eq 1 && -n "${SSH_AGENT_PID:-}" ]]; then
+        echo ">>> Cleaning up temporary ssh-agent (PID: $SSH_AGENT_PID)..."
+        kill "$SSH_AGENT_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
+if [[ -n "${SSH_KEY:-}" ]] && { $DO_DEPLOY || $DO_TRUST_REMOTE; }; then
+    if [[ -z "${SSH_AUTH_SOCK:-}" ]] || ! ssh-add -l &>/dev/null; then
+        echo ">>> Starting temporary ssh-agent..."
+        eval "$(ssh-agent -s)" >/dev/null
+        _SCRIPT_STARTED_AGENT=1
+    fi
+    key_fp=$(ssh-keygen -lf "$SSH_KEY" 2>/dev/null | awk '{print $2}')
+    if ! ssh-add -l 2>/dev/null | grep -qF "$key_fp"; then
+        echo ">>> Adding SSH key to agent (enter passphrase if prompted)..."
+        ssh-add "$SSH_KEY"
+    fi
+fi
 DO_DEPLOY=false
 DO_TRUST_LOCAL=false
 DO_TRUST_REMOTE=false
@@ -78,7 +104,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 ssh_cmd() {
-  ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=15 "${REMOTE_USER}@${REMOTE_HOST}" "$@"
+  ssh -i "$SSH_KEY" -o ConnectTimeout=15 "${REMOTE_USER}@${REMOTE_HOST}" "$@"
 }
 
 # Convert a certificate file to PEM if it is DER-encoded.
@@ -308,7 +334,7 @@ if $DO_DEPLOY; then
 
   # Deploy Kanidm cert to remote data dir
   ssh_cmd "mkdir -p $DATA_DIR/kanidm/certs"
-  scp -i "$SSH_KEY" -o BatchMode=yes \
+  scp -i "$SSH_KEY" \
     "$CERT_DIR/kanidm-chain.crt" \
     "$CERT_DIR/kanidm.key" \
     "${REMOTE_USER}@${REMOTE_HOST}:${DATA_DIR}/kanidm/certs/"
@@ -377,7 +403,7 @@ fi
 
 if $DO_TRUST_REMOTE; then
   echo ">>> Installing CA into remote host trust store ($REMOTE_HOST)..."
-  scp -i "$SSH_KEY" -o BatchMode=yes \
+  scp -i "$SSH_KEY" \
     "$CERT_DIR/ca.crt" \
     "${REMOTE_USER}@${REMOTE_HOST}:/tmp/Geo-Brain-ca.crt"
 

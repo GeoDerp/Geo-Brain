@@ -15,6 +15,8 @@ services:
     environment:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_UPDATE=off
+      - MINIO_PROMETHEUS_AUTH_TYPE=public
     volumes:
       - ${DATA_DIR}/minio:/data:Z,U
     ports:

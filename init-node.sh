@@ -59,13 +59,24 @@ if [[ -n "$SSH_KEY" ]]; then
     fi
 fi
 
+_SCRIPT_STARTED_AGENT=0
+cleanup() {
+    if [[ "$_SCRIPT_STARTED_AGENT" -eq 1 && -n "${SSH_AGENT_PID:-}" ]]; then
+        echo ">>> Cleaning up temporary ssh-agent (PID: $SSH_AGENT_PID)..."
+        kill "$SSH_AGENT_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
 # --- SSH Agent / Passphrase Handling ---
 if [[ -n "$SSH_KEY" ]]; then
     if [[ -z "${SSH_AUTH_SOCK:-}" ]] || ! ssh-add -l &>/dev/null; then
-        echo ">>> Starting ssh-agent..."
-        eval "$(ssh-agent -s)"
+        echo ">>> Starting temporary ssh-agent..."
+        eval "$(ssh-agent -s)" >/dev/null
+        _SCRIPT_STARTED_AGENT=1
     fi
-    if ! ssh-add -l 2>/dev/null | grep -qF "$SSH_KEY"; then
+    key_fp=$(ssh-keygen -lf "$SSH_KEY" 2>/dev/null | awk '{print $2}')
+    if ! ssh-add -l 2>/dev/null | grep -qF "$key_fp"; then
         echo ">>> Adding SSH key to agent (enter passphrase if prompted)..."
         ssh-add "$SSH_KEY"
     fi

@@ -11,6 +11,8 @@ services:
     userns_mode: keep-id
     ports:
       - 3000:3000
+    environment:
+      - HOMEPAGE_VAR_DISABLE_UPDATE_CHECK=true
     volumes:
       - ./config:/app/config:z,U
       - ${PODMAN_SOCK}:/var/run/docker.sock:ro

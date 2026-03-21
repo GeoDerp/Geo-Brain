@@ -14,6 +14,28 @@ REMOTE_USER="${REMOTE_USER:-admin}"
 DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
 SSH_KEY="${SSH_KEY:-~/.ssh/id_ed25519}"
 
+_SCRIPT_STARTED_AGENT=0
+cleanup() {
+    if [[ "$_SCRIPT_STARTED_AGENT" -eq 1 && -n "${SSH_AGENT_PID:-}" ]]; then
+        echo ">>> Cleaning up temporary ssh-agent (PID: $SSH_AGENT_PID)..."
+        kill "$SSH_AGENT_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
+if [[ -n "$SSH_KEY" ]]; then
+    if [[ -z "${SSH_AUTH_SOCK:-}" ]] || ! ssh-add -l &>/dev/null; then
+        echo ">>> Starting temporary ssh-agent..."
+        eval "$(ssh-agent -s)" >/dev/null
+        _SCRIPT_STARTED_AGENT=1
+    fi
+    key_fp=$(ssh-keygen -lf "$SSH_KEY" 2>/dev/null | awk '{print $2}')
+    if ! ssh-add -l 2>/dev/null | grep -qF "$key_fp"; then
+        echo ">>> Adding SSH key to agent (enter passphrase if prompted)..."
+        ssh-add "$SSH_KEY"
+    fi
+fi
+
 echo "⚠️  WARNING: This will completely wipe all containers, volumes, and data in $DATA_DIR on $REMOTE_HOST!"
 read -p "Are you sure you want to proceed? (Type 'yes' to continue): " confirm
 if [ "$confirm" != "yes" ]; then

@@ -85,12 +85,39 @@ To avoid browser warnings, install the generated Root CA onto your local worksta
   ```
 *(You can also use `./scripts/gen-selfsigned-certs.sh --trust-local` to automate this).*
 
-### Step 7: Initial Logins
+### Step 7: Initial Logins & User Setup
 
-- **Homepage (Dashboard):** `https://home.<DOMAIN>` - Your central access point.
-- **Kanidm (Identity):** `https://kanidm.<DOMAIN>` - Initial login uses the `idm_admin` account. The setup script configures it automatically with the `ADMIN_PASSWORD` defined in `.env`.
-- **Harbor (Registry):** `https://harbor.<DOMAIN>` - Log in with `admin` and the `HARBOR_ADMIN_PASSWORD` from `.env`.
-- **Dockge (Stack Management):** `https://dockge.<DOMAIN>` - Visual management for all your Podman Compose stacks.
+Your central access point for all services is the **Homepage (Dashboard):** `https://home.<DOMAIN>`
+
+Before logging into downstream apps, you **must** bootstrap your identity provider:
+
+1. **Kanidm (Identity):** `https://kanidm.<DOMAIN>`
+   - First, run the manual bootstrap command shown at the end of the setup script to recover the `idm_admin` account.
+   - Log in using the recovery password, then navigate to **Persons** and set a permanent password.
+   - Create a service account named `authelia_svc` (used by Authelia for SSO/MFA). Set its password to the `AUTHELIA_LDAP_PASSWORD` defined in your `.env`.
+   - **User Management:** Create new users here. Add administrators to the `system_admins` group.
+
+2. **Harbor (Registry):** `https://harbor.<DOMAIN>`
+   - **Local Admin:** Log in with username `admin` and the `HARBOR_ADMIN_PASSWORD` from your `.env`.
+   - **SSO:** You can also log in via OIDC (Kanidm). Users in the `system_admins` Kanidm group will automatically receive admin privileges.
+   - Use this to host your custom Docker images.
+
+3. **Wazuh (SIEM):** `https://wazuh.<DOMAIN>`
+   - Log in using Kanidm SSO.
+   - If a local break-glass login is needed, the default credentials are `admin` / `admin`. Change this immediately upon your first login.
+
+4. **DefectDojo (Vulnerability Management):** `https://defectdojo.<DOMAIN>`
+   - Log in via Kanidm SSO.
+   - If manual login is needed, check the `defectdojo-initializer` container logs for the randomly generated local admin password:
+     `podman logs defectdojo-initializer 2>&1 | grep "Admin password:"`
+
+5. **MinIO (Object Storage):** `https://minio.<DOMAIN>`
+   - Log in using OIDC (Kanidm SSO).
+   - Alternatively, use the `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD` defined in your `.env` file.
+
+6. **Dockge (Stack Management):** `https://dockge.<DOMAIN>`
+   - First-time access will prompt you to create the local admin account.
+   - Use Dockge to visually manage, start, stop, and read logs of all your deployed Compose stacks.
 
 ---
 

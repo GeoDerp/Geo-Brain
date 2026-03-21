@@ -14,6 +14,7 @@ _SCRIPT_STARTED_AGENT=0
 
 cleanup() {
     if [[ "$_SCRIPT_STARTED_AGENT" -eq 1 && -n "${SSH_AGENT_PID:-}" ]]; then
+        echo ">>> Cleaning up temporary ssh-agent (PID: $SSH_AGENT_PID)..."
         kill "$SSH_AGENT_PID" 2>/dev/null || true
     fi
 }
