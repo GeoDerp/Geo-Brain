@@ -1,0 +1,124 @@
+services:
+  quay-db:
+    image: docker.io/postgres:15-alpine
+    container_name: quay-db
+    restart: always
+    environment:
+      - POSTGRES_USER=${QUAY_DB_USER}
+      - POSTGRES_PASSWORD=${QUAY_DB_PASSWORD}
+      - POSTGRES_DB=${QUAY_DB_NAME}
+    volumes:
+      - ${DATA_DIR}/quay-db:/var/lib/postgresql/data:Z,U
+      - ./db-init:/docker-entrypoint-initdb.d:ro,z
+    networks:
+      - quay-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${QUAY_DB_USER} -d ${QUAY_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  clair-db:
+    image: docker.io/postgres:15-alpine
+    container_name: clair-db
+    restart: always
+    environment:
+      - POSTGRES_USER=${CLAIR_DB_USER}
+      - POSTGRES_PASSWORD=${CLAIR_DB_PASSWORD}
+      - POSTGRES_DB=${CLAIR_DB_NAME}
+    volumes:
+      - ${DATA_DIR}/clair-db:/var/lib/postgresql/data:Z,U
+      - ./db-init:/docker-entrypoint-initdb.d:ro,z
+    networks:
+      - quay-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CLAIR_DB_USER} -d ${CLAIR_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+
+  quay-redis:
+    image: docker.io/redis:7-alpine
+    container_name: quay-redis
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    user: "${PUID:-1000}:${PGID:-1000}"
+    userns_mode: keep-id
+    volumes:
+      - ${DATA_DIR}/quay-redis:/data:Z,U
+    networks:
+      - quay-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.2'
+
+  quay:
+    image: quay.io/projectquay/quay:v3.13.0
+    container_name: quay
+    restart: always
+    depends_on:
+      quay-db:
+        condition: service_healthy
+      quay-redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/conf/stack:Z
+      - ${DATA_DIR}/quay-storage:/datastorage:Z,U
+    networks:
+      - quay-net
+      - proxy-net
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=registry"
+      - "traefik.enable=true"
+      - "traefik.http.routers.quay.rule=Host(`quay.${DOMAIN}`)"
+      - "traefik.http.routers.quay.entrypoints=websecure"
+      - "traefik.http.routers.quay.tls=true"
+      - "traefik.http.routers.quay.middlewares=security-headers@file"
+      - "traefik.http.services.quay.loadbalancer.server.port=8080"
+      - "homepage.group=Infrastructure"
+      - "homepage.name=Quay"
+      - "homepage.icon=quay.png"
+      - "homepage.description=Container Registry"
+      - "homepage.href=https://quay.${DOMAIN}"
+
+  clair:
+    image: quay.io/projectquay/clair:4.7.3
+    container_name: clair
+    restart: always
+    depends_on:
+      clair-db:
+        condition: service_healthy
+    volumes:
+      - ./config:/config:Z
+    networks:
+      - quay-net
+    command: ["-conf", "/config/clair-config.yaml"]
+
+networks:
+  quay-net:
+    driver: bridge
+  proxy-net:
+    external: true

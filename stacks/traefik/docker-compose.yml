@@ -34,7 +34,7 @@ services:
       - security-net
       - wazuh-net
       - vulnerability-net
-      - harbor-net
+      - quay-net
       - user-net
       - pki-net
       - storage-net
@@ -80,7 +80,7 @@ networks:
     external: true
   vulnerability-net:
     external: true
-  harbor-net:
+  quay-net:
     external: true
   user-net:
     external: true

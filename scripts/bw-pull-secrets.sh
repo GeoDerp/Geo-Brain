@@ -45,7 +45,7 @@ provision_secret() {
 echo "Provisioning secrets from Vaultwarden to Podman..."
 
 # Example: Provisioning a database password
-# provision_secret "harbor_db_password" "<bitwarden-item-uuid>"
+# provision_secret "quay_db_password" "<bitwarden-item-uuid>"
 
 # Sync vault
 bw sync
