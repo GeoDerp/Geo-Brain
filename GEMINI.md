@@ -62,3 +62,8 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - Monitor `transactional-update` (MicroOS) or `rpm-ostree` (CoreOS) status.
 - Monitor `podman.socket` health.
 - Monitor Wazuh/Falco alerts for compliance drift.
+
+## Design Philosophy
+- **Declarative:** All deployments and configurations must be strictly declarative. If a tool requires manual GUI setup, find a way to declare it via config files, environment variables, or automated CLI bootstrapping.
+- **Idempotency:** Scripts and automation must be safe to run multiple times without causing failures or unintended side-effects. Always check state before applying changes.
+- **Simplicity & Maintainability:** The architecture must remain simple and easy to understand. Avoid convoluted logic. New stacks should easily integrate by following the provided templates.
