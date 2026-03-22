@@ -47,7 +47,7 @@ access_control:
         - "wazuh.${DOMAIN}"
         - "defectdojo.${DOMAIN}"
         - "dockge.${DOMAIN}"
-        - "harbor.${DOMAIN}"
+        - "quay.${DOMAIN}"
       policy: two_factor
 
     # User apps

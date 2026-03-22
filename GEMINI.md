@@ -44,7 +44,7 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - **Kanidm (IDM):** Primary Identity Management server (LDAP/OIDC).
 - **Authelia (Auth Portal):** Single Sign-On portal and 2FA provider.
 - **Step-CA (PKI):** Internal Certificate Authority for automated TLS (`*.example.local`).
-- **Harbor (Registry):** Local OCI registry and pull-through cache with integrated Trivy scanning.
+- **Quay (Registry):** Local OCI registry and pull-through cache with integrated Clair scanning.
 - **MinIO (Storage):** S3-compatible object storage for Loki chunks and Velero/Restic backups.
 
 ### Optional Stacks (WIP)

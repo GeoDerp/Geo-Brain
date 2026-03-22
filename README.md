@@ -16,7 +16,7 @@ For a detailed breakdown of every tool and architectural choice, see **[TOOLS_EX
 
 The Geo-Brain homelab is organized into discrete **stacks**:
 
-- **Core Infrastructure:** `step-ca` (Internal PKI), `harbor` (Container Registry), `traefik` (Reverse Proxy)
+- **Core Infrastructure:** `step-ca` (Internal PKI), `quay` (Container Registry), `traefik` (Reverse Proxy)
 - **Identity & Access:** `kanidm` (Identity Provider), `authelia` (SSO/MFA)
 - **Security Operations:** `wazuh` (SIEM), `falco` (Runtime Security), `crowdsec` (IPS)
 - **Observability:** `prometheus` & `grafana` (Metrics), `vector` & `loki` (Logs)
@@ -49,7 +49,7 @@ Run the node initialization script to install dependencies (Podman, Ansible), co
 
 ### Step 3: Generate Certificates
 
-Generate the root CA and required SSL certificates for `step-ca`, `harbor`, and `kanidm`:
+Generate the root CA and required SSL certificates for `step-ca`, `quay`, and `kanidm`:
 
 ```bash
 ./scripts/gen-selfsigned-certs.sh
@@ -57,7 +57,7 @@ Generate the root CA and required SSL certificates for `step-ca`, `harbor`, and 
 
 ### Step 4: Deploy the Infrastructure
 
-Deploy all stacks. The script automatically handles bootstrapping Harbor and Step-CA before rolling out the remaining services:
+Deploy all stacks. The script automatically handles bootstrapping Quay and Step-CA before rolling out the remaining services:
 
 ```bash
 ./deploy.sh all up
@@ -97,10 +97,10 @@ Before logging into downstream apps, you **must** bootstrap your identity provid
    - Create a service account named `authelia_svc` (used by Authelia for SSO/MFA). Set its password to the `AUTHELIA_LDAP_PASSWORD` defined in your `.env`.
    - **User Management:** Create new users here. Add administrators to the `system_admins` group.
 
-2. **Harbor (Registry):** `https://harbor.<DOMAIN>`
-   - **Local Admin:** Log in with username `admin` and the `HARBOR_ADMIN_PASSWORD` from your `.env`.
+2. **Quay (Registry):** `https://quay.<DOMAIN>`
+   - **Local Admin:** Set up a local admin account on your first visit to the UI.
    - **SSO:** You can also log in via OIDC (Kanidm). Users in the `system_admins` Kanidm group will automatically receive admin privileges.
-   - Use this to host your custom Docker images.
+   - Use this to host your custom Docker images, with Clair handling vulnerability scanning.
 
 3. **Wazuh (SIEM):** `https://wazuh.<DOMAIN>`
    - Log in using Kanidm SSO.

@@ -34,7 +34,7 @@ This document provides an educational overview of all tools and technologies use
   - [Gitleaks](#gitleaks)
 - [Strategic Infrastructure](#strategic-infrastructure)
   - [Kanidm / Authelia](#kanidm--authelia)
-  - [Harbor](#harbor)
+  - [Quay](#quay)
   - [Step-CA](#step-ca)
   - [MinIO](#minio)
 
@@ -93,7 +93,7 @@ graph TD
             end
 
             subgraph INFRA ["Strategic Infrastructure"]
-                HB["Harbor — Registry / Cache"]
+                HB["Quay — Registry / Cache"]
                 CA["Step-CA — Internal PKI"]
                 MO["MinIO — S3 Storage"]
             end
@@ -482,8 +482,8 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 **What it is:** Kanidm is a modern, secure identity management system written in Rust. It serves as the absolute single source of truth for identity, authentication, and authorization.
 
 **Why it's used:**
-- **Centralized IAM:** Kanidm provides Single Sign-On (SSO) via OpenID Connect (OIDC) for all supported web interfaces (Harbor, Wazuh, DefectDojo, MinIO, etc.).
-- **Role-Based Access Control (RBAC):** We define groups (like `system_admins`) in Kanidm. When an OIDC token is minted for an application like Harbor or DefectDojo, Kanidm passes these group memberships as "scopes" or "roles" within the JWT claims. The downstream application maps these claims to its internal admin tags. This means you grant administrative access centrally in Kanidm, rather than per-stack.
+- **Centralized IAM:** Kanidm provides Single Sign-On (SSO) via OpenID Connect (OIDC) for all supported web interfaces (Quay, Wazuh, DefectDojo, MinIO, etc.).
+- **Role-Based Access Control (RBAC):** We define groups (like `system_admins`) in Kanidm. When an OIDC token is minted for an application like Quay or DefectDojo, Kanidm passes these group memberships as "scopes" or "roles" within the JWT claims. The downstream application maps these claims to its internal admin tags. This means you grant administrative access centrally in Kanidm, rather than per-stack.
 - **Service Accounts:** It securely handles service-to-service authentication (e.g., Authelia validating user passwords against Kanidm's LDAP interface using a dedicated `authelia_svc` account).
 
 ### Authelia
@@ -496,14 +496,14 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 
 ---
 
-### Harbor
+### Quay
 
-**What it is:** Harbor is an open-source container registry that provides security and compliance features.
+**What it is:** Quay is an open-source container registry that provides security and compliance features.
 
 **Why it's used:**
-- **Harbor-First Architecture:** Harbor is the primary gateway for all container images. It must run first, and all subsequent containers pull their images through Harbor.
+- **Quay-First Architecture:** Quay is the primary gateway for all container images. It must run first, and all subsequent containers pull their images through Quay.
 - **Pull-Through Cache:** Mirrors external registries to reduce external dependencies and provide an airgap-ready cache.
-- **Vulnerability Scanning:** Integrates Trivy for automatic image scanning before allowing deployment.
+- **Vulnerability Scanning:** Integrates Clair for automatic image scanning before allowing deployment.
 
 ---
 
@@ -546,7 +546,7 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 | **IaC Scanning** | Checkov, Terrascan | Configuration security |
 | **Secret Detection** | Gitleaks | Credential leak prevention |
 | **Identity** | Kanidm, Authelia | Authentication and authorization |
-| **Registry** | Harbor | Image caching and scanning |
+| **Registry** | Quay | Image caching and scanning |
 | **PKI** | Step-CA | Internal certificate authority |
 | **IPS** | CrowdSec | Intrusion prevention |
 | **Storage** | MinIO | S3-compatible object storage |

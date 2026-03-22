@@ -4,10 +4,10 @@ This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from
 
 ## Phase 1: Immediate Fixes (Bootstrapping & Core Security)
 
-**Objective:** Fully automate the post-deployment configuration, eliminate plaintext secrets, and solidify the Harbor-first deployment model.
+**Objective:** Fully automate the post-deployment configuration, eliminate plaintext secrets, and solidify the Quay-first deployment model.
 
 1.  **Idempotent Rootless Bootstrapper (Completed)**
-    *   `setup-geo-brain.sh` handles Harbor initialization, PKI (Step-CA & Traefik ACME), Identity (Kanidm OIDC), and SOC (DefectDojo) bridging.
+    *   `setup-geo-brain.sh` handles Quay initialization, PKI (Step-CA & Traefik ACME), Identity (Kanidm OIDC), and SOC (DefectDojo) bridging.
     *   Dynamically extracts API keys and provisions them securely using `podman secret create`.
 
 2.  **Secret Management Transition (Podman Secrets)**
@@ -17,7 +17,7 @@ This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from
     # Example quadlet/compose transition:
     services:
       my-app:
-        image: harbor.example.local/my-app:1.0
+        image: quay.example.local/my-app:1.0
         secrets:
           - source: db_password
             target: /run/secrets/db_password
@@ -42,7 +42,7 @@ This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from
     # STIG-Compliant User Stack Template
     services:
       user-app:
-        image: harbor.example.local/my-app:latest
+        image: quay.example.local/my-app:latest
         read_only: true
         tmpfs:
           - /tmp

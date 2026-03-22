@@ -260,21 +260,6 @@ SANEOF
   # --- Step 4: Generate Kanidm cert (needs specific SANs) ---
   echo ">>> Generating Kanidm certificate..."
   # ... (existing Kanidm logic)
-  
-  # --- Step 4b: Generate Harbor Token Signing Pair ---
-  echo ">>> Generating Harbor Token Signing Pair..."
-  openssl genrsa -traditional -out "$CERT_DIR/harbor-token.key" "$KEY_SIZE" 2>/dev/null
-  chmod 600 "$CERT_DIR/harbor-token.key"
-  
-  openssl req -new -x509 \
-    -key "$CERT_DIR/harbor-token.key" \
-    -out "$CERT_DIR/harbor-token.crt" \
-    -days "$CA_DAYS" \
-    -subj "/C=US/ST=Local/L=Homelab/O=GEO-Brain/CN=harbor-token-issuer"
-    
-  echo "    Harbor Token Key:  $CERT_DIR/harbor-token.key"
-  echo "    Harbor Token Cert: $CERT_DIR/harbor-token.crt"
-
 fi  # end import/generate
 
 # --- Step 5: Write Traefik dynamic TLS config ---
@@ -309,18 +294,6 @@ if [[ -f "$CERT_DIR/ca.crt" ]]; then
   chmod 644 "$TRAEFIK_CERTS/ca.crt"
 fi
 echo "    Copied to: stacks/traefik/config/certs/"
-
-# Deploy Harbor Token Keys
-echo ">>> Preparing Harbor Token keys..."
-HARBOR_CORE_DIR="$REPO_ROOT/stacks/harbor/config/core"
-HARBOR_REG_DIR="$REPO_ROOT/stacks/harbor/config/registry"
-mkdir -p "$HARBOR_CORE_DIR" "$HARBOR_REG_DIR"
-cp "$CERT_DIR/harbor-token.key" "$HARBOR_CORE_DIR/private_key.pem"
-cp "$CERT_DIR/harbor-token.crt" "$HARBOR_REG_DIR/root.crt"
-cp "$CERT_DIR/harbor-token.crt" "$HARBOR_CORE_DIR/root.crt" # Core might need it for validation too
-chmod 600 "$HARBOR_CORE_DIR/private_key.pem"
-chmod 644 "$HARBOR_REG_DIR/root.crt" "$HARBOR_CORE_DIR/root.crt"
-echo "    Copied Harbor Token keys to stacks/harbor/config/"
 
 # --- Step 7: Verify the cert ---
 echo ""

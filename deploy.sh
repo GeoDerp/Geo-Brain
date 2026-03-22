@@ -109,7 +109,7 @@ get_base_stacks() {
         "wazuh"
         "falco"
         "crowdsec"
-        "harbor"
+        "quay"
         "defectdojo"
         "grafana"
         "ramalama"
@@ -263,7 +263,7 @@ set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
 command -v envsubst &>/dev/null || exit 0
 
 # Whitelist: only expand variables defined in .env (prevents clobbering app-specific patterns)
-VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${HARBOR_ADMIN_PASSWORD} ${HARBOR_CORE_SECRET} ${HARBOR_JOBSERVICE_SECRET} ${HARBOR_REGISTRY_PASSWORD} ${HARBOR_DB_PASSWORD} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD}'
+VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD}'
 
 find . -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
     if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
@@ -276,7 +276,7 @@ RENDER_SCRIPT
         local config_dir="$REPO_ROOT/$stack_dir/config"
         [[ -d "$config_dir" ]] || return 0
         command -v envsubst &>/dev/null || return 0
-        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${HARBOR_ADMIN_PASSWORD} ${HARBOR_CORE_SECRET} ${HARBOR_JOBSERVICE_SECRET} ${HARBOR_REGISTRY_PASSWORD} ${HARBOR_DB_PASSWORD} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD}'
+        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD}'
         find "$config_dir" -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
             if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
                 envsubst "$varlist" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
@@ -547,7 +547,7 @@ generate_traefik_config() {
     fi
     
     # Core overrides
-    [[ "$service_name" == "harbor" ]] && target_host="harbor-core"
+    [[ "$service_name" == "quay" ]] && target_host="quay-core"
     [[ "$service_name" == "wazuh" ]] && target_host="wazuh-dashboard"
 
     echo ">>> Generating Traefik dynamic config: $rule -> $target_host:$port"
@@ -637,43 +637,43 @@ deploy_batch() {
         cleanup_traefik_configs
     fi
 
-    # --- HARBOR-FIRST BOOTSTRAPPING ---
-    if [[ " ${stacks[*]} " =~ " harbor " ]] && [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
-        echo ">>> [BOOTSTRAP] Deploying Step-CA, Traefik, and Harbor as the primary SSOT registry..."
+    # --- QUAY-FIRST BOOTSTRAPPING ---
+    if [[ " ${stacks[*]} " =~ " quay " ]] && [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
+        echo ">>> [BOOTSTRAP] Deploying Step-CA, Traefik, and Quay as the primary SSOT registry..."
         deploy_single "step-ca"
         deploy_single "traefik"
-        deploy_single "harbor"
+        deploy_single "quay"
 
-        # Wait for Harbor API to become healthy (max 3 minutes)
-        echo ">>> [BOOTSTRAP] Waiting for Harbor API to report healthy..."
-        HARBOR_URL="http://localhost:8082/api/v2.0/ping"
+        # Wait for Quay API to become healthy (max 3 minutes)
+        echo ">>> [BOOTSTRAP] Waiting for Quay API to report healthy..."
+        QUAY_URL="http://localhost:8080/health/instance"
         for i in {1..36}; do
             if [[ "$DEPLOY_MODE" == "remote" ]]; then
-                if "${SSH_CMD[@]}" "curl -sk \"$HARBOR_URL\" | grep -qi \"Pong\"" 2>/dev/null; then
-                    echo ">>> [BOOTSTRAP] Harbor is UP and HEALTHY."
+                if "${SSH_CMD[@]}" "curl -sk \"$QUAY_URL\" | grep -qi \"true\"" 2>/dev/null; then
+                    echo ">>> [BOOTSTRAP] Quay is UP and HEALTHY."
                     break
                 fi
             else
-                if curl -sk "$HARBOR_URL" | grep -qi "Pong" 2>/dev/null; then
-                    echo ">>> [BOOTSTRAP] Harbor is UP and HEALTHY."
+                if curl -sk "$QUAY_URL" | grep -qi "true" 2>/dev/null; then
+                    echo ">>> [BOOTSTRAP] Quay is UP and HEALTHY."
                     break
                 fi
             fi
             sleep 5
             if [ "$i" -eq 36 ]; then
-                echo "[ERROR] Harbor failed to become healthy in time."
+                echo "[ERROR] Quay failed to become healthy in time."
                 exit 1
             fi
         done
 
         # Authenticate to the local instance (using podman over ssh if REMOTE)
-        echo ">>> [BOOTSTRAP] Authenticating local Podman to Harbor..."
+        echo ">>> [BOOTSTRAP] Authenticating local Podman to Quay..."
         local login_success=0
         if [[ "$DEPLOY_MODE" == "remote" ]]; then
-            if "${SSH_CMD[@]}" "podman login \"harbor.${DOMAIN:-example.local}\" -u admin -p \"${HARBOR_ADMIN_PASSWORD}\" --tls-verify=false" >/dev/null 2>&1; then
+            if "${SSH_CMD[@]}" "podman login \"quay.${DOMAIN:-example.local}\" -u quayuser -p \"${QUAY_DB_PASSWORD}\" --tls-verify=false" >/dev/null 2>&1; then
                 login_success=1
             else
-                echo ">>> [WARNING] Harbor authentication failed. Skipping mirror configuration."
+                echo ">>> [WARNING] Quay authentication failed. Skipping mirror configuration."
             fi
             
             if [ "$login_success" -eq 1 ]; then
@@ -682,17 +682,17 @@ unqualified-search-registries = [\"docker.io\"]
 
 [[registry]]
 prefix = \"docker.io\"
-location = \"harbor.${DOMAIN:-example.local}/dockerhub-proxy\"
+location = \"quay.${DOMAIN:-example.local}\"
 insecure = true
 EOF
 "
                 echo ">>> [BOOTSTRAP] registries.conf updated. Mirror active."
             fi
         else
-            if podman login "harbor.${DOMAIN:-example.local}" -u admin -p "${HARBOR_ADMIN_PASSWORD}" --tls-verify=false >/dev/null 2>&1; then
+            if podman login "quay.${DOMAIN:-example.local}" -u quayuser -p "${QUAY_DB_PASSWORD}" --tls-verify=false >/dev/null 2>&1; then
                 login_success=1
             else
-                echo ">>> [WARNING] Harbor authentication failed. Skipping mirror configuration."
+                echo ">>> [WARNING] Quay authentication failed. Skipping mirror configuration."
             fi
 
             if [ "$login_success" -eq 1 ]; then
@@ -702,14 +702,14 @@ unqualified-search-registries = ["docker.io"]
 
 [[registry]]
 prefix = "docker.io"
-location = "harbor.${DOMAIN:-example.local}/dockerhub-proxy"
+location = "quay.${DOMAIN:-example.local}"
 insecure = true
 EOF
                 echo ">>> [BOOTSTRAP] registries.conf updated. Mirror active."
             fi
         fi
     fi
-    # --- END HARBOR-FIRST BOOTSTRAPPING ---
+    # --- END QUAY-FIRST BOOTSTRAPPING ---
 
 
     for stack in "${stacks[@]}"; do

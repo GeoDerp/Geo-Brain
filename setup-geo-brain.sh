@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # setup-geo-brain.sh
 # Idempotent rootless Podman setup script for the Geo Brain environment
-# This script configures Harbor, Identity (Kanidm), PKI (Step-CA), SOC (DefectDojo/Wazuh), and Proxy.
+# This script configures Quay, Identity (Kanidm), PKI (Step-CA), SOC (DefectDojo/Wazuh), and Proxy.
 
 set -euo pipefail
 
@@ -61,37 +61,28 @@ create_secret() {
   fi
 }
 
-# --- 1) Harbor First Initialization ---
-init_harbor() {
-  echo "--- 1) Harbor Initialization ---"
+# --- 1) Quay First Initialization ---
+init_quay() {
+  echo "--- 1) Quay Initialization ---"
   
-  # Wait for Harbor Core API
-  wait_for_service "Harbor API" "curl -s -k -f https://harbor.${DOMAIN}/api/v2.0/health" || exit 1
+  # Wait for Quay Core API
+  wait_for_service "Quay API" "curl -s -k -f https://quay.${DOMAIN}/health/instance" || exit 1
   
-  echo "Changing Harbor admin password..."
-  # Harbor default admin is 'admin' / 'Harbor12345'
-  # We attempt to change it to ADMIN_PASSWORD. If it fails, we assume it's already changed.
-  curl -s -k -u "admin:Harbor12345" -X PUT -H "Content-Type: application/json" \
-    -d "{\"old_password\": \"Harbor12345\", \"new_password\": \"${ADMIN_PASSWORD}\"}" \
-    "https://harbor.${DOMAIN}/api/v2.0/users/1/password" || echo "🔹 Harbor password may already be changed."
-  
-  create_secret "harbor_admin_password" "$ADMIN_PASSWORD"
-
-  # Enforce Harbor as primary registry and mirror in Podman (Rootless context requires user config)
+  # Enforce Quay as primary registry and mirror in Podman (Rootless context requires user config)
   mkdir -p ~/.config/containers
   cat <<EOF > ~/.config/containers/registries.conf
-unqualified-search-registries = ["harbor.${DOMAIN}", "docker.io"]
+unqualified-search-registries = ["quay.${DOMAIN}", "docker.io"]
 
 [[registry]]
 prefix = "docker.io"
-location = "harbor.${DOMAIN}/docker-hub-proxy"
+location = "quay.${DOMAIN}"
 mirror-by-digest-only = false
 
 [[registry]]
-location = "harbor.${DOMAIN}"
+location = "quay.${DOMAIN}"
 insecure = false
 EOF
-  echo "✅ Configured Podman to use Harbor as a registry."
+  echo "✅ Configured Podman to use Quay as a registry."
 }
 
 # --- 2) PKI (Step-CA & Traefik ACME) ---
@@ -158,9 +149,9 @@ setup_identity() {
   VAULTWARDEN_OIDC_SECRET=$(openssl rand -base64 32)
   create_secret "vaultwarden_oidc_secret" "$VAULTWARDEN_OIDC_SECRET"
 
-  # Harbor OIDC client secret
-  HARBOR_OIDC_SECRET=$(openssl rand -base64 32)
-  create_secret "harbor_oidc_secret" "$HARBOR_OIDC_SECRET"
+  # Quay OIDC client secret
+  QUAY_OIDC_SECRET=$(openssl rand -base64 32)
+  create_secret "quay_oidc_secret" "$QUAY_OIDC_SECRET"
 
   # DefectDojo OIDC client secret
   DOJO_OIDC_SECRET=$(openssl rand -base64 32)
@@ -247,7 +238,7 @@ main() {
   echo "Geo Brain - Rootless DevSecOps Bootstrapper"
   echo "================================================="
   
-  init_harbor
+  init_quay
   setup_pki
   setup_identity
   wait_proxies
