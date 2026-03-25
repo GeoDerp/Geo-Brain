@@ -89,6 +89,16 @@ services:
     networks:
       - quay-net
       - proxy-net
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/instance"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=registry"
@@ -115,6 +125,16 @@ services:
       - ./config:/config:Z
     networks:
       - quay-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6060/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     command: ["-conf", "/config/clair-config.yaml"]
 
 networks:

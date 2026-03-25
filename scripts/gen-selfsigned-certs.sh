@@ -55,18 +55,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ -n "${SSH_KEY:-}" ]] && { $DO_DEPLOY || $DO_TRUST_REMOTE; }; then
-    if [[ -z "${SSH_AUTH_SOCK:-}" ]] || ! ssh-add -l &>/dev/null; then
-        echo ">>> Starting temporary ssh-agent..."
-        eval "$(ssh-agent -s)" >/dev/null
-        _SCRIPT_STARTED_AGENT=1
-    fi
-    key_fp=$(ssh-keygen -lf "$SSH_KEY" 2>/dev/null | awk '{print $2}')
-    if ! ssh-add -l 2>/dev/null | grep -qF "$key_fp"; then
-        echo ">>> Adding SSH key to agent (enter passphrase if prompted)..."
-        ssh-add "$SSH_KEY"
-    fi
-fi
 DO_DEPLOY=false
 DO_TRUST_LOCAL=false
 DO_TRUST_REMOTE=false
@@ -102,6 +90,19 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "${SSH_KEY:-}" ]] && { $DO_DEPLOY || $DO_TRUST_REMOTE; }; then
+    if [[ -z "${SSH_AUTH_SOCK:-}" ]] || ! ssh-add -l &>/dev/null; then
+        echo ">>> Starting temporary ssh-agent..."
+        eval "$(ssh-agent -s)" >/dev/null
+        _SCRIPT_STARTED_AGENT=1
+    fi
+    key_fp=$(ssh-keygen -lf "$SSH_KEY" 2>/dev/null | awk '{print $2}')
+    if ! ssh-add -l 2>/dev/null | grep -qF "$key_fp"; then
+        echo ">>> Adding SSH key to agent (enter passphrase if prompted)..."
+        ssh-add "$SSH_KEY"
+    fi
+fi
 
 ssh_cmd() {
   ssh -i "$SSH_KEY" -o ConnectTimeout=15 "${REMOTE_USER}@${REMOTE_HOST}" "$@"

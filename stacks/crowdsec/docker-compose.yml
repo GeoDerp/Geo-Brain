@@ -9,6 +9,12 @@ services:
       - ALL
     environment:
       - COLLECTIONS=crowdsecurity/linux crowdsecurity/traefik
+      # Zero Telemetry / Zero Upload Mandate
+      - DISABLE_ONLINE_API=true
+      # Prevent sharing with the central API
+      - USE_WALTON=false
+      # Keep local API enabled for Bouncers and local Vector ingestion
+      - DISABLE_LOCAL_API=false
     ports:
       - "8180:8080" # LAPI for bouncers
     volumes:

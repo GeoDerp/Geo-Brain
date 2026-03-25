@@ -34,31 +34,13 @@ This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from
 
 **Objective:** Implement strict internal networking, secure user stack onboarding, and rootless-aware observability.
 
-1.  **Declarative Zero-Trust User Stacks (Dockge + Traefik/Step-CA)**
-    *   **Rationale:** Users should easily spin up apps without configuring complex PKI.
-    *   **Implementation:** Traefik uses the internal Step-CA ACME challenge. User stacks deployed via Dockge only need standard Traefik labels.
-    *   **STIG Compliance:** Enforce `read_only: true`, drop `ALL` capabilities, and mount a temporary `tmpfs` for `/tmp`.
-    ```yaml
-    # STIG-Compliant User Stack Template
-    services:
-      user-app:
-        image: quay.example.local/my-app:latest
-        read_only: true
-        tmpfs:
-          - /tmp
-        cap_drop:
-          - ALL
-        networks:
-          - user-net
-        labels:
-          - "traefik.enable=true"
-          - "traefik.http.routers.app.rule=Host(`app.${DOMAIN}`)"
-          - "traefik.http.routers.app.tls.certresolver=stepca"
-    ```
+1.  **Declarative Zero-Trust User Stacks & mTLS Sidecars (Completed)**
+    *   **Rationale:** Internal services shouldn't implicitly trust each other. Plaintext internal networks are an attack vector.
+    *   **Implementation:** Backend databases and apps bind only to `127.0.0.1` and share a network namespace with a Caddy proxy sidecar. The sidecar handles mTLS via Step-CA. Internal application networks are set to `internal: true` to physically sever internet access. User-facing apps use Traefik labels with Step-CA integration.
 
-2.  **Rootless eBPF Monitoring (Falco to Wazuh)**
-    *   **Rationale:** Traditional Falco requires root Docker sockets or kernel module access.
-    *   **Implementation:** Utilize the modern eBPF driver (`falco-bpf`). Since Podman rootless isolates namespaces, Falco must run with `security.stig.bypass_privileged=true` just for the specific eBPF capability to monitor syscalls across user namespaces. Route alerts via local Syslog (`logger`) to Vector, forwarding them into Wazuh.
+2.  **Automated Rootless eBPF Remediation (Completed)**
+    *   **Rationale:** We need an active SOC loop to instantly quarantine compromised containers, not just log them.
+    *   **Implementation:** Utilize the modern eBPF driver (`falco-bpf`) running with `security.stig.bypass_privileged=true`. Falco monitors syscalls for inter-container network bypasses. Vector ingests these alerts, routing them simultaneously to Wazuh (SIEM) and to an air-gapped, zero-telemetry CrowdSec container. CrowdSec instantly pushes IP bans to Caddy bouncers, cutting off unauthorized internal container traffic.
 
 3.  **Rootless-Aware Observability (Podman Exporter)**
     *   **Rationale:** Standard cAdvisor doesn't understand rootless Podman cgroups correctly.

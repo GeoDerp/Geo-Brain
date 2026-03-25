@@ -31,7 +31,7 @@
 #       - "homepage.icon=pangolin.png"
 #       - "homepage.description=Zero-Trust Tunnel Proxy"
 #       - "homepage.href=https://pangolin.${DOMAIN}"
-
+# 
 #   gerbil:
 #     image: ghcr.io/fosrl/gerbil:1.16.2
 #     container_name: gerbil
@@ -62,7 +62,7 @@
 #       - "security.stig.compliance=true"
 #       - "security.stig.bypass_privileged=true"
 #       - "security.stig.role=wireguard-tunnel"
-
+# 
 # networks:
 #   pangolin-net:
 #     driver: bridge

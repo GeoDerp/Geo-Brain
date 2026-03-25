@@ -48,98 +48,111 @@ The following diagram illustrates how all components interact within the GEO-Bra
 graph TD
     USER(["🖥️ User / Browser"])
 
-    subgraph Host ["openSUSE MicroOS — STIG-Compliant Immutable Host"]
+    subgraph Host ["openSUSE MicroOS / Fedora CoreOS — STIG-Compliant Immutable Host"]
 
         subgraph HOST_MON ["Host-Level Monitoring"]
             JD["journald"]
             AD["auditd"]
-            TU["transactional-update"]
+            TU["transactional-update / rpm-ostree"]
         end
 
         subgraph Podman ["Podman — Rootless Container Engine"]
 
+            subgraph OPTIONAL ["Optional Edge Security"]
+                BW["BunkerWeb — WAF"]
+                PG["Pangolin — ZTNA Tunnel"]
+            end
+
             subgraph MGMT ["Management & Orchestration"]
-                TR["Traefik — Reverse Proxy / TLS"]
+                TR["Traefik — Reverse Proxy / Edge TLS"]
                 HP["Homepage — Dashboard"]
                 DG["Dockge — Stack Manager"]
             end
 
             subgraph AUTH ["Identity & Access"]
-                IAM["Kanidm / Authelia — SSO + MFA"]
+                IAM["Kanidm — Identity / LDAP"]
+                AU["Authelia — SSO + MFA"]
+            end
+
+            subgraph ZT_MTLS ["Zero-Trust mTLS Network (Internal)"]
+                SD["Caddy / Sidecars — mTLS Termination"]
+                APPS["Backend Applications / DBs"]
             end
 
             subgraph SOC ["Security Operations Center"]
                 WZ["Wazuh — SIEM / XDR"]
-                FL["Falco — Runtime Security"]
-                CS["CrowdSec — IPS"]
+                FL["Falco — eBPF Runtime Security"]
+                CS["CrowdSec — Air-Gapped IPS"]
                 DD["DefectDojo — Vuln Tracking"]
-                RL["RamaLama — AI Triage"]
+                RL["RamaLama — Local AI Triage"]
             end
 
             subgraph LGV ["Observability — LGV Stack"]
-                VC["Vector — Log Pipeline"]
+                VC["Vector — High-Perf Log Pipeline"]
                 LK["Loki — Log Store"]
                 PR["Prometheus — Metrics"]
                 GF["Grafana — Dashboards"]
             end
 
             subgraph SCAN ["Vulnerability Scanning"]
-                TV["Trivy"]
-                GP["Grype"]
-                DL["Dockle"]
-                CV["Checkov"]
-                TS["Terrascan"]
-                GL["Gitleaks"]
+                TV["Trivy — Image/SCA Scan"]
+                CV["Checkov — IaC Scan"]
+                GL["Gitleaks — Secrets"]
+                SG["Semgrep — SAST"]
             end
 
             subgraph INFRA ["Strategic Infrastructure"]
-                HB["Quay — Registry / Cache"]
-                CA["Step-CA — Internal PKI"]
-                MO["MinIO — S3 Storage"]
+                HB["Quay + Clair — Local Registry & Scan"]
+                CA["Step-CA — Internal PKI / mTLS"]
+                MO["MinIO — S3 Storage Backend"]
             end
         end
     end
 
     %% ── User Access Flow ──
-    USER -- "HTTPS *.example.local" --> TR
-    TR -- "ForwardAuth (MFA check)" --> IAM
-    IAM -. "auth OK" .-> TR
+    USER -- "HTTPS" --> BW
+    BW -- "Clean Traffic" --> TR
+    USER -- "VPN / WireGuard" --> PG
+    PG -- "Identity-Aware Access" --> APPS
+
+    TR -- "HTTPS *.example.local" --> SD
+    SD -- "127.0.0.1" --> APPS
+
+    TR -- "ForwardAuth (MFA check)" --> AU
+    AU -- "LDAP Verify" --> IAM
+    AU -. "auth OK" .-> TR
     TR -- "proxy" --> HP & DG & GF & WZ & DD
 
     %% ── Infrastructure ──
     CA -- "ACME certs" --> TR
+    CA -- "mTLS certs" --> SD
     HB -- "pinned images" --> Podman
 
-    %% ── Host → Vector ──
-    JD -- "system logs" --> VC
-    AD -- "audit events" --> VC
-    TU -- "update status" --> VC
-
-    %% ── Vector fan-out ──
+    %% ── Observability & Logging ──
+    JD & AD & TU -- "host logs" --> VC
+    Podman -- "container logs" --> VC
     VC -- "structured logs" --> LK
-    VC -- "security logs" --> WZ
+    VC -- "security alerts" --> WZ
+    VC -- "Falco alerts" --> CS
 
     %% ── Runtime Security ──
     FL -- "syscall alerts" --> VC
-    CS -- "reads access logs" --> TR
-    CS -. "ban decisions" .-> TR
+    CS -- "reads alerts" --> VC
+    CS -. "update bouncers" .-> SD
 
-    %% ── Observability ──
-    LK -- "log queries" --> GF
-    PR -- "metric queries" --> GF
-    MO -- "S3 backend" --> LK
+    %% ── Observability Dashboards ──
+    LK & PR & WZ -- "queries" --> GF
+    MO -- "S3 chunk storage" --> LK
     PR -- "scrapes /metrics" --> Podman
-    WZ -- "security events" --> GF
 
     %% ── Scan Results ──
-    TV & GP & DL -- "image findings" --> DD
-    CV & TS -- "IaC findings" --> DD
-    GL -- "secret findings" --> DD
+    TV & CV & GL & SG -- "findings" --> DD
+    HB -- "Clair findings" --> DD
 
     %% ── SOC Correlation ──
     DD -. "high-sev alerts" .-> WZ
-    RL -. "triage queries" .-> WZ
-    RL -. "finding queries" .-> DD
+    RL -. "analyze logs/alerts" .-> WZ
+    RL -. "triage vulns" .-> DD
 
     %% ── Colour Classes ──
     classDef user fill:#64748b,stroke:#334155,color:#fff
@@ -148,15 +161,19 @@ graph TD
     classDef soc fill:#ef4444,stroke:#991b1b,color:#fff
     classDef obs fill:#22c55e,stroke:#166534,color:#fff
     classDef scan fill:#f59e0b,stroke:#92400e,color:#fff
+    classDef opt fill:#0f766e,stroke:#14532d,color:#fff
+    classDef zt fill:#6d28d9,stroke:#4c1d95,color:#fff
     classDef infra fill:#06b6d4,stroke:#0e7490,color:#fff
     classDef host fill:#78716c,stroke:#44403c,color:#fff
 
     class USER user
     class TR,HP,DG mgmt
-    class IAM auth
+    class IAM,AU auth
     class WZ,FL,CS,DD,RL soc
     class VC,LK,PR,GF obs
-    class TV,GP,DL,CV,TS,GL scan
+    class TV,CV,GL,SG scan
+    class BW,PG opt
+    class SD,APPS zt
     class HB,CA,MO infra
     class JD,AD,TU host
 ```
@@ -362,15 +379,16 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 
 ### Falco
 
-**What it is:** Falco is a cloud-native runtime security tool that detects anomalous activity in containers and hosts.
+**What it is:** Falco is a cloud-native runtime security tool that detects anomalous activity in containers and hosts using modern eBPF.
 
 **Why it's used:**
 - **Runtime Detection:** Monitors system calls in real-time to detect suspicious behavior.
 - **Container-Aware:** Understands container context and can detect container-specific threats.
-- **Custom Rules:** Supports custom rules for organization-specific security policies.
-- **Wazuh Integration:** Forwards alerts to Wazuh for centralized analysis.
+- **Active Remediation Trigger:** Acts as the detection engine for our active SOC loop. Alerts (such as bypassing internal mTLS sidecars) are routed via Vector directly to CrowdSec for immediate IP banning.
+- **Wazuh Integration:** Forwards alerts to Wazuh for centralized SIEM analysis.
 
 **Detection Examples:**
+- Inter-container network bypasses (failing to use the local Caddy sidecar proxy)
 - Shell spawned inside a container
 - Sensitive file access (e.g., `/etc/shadow`)
 - Network connections from unexpected processes
@@ -384,7 +402,9 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 
 **Why it's used:**
 - **Behavioral Detection:** Analyzes logs to detect malicious patterns.
-- **Bouncer Architecture:** Integrates with firewalls, reverse proxies (Traefik), and applications.
+- **Automated SOC Remediation:** Ingests eBPF alerts from Falco via Vector to instantly ban offending internal or external IPs.
+- **Strictly Air-Gapped:** Configured with `DISABLE_ONLINE_API=true` to enforce a Zero Telemetry and Zero Upload mandate, guaranteeing no homelab behavior or signals are shared externally.
+- **Bouncer Architecture:** Pushes active ban decisions to our Edge proxy (Traefik/BunkerWeb) and our internal Caddy mTLS sidecars.
 - **Podman Compatible:** Works well with containerized deployments.
 
 ---

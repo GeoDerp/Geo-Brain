@@ -68,3 +68,14 @@ sinks:
     inputs:
       - internal_metrics
     address: "0.0.0.0:9598"
+
+  # Forward Falco logs to CrowdSec (Air-gapped)
+  crowdsec:
+    type: syslog
+    inputs:
+      - falco_normalize
+    address: "crowdsec:5140"
+    mode: tcp
+    encoding:
+      codec: json
+
