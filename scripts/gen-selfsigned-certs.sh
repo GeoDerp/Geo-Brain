@@ -42,6 +42,7 @@ CERT_DAYS=825   # Leaf cert valid ~2.25 years (Apple max)
 KEY_SIZE=4096
 CA_SUBJECT="/C=US/ST=Local/L=Homelab/O=GEO-Brain/OU=SSOF/CN=${DOMAIN} Temporary CA"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+SSH_KEY="${SSH_KEY/#\~/$HOME}"
 REMOTE_HOST="${REMOTE_HOST:-homelab.local}"
 REMOTE_USER="${REMOTE_USER:-$USER}"
 DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"

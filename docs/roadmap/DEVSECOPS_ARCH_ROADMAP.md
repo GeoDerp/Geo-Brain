@@ -7,7 +7,7 @@ This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from
 **Objective:** Fully automate the post-deployment configuration, eliminate plaintext secrets, and solidify the Quay-first deployment model.
 
 1.  **Idempotent Rootless Bootstrapper (Completed)**
-    *   `setup-geo-brain.sh` handles Quay initialization, PKI (Step-CA & Traefik ACME), Identity (Kanidm OIDC), and SOC (DefectDojo) bridging.
+    *   `setup-brain.sh` handles Quay initialization, PKI (Step-CA & Traefik ACME), Identity (Kanidm OIDC), and SOC (DefectDojo) bridging.
     *   Dynamically extracts API keys and provisions them securely using `podman secret create`.
 
 2.  **Secret Management Transition (Podman Secrets)**

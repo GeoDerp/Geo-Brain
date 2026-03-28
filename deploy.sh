@@ -528,6 +528,8 @@ generate_traefik_config() {
     local port=$(grep "traefik.http.services.*.port" "$compose_file" | sed -E 's/.*port[=:]"?([0-9]+)"?.*/\1/' | head -n 1)
     local scheme=$(grep "traefik.http.services.*.scheme" "$compose_file" | sed -E 's/.*scheme[=:]"?([https]+)"?.*/\1/' | head -n 1)
     local resolver=$(grep "traefik.http.routers.*.certresolver" "$compose_file" | sed -E 's/.*certresolver[=:]"?([^"]+)"?.*/\1/' | head -n 1)
+    local middlewares=$(grep "traefik.http.routers.*.middlewares" "$compose_file" | sed -E 's/.*middlewares[=:]"?([^"]+)"?.*/\1/' | head -n 1)
+    local serverstransport=$(grep -i "traefik.http.services.*.serverstransport" "$compose_file" | sed -E 's/.*[sS]ervers[tT]ransport[=:]"?([^"]+)"?.*/\1/' | head -n 1)
     
     # Defaults
     [[ -z "$port" ]] && port="80"
@@ -547,8 +549,8 @@ generate_traefik_config() {
     fi
     
     # Core overrides
-    [[ "$service_name" == "quay" ]] && target_host="quay-core"
-    [[ "$service_name" == "wazuh" ]] && target_host="wazuh-dashboard"
+    # [[ "$service_name" == "quay" ]] && target_host="quay-core"
+    # [[ "$service_name" == "wazuh" ]] && target_host="wazuh-dashboard"
 
     echo ">>> Generating Traefik dynamic config: $rule -> $target_host:$port"
 
@@ -563,12 +565,27 @@ http:
       service: ${stack_name/\//_}_${service_name}
       tls:
         certResolver: $resolver
+EOF
+
+    if [[ -n "$middlewares" ]]; then
+        echo "      middlewares:" >> "$output_file"
+        IFS=',' read -ra ADDR <<< "$middlewares"
+        for i in "${ADDR[@]}"; do
+            echo "        - $i" >> "$output_file"
+        done
+    fi
+
+    cat <<EOF >> "$output_file"
   services:
     ${stack_name/\//_}_${service_name}:
       loadBalancer:
         servers:
           - url: "$scheme://$target_host:$port"
 EOF
+
+    if [[ -n "$serverstransport" ]]; then
+        echo "        serversTransport: $serverstransport" >> "$output_file"
+    fi
 
     # If stack is remote, sync the generated file
     if [[ "$DEPLOY_MODE" == "remote" ]]; then

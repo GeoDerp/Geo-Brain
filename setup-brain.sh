@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-geo-brain.sh
+# setup-brain.sh
 # Idempotent rootless Podman setup script for the Geo Brain environment
 # This script configures Quay, Identity (Kanidm), PKI (Step-CA), SOC (DefectDojo/Wazuh), and Proxy.
 

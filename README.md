@@ -66,7 +66,7 @@ Deploy all stacks. The script automatically handles bootstrapping Quay and Step-
 Run the setup script to initialize identities, integrate Step-CA with Traefik via ACME, and configure rootless service accounts:
 
 ```bash
-./setup-geo-brain.sh
+./setup-brain.sh
 ```
 
 ### Step 6: Trust the Root Certificate

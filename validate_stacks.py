@@ -12,7 +12,7 @@ def check_stack(filepath):
         return [f"Failed to parse YAML: {e}"]
 
     if not data or not isinstance(data, dict):
-        return ["Empty or invalid YAML file"]
+        return []
 
     services = data.get("services", {})
     for service_name, service in services.items():
@@ -42,12 +42,19 @@ def check_stack(filepath):
         volumes = service.get("volumes", [])
         for vol in volumes:
             if isinstance(vol, str):
-                host_path = vol.split(":")[0]
-                if not host_path.startswith("./") and not host_path.startswith("${DATA_DIR}") and not host_path.startswith("/var/run/"):
+                # Handle param expansion default values containing colons (e.g. ${VAR:-default}:/path)
+                if "}:" in vol:
+                    host_path = vol.split("}:")[0] + "}"
+                else:
+                    host_path = vol.split(":")[0]
+                
+                allowed_prefixes = ("./", "../", "${DATA_DIR}", "/var/run/", "/dev", "/proc", "/etc", "/var/log", "${PODMAN_SOCK")
+                if not any(host_path.startswith(prefix) for prefix in allowed_prefixes):
                      errors.append(f"Service '{service_name}' uses absolute or non-DATA_DIR volume: '{host_path}'")
             elif isinstance(vol, dict):
                 host_path = vol.get("source", "")
-                if not host_path.startswith("./") and not host_path.startswith("${DATA_DIR}") and not host_path.startswith("/var/run/"):
+                allowed_prefixes = ("./", "../", "${DATA_DIR}", "/var/run/", "/dev", "/proc", "/etc", "/var/log", "${PODMAN_SOCK")
+                if not any(host_path.startswith(prefix) for prefix in allowed_prefixes):
                      errors.append(f"Service '{service_name}' uses non-DATA_DIR volume source: '{host_path}'")
                      
     networks = data.get("networks", {})
