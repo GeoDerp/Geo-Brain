@@ -31,7 +31,7 @@ fi
 if [[ "$COMMAND" == "up" ]]; then
     if [[ ! -f "$REPO_ROOT/certs/ca.crt" ]] || [[ ! -f "$REPO_ROOT/certs/wildcard.crt" ]]; then
         echo -e "\n[WARNING] Missing core certificates (ca.crt or wildcard.crt) in $REPO_ROOT/certs/."
-        echo "Did you forget to run: ./scripts/gen-selfsigned-certs.sh ?"
+        echo "Did you forget to run: ./scripts/secrets/gen-selfsigned-certs.sh ?"
         echo -n "Press ENTER to continue anyway, or Ctrl+C to abort..."
         read -r
     fi
@@ -276,7 +276,7 @@ RENDER_SCRIPT
         local config_dir="$REPO_ROOT/$stack_dir/config"
         [[ -d "$config_dir" ]] || return 0
         command -v envsubst &>/dev/null || return 0
-        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD}'
+        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${QUAY_OIDC_SECRET}'
         find "$config_dir" -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
             if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
                 envsubst "$varlist" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"

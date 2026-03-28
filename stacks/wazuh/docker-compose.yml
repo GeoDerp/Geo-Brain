@@ -84,6 +84,12 @@ services:
     environment:
       - WAZUH_MANAGER_URL=http://wazuh-manager
       - INDEXER_URL=http://wazuh-indexer:9200
+      - OPENSEARCH_SECURITY_AUTH_TYPE=openid
+      - OPENSEARCH_SECURITY_OPENID_CLIENT_ID=wazuh
+      - OPENSEARCH_SECURITY_OPENID_CLIENT_SECRET=${WAZUH_OIDC_SECRET}
+      - OPENSEARCH_SECURITY_OPENID_BASE_REDIRECT_URL=https://wazuh.${DOMAIN}
+    #secrets:
+      #- wazuh_oidc_secret
     networks:
       - wazuh-net
       - monitoring-net
@@ -120,4 +126,8 @@ networks:
   monitoring-net:
     external: true
   proxy-net:
+    external: true
+
+#secrets:
+  wazuh_oidc_secret:
     external: true

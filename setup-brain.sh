@@ -182,6 +182,14 @@ setup_soc() {
   # Wait for DefectDojo Login page
   wait_for_service "DefectDojo UI" "curl -s -k https://defectdojo.${DOMAIN}/login" || echo "⚠️ DefectDojo UI check failed."
 
+  echo "\n--- OIDC Configuration Checklist ---"
+  echo "To complete the zero-trust SSO rollout, log into the Kanidm Admin UI and create the following OIDC Applications:"
+  echo "  1. Quay (Client ID: quay, Secret: $QUAY_OIDC_SECRET, Redirect URI: https://quay.$DOMAIN/oauth2/oidc/callback)"
+  echo "  2. DefectDojo (Client ID: defectdojo, Secret: $DOJO_OIDC_SECRET, Redirect URI: https://defectdojo.$DOMAIN/complete/oidc/)"
+  echo "  3. MinIO (Client ID: minio, Secret: $MINIO_OIDC_SECRET, Redirect URI: https://minio.$DOMAIN/oauth_callback)"
+  echo "  4. Wazuh (Client ID: wazuh, Secret: $WAZUH_OIDC_SECRET, Redirect URI: https://wazuh.$DOMAIN/api/v1/auth/login)"
+  echo "Save these secrets securely. The compose stacks are already configured to expect them."
+
   echo "Checking DefectDojo Admin Credentials..."
   # If we have initializer logs, extract the password.
   # This requires knowing the exact container name. Let's assume 'defectdojo-initializer' or similar.
@@ -244,6 +252,41 @@ main() {
   wait_proxies
   setup_soc
   setup_crowdsec
+  
+  echo "================================================="
+  echo "🔐 BREAKGLASS & SSO SUMMARY"
+  echo "================================================="
+  echo "Save the following credentials in a SECURE location (e.g. Vaultwarden):"
+  echo ""
+  
+  # Try to extract Kanidm recovery password
+  KANIDM_RECOVERY=$(podman exec kanidm /sbin/kanidmd recover-account -c /data/server.toml idm_admin 2>&1 | grep new_password | grep -o '"[^"]*"' | tr -d '"' || echo "See instructions above")
+  echo "1. Kanidm (Primary IDM)"
+  echo "   - URL: https://kanidm.${DOMAIN}"
+  echo "   - Admin User: idm_admin"
+  echo "   - Recovery Password: $KANIDM_RECOVERY"
+  echo ""
+  
+  # Try to extract DefectDojo password if DOJO_API_KEY secret exists
+  if podman secret ls | grep -q "DOJO_API_KEY"; then
+     echo "2. DefectDojo (Vulnerability Management)"
+     echo "   - URL: https://defectdojo.${DOMAIN}"
+     echo "   - SSO: Click 'Log in via Kanidm SSO'"
+     echo "   - Local Admin: admin / (See initializer logs)"
+  fi
+  
+  echo "3. MinIO (S3 Storage)"
+  echo "   - URL: https://minio.${DOMAIN}"
+  echo "   - SSO: Click 'Login with OpenID'"
+  echo "   - Local Admin: ${MINIO_ROOT_USER:-minioadmin} / ${MINIO_ROOT_PASSWORD:-[REDACTED]}"
+  
+  echo "4. Quay (Registry)"
+  echo "   - URL: https://quay.${DOMAIN}"
+  echo "   - SSO: Select 'OIDC' on login screen"
+  
+  echo "5. Grafana (Observability)"
+  echo "   - URL: https://grafana.${DOMAIN}"
+  echo "   - SSO: Automatic via Authelia"
   
   echo "================================================="
   echo "🎉 Geo Brain setup script completed successfully."

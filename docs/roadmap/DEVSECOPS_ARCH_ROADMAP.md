@@ -46,6 +46,10 @@ This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from
     *   **Rationale:** Standard cAdvisor doesn't understand rootless Podman cgroups correctly.
     *   **Implementation:** Deploy the official `prometheus-podman-exporter` directly within the user namespace to scrape accurate memory/CPU limits without needing `/var/run/docker.sock`.
 
+4.  **Declarative SSO for Observability (Grafana, Loki, Prometheus)**
+    *   **Rationale:** Centralized visibility shouldn't rely on local accounts.
+    *   **Implementation:** Update Grafana to utilize OIDC via Kanidm directly (moving beyond ForwardAuth for better attribute mapping). Configure Loki and Prometheus to support OIDC/Basic Auth backed by Kanidm LDAP for secure endpoint scraping and log access.
+
 ## Phase 3: Long-Term Architectural Shifts (Advanced Identity & Airgap)
 
 1.  **Kanidm / Step-CA SSH Certificate Authority**

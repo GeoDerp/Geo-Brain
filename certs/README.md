@@ -10,10 +10,10 @@ TLS certificates **must exist** before running `deploy.sh` — Traefik and Kanid
 
 ```bash
 # 1. Generate CA + wildcard + Kanidm certs (local only)
-./scripts/gen-selfsigned-certs.sh
+./scripts/secrets/gen-selfsigned-certs.sh
 
 # 2. Generate, deploy to remote, and trust on both hosts
-./scripts/gen-selfsigned-certs.sh --all
+./scripts/secrets/gen-selfsigned-certs.sh --all
 ```
 
 The script will:
@@ -54,8 +54,8 @@ openssl s_client -connect example.local:443 -servername home.example.local </dev
 ## Quick Start
 
 ```bash
-./scripts/gen-selfsigned-certs.sh          # generate only
-./scripts/gen-selfsigned-certs.sh --all    # generate + deploy + trust
+./scripts/secrets/gen-selfsigned-certs.sh          # generate only
+./scripts/secrets/gen-selfsigned-certs.sh --all    # generate + deploy + trust
 ```
 
 ## Expected Files

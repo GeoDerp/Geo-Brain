@@ -13,6 +13,11 @@ services:
     environment:
       - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
       - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
+      - DD_SOCIAL_AUTH_OIDC_OIDC_ENDPOINT=https://kanidm.${DOMAIN}/oauth2/openid/defectdojo
+      - DD_SOCIAL_AUTH_OIDC_KEY=defectdojo
+      - DD_SOCIAL_AUTH_OIDC_SECRET=${DOJO_OIDC_SECRET}
+    #secrets:
+      #- dojo_oidc_secret
     networks:
       - vulnerability-net
       - proxy-net
@@ -98,4 +103,8 @@ networks:
   vulnerability-net:
     external: true
   proxy-net:
+    external: true
+
+#secrets:
+  dojo_oidc_secret:
     external: true

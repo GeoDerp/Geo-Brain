@@ -50,7 +50,7 @@ Run the node initialization script to install dependencies (Podman, Ansible), co
 Generate the root CA and required SSL certificates for `step-ca`, `quay`, and `kanidm`:
 
 ```bash
-./scripts/gen-selfsigned-certs.sh
+./scripts/secrets/gen-selfsigned-certs.sh
 ```
 
 ### Step 4: Deploy the Infrastructure
@@ -81,7 +81,7 @@ To avoid browser warnings, install the generated Root CA onto your local worksta
   ```bash
   sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain certs/ca.crt
   ```
-*(You can also use `./scripts/gen-selfsigned-certs.sh --trust-local` to automate this).*
+*(You can also use `./scripts/secrets/gen-selfsigned-certs.sh --trust-local` to automate this).*
 
 ### Step 7: Initial Logins & User Setup
 

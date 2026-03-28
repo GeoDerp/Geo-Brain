@@ -10,7 +10,7 @@
 # Also installs the CA into the local and remote host trust stores.
 #
 # Usage:
-#   ./scripts/gen-selfsigned-certs.sh [OPTIONS]
+#   ./scripts/secrets/gen-selfsigned-certs.sh [OPTIONS]
 #
 # Options:
 #   --deploy        Deploy certs to remote host and restart affected containers
@@ -398,7 +398,7 @@ echo "  Traefik TLS:   stacks/traefik/config/dynamic/tls.yml"
 echo "  Traefik certs: stacks/traefik/config/certs/"
 echo ""
 echo "Next steps:"
-echo "  1. Run: ./scripts/gen-selfsigned-certs.sh --all"
+echo "  1. Run: ./scripts/secrets/gen-selfsigned-certs.sh --all"
 echo "     (to deploy + trust on both hosts)"
 echo "  2. Or manually: bash deploy.sh traefik up && bash deploy.sh kanidm up"
 echo "  3. Verify: curl -v https://home.$DOMAIN (should show valid cert)"
