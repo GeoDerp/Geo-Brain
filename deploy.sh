@@ -121,11 +121,19 @@ get_base_stacks() {
         "homepage"
     )
 
+    local exclude_stacks=("ramalama")
     local found_stacks=()
     for dir in "$REPO_ROOT"/stacks/*/; do
         local name
         name="$(basename "$dir")"
         [[ "$name" == "_template" || "$name" == "user" ]] && continue
+        
+        # Skip excluded stacks
+        local skip=0
+        for ex in "${exclude_stacks[@]}"; do
+            if [[ "$name" == "$ex" ]]; then skip=1; break; fi
+        done
+        [[ "$skip" -eq 1 ]] && continue
         if [[ -f "$dir/docker-compose.yml" ]] && ! grep -q '^[[:space:]]*services:' "$dir/docker-compose.yml"; then
             continue
         fi
@@ -273,8 +281,7 @@ set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
 command -v envsubst &>/dev/null || exit 0
 
 # Whitelist: only expand variables defined in .env (prevents clobbering app-specific patterns)
-VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD}'
-
+VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY} ${N8N_OIDC_SECRET}'
 find . -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
     if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
         envsubst "$VARLIST" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
@@ -286,7 +293,7 @@ RENDER_SCRIPT
         local config_dir="$REPO_ROOT/$stack_dir/config"
         [[ -d "$config_dir" ]] || return 0
         command -v envsubst &>/dev/null || return 0
-        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${QUAY_OIDC_SECRET}'
+        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY} ${N8N_OIDC_SECRET}'
         find "$config_dir" -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
             if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
                 envsubst "$varlist" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
@@ -499,11 +506,22 @@ check_security() {
 # --- TRAEFIK DYNAMIC CONFIG GENERATOR ---
 
 cleanup_traefik_configs() {
+    local stack_filter="${1:-}"
     local gen_dir="$REPO_ROOT/stacks/traefik/config/dynamic"
-    echo ">>> Cleaning up old generated Traefik configs..."
-    rm -f "$gen_dir"/gen_*.yml
-    if [[ "$DEPLOY_MODE" == "remote" ]]; then
-        "${SSH_CMD[@]}" "rm -f ~/${REMOTE_BASE}/stacks/traefik/config/dynamic/gen_*.yml"
+    
+    if [[ -z "$stack_filter" ]]; then
+        echo ">>> Cleaning up all old generated Traefik configs..."
+        rm -f "$gen_dir"/gen_*.yml
+        if [[ "$DEPLOY_MODE" == "remote" ]]; then
+            "${SSH_CMD[@]}" "rm -f ~/${REMOTE_BASE}/stacks/traefik/config/dynamic/gen_*.yml"
+        fi
+    else
+        local filter_name="${stack_filter/\//_}"
+        echo ">>> Cleaning up old generated Traefik config for $stack_filter..."
+        rm -f "$gen_dir"/gen_"${filter_name}"_*.yml
+        if [[ "$DEPLOY_MODE" == "remote" ]]; then
+            "${SSH_CMD[@]}" "rm -f ~/${REMOTE_BASE}/stacks/traefik/config/dynamic/gen_${filter_name}_*.yml"
+        fi
     fi
 }
 
@@ -774,7 +792,7 @@ case $STACK_NAME in
     *)
         # Always cleanup old generated configs at the start of a run (if up/redeploy)
         if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
-            cleanup_traefik_configs
+            cleanup_traefik_configs "$STACK_NAME"
         fi
         deploy_single "$STACK_NAME"
         echo ">>> Done."

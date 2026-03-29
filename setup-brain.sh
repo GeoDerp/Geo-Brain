@@ -22,17 +22,13 @@ DATA_DIR="${DATA_DIR/#\~/$HOME}"
 echo "Starting Geo Brain post-deployment rootless bootstrapper..."
 
 # --- Podman Connection Wrapper ---
-# This allows the script to be run from the host OR directly on the target node.
 PODMAN="podman"
 if [[ -n "${REMOTE_HOST:-}" ]]; then
-  # If we are on the host, REMOTE_HOST is defined. Check for a connection.
   if podman system connection ls --format '{{.Name}} {{.URI}}' | grep -q "${REMOTE_HOST}"; then
     CONN_NAME=$(podman system connection ls --format '{{.Name}} {{.URI}}' | grep "${REMOTE_HOST}" | awk '{print $1}' | head -n 1)
     PODMAN="podman --connection ${CONN_NAME}"
     echo "🔹 Using remote podman connection: ${CONN_NAME}"
   else
-    # If we are ALREADY on the remote host, REMOTE_HOST might still be in .env.
-    # Check if we are running on the host that matches REMOTE_HOST.
     HOSTNAME_VAL=$(hostname 2>/dev/null || echo "")
     if [[ "$HOSTNAME_VAL" == "$REMOTE_HOST" ]] || [[ "$HOSTNAME_VAL" == "${REMOTE_HOST%%.*}" ]]; then
        echo "🔹 Detected local execution on target node ${REMOTE_HOST}."
@@ -70,7 +66,7 @@ create_secret() {
   local secret_name=$1
   local secret_value=$2
 
-  if $PODMAN secret ls --format "{{.Name}}" | grep -q "^${secret_name}$"; then
+  if $PODMAN secret inspect "${secret_name}" > /dev/null 2>&1; then
     echo "🔹 Secret ${secret_name} already exists. Skipping."
   else
     echo -n "$secret_value" | $PODMAN secret create "$secret_name" -
@@ -127,7 +123,7 @@ setup_pki() {
 # --- 3) Identity (Kanidm) ---
 setup_identity() {
   echo "--- 3) Identity (Kanidm) ---"
-  wait_for_service "Kanidm" "curl -s -k -f https://kanidm.${DOMAIN}/healthz" || exit 1
+  wait_for_service "Kanidm" "curl -s -k -f https://kanidm.${DOMAIN}/" || exit 1
 
   local kanidm_container
   kanidm_container=$($PODMAN ps -a --format "{{.Names}}" | grep kanidm | head -n 1 || echo "kanidm")
@@ -136,14 +132,15 @@ setup_identity() {
   $PODMAN exec "$kanidm_container" /sbin/kanidmd recover-account -c /data/server.toml idm_admin || echo "⚠️ Admin account recovery skipped."
 }
 
-# --- 4) Storage (MinIO) ---
+# --- 4) Storage & SOC Secrets ---
 setup_storage() {
-  echo "--- 4) Storage (MinIO) ---"
+  echo "--- 4) Secret Provisioning ---"
   create_secret "minio_oidc_secret" "$(openssl rand -base64 32)"
   create_secret "vaultwarden_oidc_secret" "$(openssl rand -base64 32)"
   create_secret "quay_oidc_secret" "$(openssl rand -base64 32)"
   create_secret "wazuh_oidc_secret" "$(openssl rand -base64 32)"
   create_secret "dojo_oidc_secret" "$(openssl rand -base64 32)"
+  create_secret "dojo_secret_key" "$(openssl rand -base64 32)"
   create_secret "n8n_oidc_secret" "$(openssl rand -base64 32)"
 }
 
@@ -188,7 +185,6 @@ wait_proxies() {
 # --- Main execution ---
 main() {
   echo "--- 0) Self-Healing & Pre-flight ---"
-  # Self-healing for erroneous directories
   if [[ "$PODMAN" == "podman" ]]; then
     for f in ${DATA_DIR}/kanidm/chain.pem ${DATA_DIR}/kanidm/key.pem; do
       if [ -d "$f" ]; then rm -rf "$f"; fi
@@ -214,7 +210,7 @@ main() {
   echo "2. MinIO: https://minio.${DOMAIN} | Admin: ${MINIO_ROOT_USER:-minioadmin} / ${MINIO_ROOT_PASSWORD:-[REDACTED]}"
   echo "3. Quay: https://quay.${DOMAIN} | OIDC SSO Ready"
   echo "4. Wazuh: https://wazuh.${DOMAIN} | OIDC SSO Ready"
-  echo "5. n8n: https://n8n.${DOMAIN} | Local Auth (Configure OIDC in UI)"
+  echo "5. n8n: https://n8n.${DOMAIN} | OIDC SSO Ready"
   echo "================================================="
 }
 

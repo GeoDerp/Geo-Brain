@@ -11,6 +11,7 @@ services:
       - defectdojo-db
       - defectdojo-redis
     environment:
+      - DD_SECRET_KEY=${DOJO_SECRET_KEY}
       - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
       - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
       - DD_SOCIAL_AUTH_OIDC_OIDC_ENDPOINT=https://kanidm.${DOMAIN}/oauth2/openid/defectdojo
@@ -27,7 +28,7 @@ services:
           memory: 2G
           cpus: '1.0'
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthcheck')\""]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8081/healthcheck')\""]
       interval: 5m
       timeout: 10s
       retries: 3

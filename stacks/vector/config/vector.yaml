@@ -71,11 +71,10 @@ sinks:
 
   # Forward Falco logs to CrowdSec (Air-gapped)
   crowdsec:
-    type: syslog
+    type: socket
     inputs:
       - falco_normalize
     address: "crowdsec:5140"
     mode: tcp
     encoding:
       codec: json
-

@@ -56,7 +56,7 @@ services:
       # -- Logging --
       LOG_LEVEL: "info"
     volumes:
-      - ./data:/data:Z
+      - ${DATA_DIR}/bunkerweb:/data:Z,U
     networks:
       - waf-net
       - proxy-net
