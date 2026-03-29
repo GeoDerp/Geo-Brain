@@ -30,9 +30,9 @@ This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from
     *   **Rationale:** We need an active SOC loop to instantly quarantine compromised containers.
     *   **Implementation:** Utilize the modern eBPF driver (`falco-bpf`) running with `security.stig.bypass_privileged=true`. 
 
-3.  **Rootless-Aware Observability (Podman Exporter)**
-    *   **Rationale:** Standard cAdvisor doesn't understand rootless Podman cgroups correctly.
-    *   **Implementation:** Deploy the official `prometheus-podman-exporter` directly within the user namespace.
+3.  **Rootless-Aware Observability (Prometheus & Exporters)**
+    *   **Rationale:** `podman-exporter` was removed as it required breaking SELinux confinement to access the host podman socket, violating strict DISA STIG compliance.
+    *   **Implementation:** Prometheus stack is currently disabled in `deploy.sh`. Review node-level exporters or alternative metrics gathering methods that do not require unconfined host access.
 
 4.  **Declarative SSO for Observability (Grafana, Loki, Prometheus)**
     *   **Rationale:** Centralized visibility shouldn't rely on local accounts.

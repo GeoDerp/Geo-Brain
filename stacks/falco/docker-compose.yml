@@ -3,7 +3,17 @@ services:
     image: docker.io/falcosecurity/falco:0.43.0
     container_name: falco
     restart: always
-    privileged: true
+    security_opt:
+      - no-new-privileges:true
+      - label=disable
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - SYS_PTRACE
+      - BPF
+      - PERFMON
     # modern_ebpf doesn't need modules or boot, but it needs proc and dev
     volumes:
       - /dev:/host/dev:ro
