@@ -8,19 +8,7 @@ FEATURE_USER_INITIALIZE: true
 FEATURE_USER_CREATION: true
 REGISTRY_TITLE: Geo-Brain Quay
 REGISTRY_TITLE_SHORT: Quay
-AUTHENTICATION_TYPE: OIDC
-OIDC_PROVIDER_CONFIG:
-  - OIDC_SERVER_URL: "https://kanidm.${DOMAIN}/oauth2/openid/quay"
-    CLIENT_ID: "quay"
-    CLIENT_SECRET: "${QUAY_OIDC_SECRET}"
-    OIDC_SCOPES:
-      - openid
-      - profile
-      - email
-    LOGIN_SCOPES:
-      - openid
-      - profile
-      - email
+AUTHENTICATION_TYPE: Database
 SECRET_KEY: GeoBrainQuaySecretKey123
 DATABASE_SECRET_KEY: GeoBrainQuayDBSecretKey123
 

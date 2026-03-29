@@ -12,6 +12,7 @@ fi
 REMOTE_HOST="${REMOTE_HOST:-brain.home.lan}"
 REMOTE_USER="${REMOTE_USER:-admin}"
 DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
+DATA_DIR="${DATA_DIR/#\~/$HOME}"
 SSH_KEY="${SSH_KEY:-~/.ssh/id_ed25519}"
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
 

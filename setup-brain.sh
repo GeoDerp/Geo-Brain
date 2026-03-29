@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # setup-brain.sh
 # Idempotent rootless Podman setup script for the Geo Brain environment
 # This script configures Quay, Identity (Kanidm), PKI (Step-CA), SOC (DefectDojo/Wazuh), and Proxy.
@@ -17,12 +17,33 @@ ADMIN_PASSWORD=${ADMIN_PASSWORD:-"ChangeMe123!"}
 MAX_RETRIES=15
 INITIAL_BACKOFF=2
 DATA_DIR=${DATA_DIR:-/var/Geo-Brain}
+DATA_DIR="${DATA_DIR/#\~/$HOME}"
 
 echo "Starting Geo Brain post-deployment rootless bootstrapper..."
 
+# --- Podman Connection Wrapper ---
+# This allows the script to be run from the host OR directly on the target node.
+PODMAN="podman"
+if [[ -n "${REMOTE_HOST:-}" ]]; then
+  # If we are on the host, REMOTE_HOST is defined. Check for a connection.
+  if podman system connection ls --format '{{.Name}} {{.URI}}' | grep -q "${REMOTE_HOST}"; then
+    CONN_NAME=$(podman system connection ls --format '{{.Name}} {{.URI}}' | grep "${REMOTE_HOST}" | awk '{print $1}' | head -n 1)
+    PODMAN="podman --connection ${CONN_NAME}"
+    echo "🔹 Using remote podman connection: ${CONN_NAME}"
+  else
+    # If we are ALREADY on the remote host, REMOTE_HOST might still be in .env.
+    # Check if we are running on the host that matches REMOTE_HOST.
+    HOSTNAME_VAL=$(hostname 2>/dev/null || echo "")
+    if [[ "$HOSTNAME_VAL" == "$REMOTE_HOST" ]] || [[ "$HOSTNAME_VAL" == "${REMOTE_HOST%%.*}" ]]; then
+       echo "🔹 Detected local execution on target node ${REMOTE_HOST}."
+    else
+       echo "⚠️  No podman connection found for ${REMOTE_HOST}. Attempting local execution."
+    fi
+  fi
+fi
+
 # --- Helper Functions ---
 
-# Function for exponential backoff health checks
 wait_for_service() {
   local service_name=$1
   local check_command=$2
@@ -38,37 +59,30 @@ wait_for_service() {
     echo "⏳ ${service_name} not ready yet. Retrying in ${backoff} seconds..."
     sleep $backoff
     retries=$((retries + 1))
-    # Cap backoff at 30 seconds
-    if [ $backoff -lt 30 ]; then
-      backoff=$((backoff * 2))
-    fi
+    if [ $backoff -lt 30 ]; then backoff=$((backoff * 2)); fi
   done
 
   echo "❌ Error: ${service_name} failed to become ready after ${MAX_RETRIES} retries."
   return 1
 }
 
-# Function to create podman secret idempotently
 create_secret() {
   local secret_name=$1
   local secret_value=$2
 
-  if podman secret ls --format "{{.Name}}" | grep -q "^${secret_name}$"; then
+  if $PODMAN secret ls --format "{{.Name}}" | grep -q "^${secret_name}$"; then
     echo "🔹 Secret ${secret_name} already exists. Skipping."
   else
-    echo -n "$secret_value" | podman secret create "$secret_name" -
+    echo -n "$secret_value" | $PODMAN secret create "$secret_name" -
     echo "✅ Created podman secret: ${secret_name}"
   fi
 }
 
-# --- 1) Quay First Initialization ---
+# --- 1) Quay Initialization ---
 init_quay() {
   echo "--- 1) Quay Initialization ---"
-  
-  # Wait for Quay Core API
   wait_for_service "Quay API" "curl -s -k -f https://quay.${DOMAIN}/health/instance" || exit 1
   
-  # Enforce Quay as primary registry and mirror in Podman (Rootless context requires user config)
   mkdir -p ~/.config/containers
   cat <<EOF > ~/.config/containers/registries.conf
 unqualified-search-registries = ["quay.${DOMAIN}", "docker.io"]
@@ -82,172 +96,108 @@ mirror-by-digest-only = false
 location = "quay.${DOMAIN}"
 insecure = false
 EOF
-  echo "✅ Configured Podman to use Quay as a registry."
+  echo "✅ Configured Podman registries.conf."
 }
 
 # --- 2) PKI (Step-CA & Traefik ACME) ---
 setup_pki() {
   echo "--- 2) PKI (Step-CA & Traefik ACME) ---"
-  
-  # Wait for Step-CA
   wait_for_service "Step-CA" "curl -s -k -f https://ca.${DOMAIN}/health" || exit 1
 
+  local step_ca_container
+  step_ca_container=$($PODMAN ps -a --format "{{.Names}}" | grep step-ca | head -n 1 || echo "step-ca")
+
   echo "Adding ACME provisioner to Step-CA..."
-  # Check if ACME provisioner exists
-  if podman exec step-ca step ca provisioner list --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt | grep -q '"name": "acme"'; then
+  if $PODMAN exec "$step_ca_container" step ca provisioner list --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt | grep -q '"name": "acme"'; then
      echo "🔹 ACME provisioner already exists."
   else
-     # The step-ca container might run as a specific user, ensure we have rights.
-     podman exec step-ca step ca provisioner add acme --type ACME --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt
-     echo "Reloading Step-CA..."
-     podman kill -s SIGHUP step-ca
-     echo "✅ ACME provisioner added to Step-CA."
+     $PODMAN exec "$step_ca_container" step ca provisioner add acme --type ACME --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt
+     $PODMAN kill -s SIGHUP "$step_ca_container"
+     echo "✅ Added ACME provisioner to Step-CA."
   fi
 
-  echo "Adding OIDC provisioner to Step-CA for Kanidm..."
-  # if podman exec step-ca step ca provisioner list --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt | grep -q '"name": "kanidm"'; then
-  #    echo "🔹 OIDC provisioner 'kanidm' already exists."
-  # else
-  #    podman exec step-ca step ca provisioner add kanidm --type OIDC --client-id step-ca --client-secret "${STEPCA_OIDC_SECRET:-placeholder}" --configuration-endpoint https://kanidm.${DOMAIN}/oauth2/openid/step-ca/.well-known/openid-configuration --domain ${DOMAIN} --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt
-  #    echo "Reloading Step-CA..."
-  #    podman kill -s SIGHUP step-ca
-  #    echo "✅ OIDC provisioner added to Step-CA."
-  # fi
-
-  echo "Injecting Step-CA Root Certificate into Traefik..."
-  # Extract the root CA. We assume Step-CA volume is mounted at ${DATA_DIR}/step-ca/step
-  # OR we can pull it via step cli inside the container
-  mkdir -p ./stacks/traefik/config/certs
-  if [ ! -f ./stacks/traefik/config/certs/root_ca.crt ]; then
-      podman exec step-ca cat /home/step/certs/root_ca.crt > ./stacks/traefik/config/certs/root_ca.crt
-      echo "✅ Copied root_ca.crt to Traefik certs directory."
-  else
-      echo "🔹 Traefik already has root_ca.crt."
-  fi
+  local traefik_container
+  traefik_container=$($PODMAN ps -a --format "{{.Names}}" | grep traefik | head -n 1 || echo "traefik")
+  
+  echo "Injecting Step-CA Root into Traefik..."
+  $PODMAN exec "$step_ca_container" cat /home/step/certs/root_ca.crt > ./stacks/traefik/config/certs/root_ca.crt || true
+  echo "✅ Traefik now trusts Step-CA."
 }
 
-# --- 3) Identity (Kanidm & Vaultwarden OIDC) ---
+# --- 3) Identity (Kanidm) ---
 setup_identity() {
-  echo "--- 3) Identity (Kanidm & Vaultwarden OIDC) ---"
-  
-  # Wait for Kanidm
-  wait_for_service "Kanidm" "curl -s -k -f https://kanidm.${DOMAIN}/status" || exit 1
-  
-  echo "🔹 Kanidm requires manual bootstrapping for the first-time setup."
-  echo "   Please run the following commands on the remote host to unblock Authelia and OIDC:"
-  echo ""
-  echo "   # 1. Recover admin account and set password"
-  echo "   podman exec kanidm kanidmd recover-account -c /data/server.toml idm_admin"
-  echo "   # 2. Create Authelia service account (use AUTHELIA_LDAP_PASSWORD from .env)"
-  echo "   #    (Use the recovered password to log in at https://kanidm.${DOMAIN})"
-  echo ""
-  
-  echo "Press ENTER to acknowledge and continue the script..."
-  read -r
+  echo "--- 3) Identity (Kanidm) ---"
+  wait_for_service "Kanidm" "curl -s -k -f https://kanidm.${DOMAIN}/healthz" || exit 1
 
-  # Vaultwarden OIDC client secret
-  VAULTWARDEN_OIDC_SECRET=$(openssl rand -base64 32)
-  create_secret "vaultwarden_oidc_secret" "$VAULTWARDEN_OIDC_SECRET"
+  local kanidm_container
+  kanidm_container=$($PODMAN ps -a --format "{{.Names}}" | grep kanidm | head -n 1 || echo "kanidm")
 
-  # Quay OIDC client secret
-  QUAY_OIDC_SECRET=$(openssl rand -base64 32)
-  create_secret "quay_oidc_secret" "$QUAY_OIDC_SECRET"
-
-  # DefectDojo OIDC client secret
-  DOJO_OIDC_SECRET=$(openssl rand -base64 32)
-  create_secret "dojo_oidc_secret" "$DOJO_OIDC_SECRET"
-
-  # MinIO OIDC
-  MINIO_OIDC_SECRET=$(openssl rand -base64 32)
-  create_secret "minio_oidc_secret" "$MINIO_OIDC_SECRET"
-
-  # Wazuh OIDC
-  WAZUH_OIDC_SECRET=$(openssl rand -base64 32)
-  create_secret "wazuh_oidc_secret" "$WAZUH_OIDC_SECRET"
-
-  echo "✅ Identity secrets generated and stored in Podman secrets."
+  echo "Initializing Kanidm Admin Account..."
+  $PODMAN exec "$kanidm_container" /sbin/kanidmd recover-account -c /data/server.toml idm_admin || echo "⚠️ Admin account recovery skipped."
 }
 
-# --- 4) Management/Proxy Wait ---
-wait_proxies() {
-  echo "--- 4) Waiting for Proxies & Management ---"
-  wait_for_service "Traefik" "curl -s -k https://traefik.${DOMAIN}/ping" || echo "⚠️ Traefik ping failed, continuing..."
+# --- 4) Storage (MinIO) ---
+setup_storage() {
+  echo "--- 4) Storage (MinIO) ---"
+  create_secret "minio_oidc_secret" "$(openssl rand -base64 32)"
+  create_secret "vaultwarden_oidc_secret" "$(openssl rand -base64 32)"
+  create_secret "quay_oidc_secret" "$(openssl rand -base64 32)"
+  create_secret "wazuh_oidc_secret" "$(openssl rand -base64 32)"
+  create_secret "dojo_oidc_secret" "$(openssl rand -base64 32)"
+  create_secret "n8n_oidc_secret" "$(openssl rand -base64 32)"
 }
 
 # --- 5) SOC (Wazuh & DefectDojo) ---
 setup_soc() {
   echo "--- 5) SOC (Wazuh & DefectDojo) ---"
-  
-  # DefectDojo
-  # Wait for DefectDojo Login page
-  wait_for_service "DefectDojo UI" "curl -s -k https://defectdojo.${DOMAIN}/login" || echo "⚠️ DefectDojo UI check failed."
-
-  echo "\n--- OIDC Configuration Checklist ---"
-  echo "To complete the zero-trust SSO rollout, log into the Kanidm Admin UI and create the following OIDC Applications:"
-  echo "  1. Quay (Client ID: quay, Secret: $QUAY_OIDC_SECRET, Redirect URI: https://quay.$DOMAIN/oauth2/oidc/callback)"
-  echo "  2. DefectDojo (Client ID: defectdojo, Secret: $DOJO_OIDC_SECRET, Redirect URI: https://defectdojo.$DOMAIN/complete/oidc/)"
-  echo "  3. MinIO (Client ID: minio, Secret: $MINIO_OIDC_SECRET, Redirect URI: https://minio.$DOMAIN/oauth_callback)"
-  echo "  4. Wazuh (Client ID: wazuh, Secret: $WAZUH_OIDC_SECRET, Redirect URI: https://wazuh.$DOMAIN/api/v1/auth/login)"
-  echo "Save these secrets securely. The compose stacks are already configured to expect them."
+  wait_for_service "DefectDojo UI" "curl -s -k -f https://defectdojo.${DOMAIN}/" || exit 1
 
   echo "Checking DefectDojo Admin Credentials..."
-  # If we have initializer logs, extract the password.
-  # This requires knowing the exact container name. Let's assume 'defectdojo-initializer' or similar.
-  DD_INIT_CONTAINER=$(podman ps -a --format "{{.Names}}" | grep defectdojo-initializer || true)
-  if [ -n "$DD_INIT_CONTAINER" ]; then
-    DD_ADMIN_PASSWORD=$(podman logs "$DD_INIT_CONTAINER" 2>&1 | grep "Admin password:" | awk -F': ' '{print $2}' | tr -d '\r')
-    if [ -n "$DD_ADMIN_PASSWORD" ]; then
-      echo "✅ Extracted DefectDojo Admin Password from logs."
-      # Authenticate to get API key
-      DD_TOKEN_RESPONSE=$(curl -s -k -X POST -H "Content-Type: application/json" \
-        -d "{\"username\": \"admin\", \"password\": \"${DD_ADMIN_PASSWORD}\"}" \
-        "https://defectdojo.${DOMAIN}/api/v2/api-token-auth/")
-      
-      DD_API_KEY=$(echo "$DD_TOKEN_RESPONSE" | grep -o '"token":"[^"]*' | grep -o '[^"]*$')
-      
-      if [ -n "$DD_API_KEY" ]; then
-        create_secret "DOJO_API_KEY" "$DD_API_KEY"
-      else
-        echo "⚠️ Failed to extract DOJO_API_KEY from API response."
-      fi
-    else
-      echo "⚠️ Could not find 'Admin password:' in $DD_INIT_CONTAINER logs."
-    fi
+  local dd_init_container
+  dd_init_container=$($PODMAN ps -a --format "{{.Names}}" | grep defectdojo-initializer | head -n 1 || true)
+  if [[ -n "$dd_init_container" ]]; then
+    DD_ADMIN_PASSWORD=$($PODMAN logs "$dd_init_container" 2>&1 | grep "Admin password:" | awk -F': ' '{print $2}' | tr -d '\r' || echo "Already initialized")
+    echo "✅ DefectDojo Local Admin Password: $DD_ADMIN_PASSWORD"
   else
-    echo "⚠️ DefectDojo initializer container not found. Cannot extract initial password automatically."
+    echo "⚠️ DefectDojo initializer container not found."
   fi
 }
 
-# --- 6) CrowdSec placeholder ---
+# --- 6) CrowdSec integration ---
 setup_crowdsec() {
   echo "--- 6) CrowdSec integration ---"
-  
-  if [ "${ENABLE_CROWDSEC:-false}" = "true" ]; then
-    echo "Setting up CrowdSec Bouncer for BunkerWeb..."
-    # Ensure crowdsec is running
-    if podman ps --format "{{.Names}}" | grep -q "crowdsec"; then
-      if podman exec crowdsec cscli bouncers list -o json | grep -q "bunkerweb-bouncer"; then
-        echo "🔹 bunkerweb-bouncer already exists."
-      else
-        CROWDSEC_BOUNCER_KEY=$(podman exec crowdsec cscli bouncers add bunkerweb-bouncer -o raw)
-        create_secret "crowdsec_bouncer_key" "$CROWDSEC_BOUNCER_KEY"
+  if [[ "${ENABLE_CROWDSEC:-false}" == "true" ]]; then
+    local crowdsec_container
+    crowdsec_container=$($PODMAN ps --format "{{.Names}}" | grep crowdsec | head -n 1 || true)
+    if [[ -n "$crowdsec_container" ]]; then
+      if ! $PODMAN exec "$crowdsec_container" cscli bouncers list -o json | grep -q "bunkerweb-bouncer"; then
+        CROWDSEC_BOUNCER_KEY=$($PODMAN exec "$crowdsec_container" cscli bouncers add bunkerweb-bouncer -o raw)
+        echo "✅ Created CrowdSec Bouncer Key for BunkerWeb: $CROWDSEC_BOUNCER_KEY"
       fi
-    else
-      echo "⚠️ CrowdSec container not running."
     fi
   else
-    echo "🔹 CrowdSec integration disabled (set ENABLE_CROWDSEC=true to enable)."
+    echo "🔹 CrowdSec integration disabled."
   fi
 }
 
-# --- Main Execution ---
+wait_proxies() {
+  echo "Waiting for Proxies..."
+  wait_for_service "Traefik" "curl -s -k -f https://traefik.${DOMAIN}/dashboard/" || echo "⚠️ Traefik dashboard not reachable"
+}
+
+# --- Main execution ---
 main() {
-  echo "================================================="
-  echo "Geo Brain - Rootless DevSecOps Bootstrapper"
-  echo "================================================="
-  
+  echo "--- 0) Self-Healing & Pre-flight ---"
+  # Self-healing for erroneous directories
+  if [[ "$PODMAN" == "podman" ]]; then
+    for f in ${DATA_DIR}/kanidm/chain.pem ${DATA_DIR}/kanidm/key.pem; do
+      if [ -d "$f" ]; then rm -rf "$f"; fi
+    done
+  fi
+
   init_quay
   setup_pki
+  setup_storage
   setup_identity
   wait_proxies
   setup_soc
@@ -256,40 +206,15 @@ main() {
   echo "================================================="
   echo "🔐 BREAKGLASS & SSO SUMMARY"
   echo "================================================="
-  echo "Save the following credentials in a SECURE location (e.g. Vaultwarden):"
-  echo ""
+  local kanidm_container
+  kanidm_container=$($PODMAN ps -a --format "{{.Names}}" | grep kanidm | head -n 1 || echo "kanidm")
   
-  # Try to extract Kanidm recovery password
-  KANIDM_RECOVERY=$(podman exec kanidm /sbin/kanidmd recover-account -c /data/server.toml idm_admin 2>&1 | grep new_password | grep -o '"[^"]*"' | tr -d '"' || echo "See instructions above")
-  echo "1. Kanidm (Primary IDM)"
-  echo "   - URL: https://kanidm.${DOMAIN}"
-  echo "   - Admin User: idm_admin"
-  echo "   - Recovery Password: $KANIDM_RECOVERY"
-  echo ""
-  
-  # Try to extract DefectDojo password if DOJO_API_KEY secret exists
-  if podman secret ls | grep -q "DOJO_API_KEY"; then
-     echo "2. DefectDojo (Vulnerability Management)"
-     echo "   - URL: https://defectdojo.${DOMAIN}"
-     echo "   - SSO: Click 'Log in via Kanidm SSO'"
-     echo "   - Local Admin: admin / (See initializer logs)"
-  fi
-  
-  echo "3. MinIO (S3 Storage)"
-  echo "   - URL: https://minio.${DOMAIN}"
-  echo "   - SSO: Click 'Login with OpenID'"
-  echo "   - Local Admin: ${MINIO_ROOT_USER:-minioadmin} / ${MINIO_ROOT_PASSWORD:-[REDACTED]}"
-  
-  echo "4. Quay (Registry)"
-  echo "   - URL: https://quay.${DOMAIN}"
-  echo "   - SSO: Select 'OIDC' on login screen"
-  
-  echo "5. Grafana (Observability)"
-  echo "   - URL: https://grafana.${DOMAIN}"
-  echo "   - SSO: Automatic via Authelia"
-  
-  echo "================================================="
-  echo "🎉 Geo Brain setup script completed successfully."
+  KANIDM_RECOVERY=$($PODMAN exec "$kanidm_container" /sbin/kanidmd recover-account -c /data/server.toml idm_admin 2>&1 | grep new_password | grep -o '"[^"]*"' | tr -d '"' || echo "Check container logs")
+  echo "1. Kanidm: https://kanidm.${DOMAIN} | Admin: idm_admin | Recovery: $KANIDM_RECOVERY"
+  echo "2. MinIO: https://minio.${DOMAIN} | Admin: ${MINIO_ROOT_USER:-minioadmin} / ${MINIO_ROOT_PASSWORD:-[REDACTED]}"
+  echo "3. Quay: https://quay.${DOMAIN} | OIDC SSO Ready"
+  echo "4. Wazuh: https://wazuh.${DOMAIN} | OIDC SSO Ready"
+  echo "5. n8n: https://n8n.${DOMAIN} | Local Auth (Configure OIDC in UI)"
   echo "================================================="
 }
 

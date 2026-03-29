@@ -28,6 +28,12 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
     set +a
 fi
 
+# Expand tilde in DATA_DIR and SSH_KEY if they exist
+DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
+DATA_DIR="${DATA_DIR/#\~/$HOME}"
+SSH_KEY="${SSH_KEY:-~/.ssh/id_ed25519}"
+SSH_KEY="${SSH_KEY/#\~/$HOME}"
+
 if [[ "$COMMAND" == "up" ]]; then
     if [[ ! -f "$REPO_ROOT/certs/ca.crt" ]] || [[ ! -f "$REPO_ROOT/certs/wildcard.crt" ]]; then
         echo -e "\n[WARNING] Missing core certificates (ca.crt or wildcard.crt) in $REPO_ROOT/certs/."
@@ -43,7 +49,6 @@ fi
 
 ensure_ssh_agent() {
     [[ -z "${SSH_KEY:-}" ]] && return 0
-    SSH_KEY="${SSH_KEY/#\~/$HOME}"
     if [[ ! -f "$SSH_KEY" ]]; then
         echo "[ERROR] SSH key not found: $SSH_KEY"
         exit 1
@@ -112,7 +117,6 @@ get_base_stacks() {
         "quay"
         "defectdojo"
         "grafana"
-        "ramalama"
         "dockge"
         "homepage"
     )
@@ -177,6 +181,12 @@ rsync_to_remote() {
         --exclude='*.log' \
         "$REPO_ROOT/${stack_dir}/" \
         "${REMOTE_USER}@${REMOTE_HOST}:~/${REMOTE_BASE}/${stack_dir}/"
+
+    # Sync certs if they exist (needed by some stacks like Quay OIDC)
+    if [[ -d "$REPO_ROOT/certs" ]]; then
+        "${SSH_CMD[@]}" "mkdir -p ~/${REMOTE_BASE}/certs"
+        rsync -rlpt -e "$rsync_ssh" "$REPO_ROOT/certs/" "${REMOTE_USER}@${REMOTE_HOST}:~/${REMOTE_BASE}/certs/"
+    fi
 
     # Sync root .env to remote project base
     if [[ -f "$REPO_ROOT/.env" ]]; then

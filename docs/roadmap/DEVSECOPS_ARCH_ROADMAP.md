@@ -13,49 +13,41 @@ This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from
 2.  **Secret Management Transition (Podman Secrets)**
     *   **Rationale:** Stop passing highly sensitive dynamic values via `.env` files.
     *   **Implementation:** Transition compose files to use `secrets` explicitly.
-    ```yaml
-    # Example quadlet/compose transition:
-    services:
-      my-app:
-        image: quay.example.local/my-app:1.0
-        secrets:
-          - source: db_password
-            target: /run/secrets/db_password
-    secrets:
-      db_password:
-        external: true
-    ```
 
 3.  **Rootless Permissions & Ports (< 1024)**
     *   **Rationale:** Binding Traefik to `443` without root requires explicit sysctl configs.
-    *   **Implementation:** Ensure Ansible/init scripts set `net.ipv4.ip_unprivileged_port_start=80` and explicitly manage `subuid`/`subgid` mapping for database containers (e.g., Postgres mapping user 999 to the correct host namespace).
+    *   **Implementation:** Ensure Ansible/init scripts set `net.ipv4.ip_unprivileged_port_start=80` and explicitly manage `subuid`/`subgid` mapping for database containers.
 
-## Phase 2: Medium-Term Upgrades (Zero-Trust & Observability)
+## Phase 2: Observability & Operational Maturity
 
-**Objective:** Implement strict internal networking, secure user stack onboarding, and rootless-aware observability.
+**Objective:** Implement strict internal networking, secure user stack onboarding, and AI-driven security analysis.
 
 1.  **Declarative Zero-Trust User Stacks & mTLS Sidecars (Completed)**
-    *   **Rationale:** Internal services shouldn't implicitly trust each other. Plaintext internal networks are an attack vector.
-    *   **Implementation:** Backend databases and apps bind only to `127.0.0.1` and share a network namespace with a Caddy proxy sidecar. The sidecar handles mTLS via Step-CA. Internal application networks are set to `internal: true` to physically sever internet access. User-facing apps use Traefik labels with Step-CA integration.
+    *   **Rationale:** Internal services shouldn't implicitly trust each other. 
+    *   **Implementation:** Backend databases and apps bind only to `127.0.0.1` and share a network namespace with a Caddy proxy sidecar. 
 
 2.  **Automated Rootless eBPF Remediation (Completed)**
-    *   **Rationale:** We need an active SOC loop to instantly quarantine compromised containers, not just log them.
-    *   **Implementation:** Utilize the modern eBPF driver (`falco-bpf`) running with `security.stig.bypass_privileged=true`. Falco monitors syscalls for inter-container network bypasses. Vector ingests these alerts, routing them simultaneously to Wazuh (SIEM) and to an air-gapped, zero-telemetry CrowdSec container. CrowdSec instantly pushes IP bans to Caddy bouncers, cutting off unauthorized internal container traffic.
+    *   **Rationale:** We need an active SOC loop to instantly quarantine compromised containers.
+    *   **Implementation:** Utilize the modern eBPF driver (`falco-bpf`) running with `security.stig.bypass_privileged=true`. 
 
 3.  **Rootless-Aware Observability (Podman Exporter)**
     *   **Rationale:** Standard cAdvisor doesn't understand rootless Podman cgroups correctly.
-    *   **Implementation:** Deploy the official `prometheus-podman-exporter` directly within the user namespace to scrape accurate memory/CPU limits without needing `/var/run/docker.sock`.
+    *   **Implementation:** Deploy the official `prometheus-podman-exporter` directly within the user namespace.
 
 4.  **Declarative SSO for Observability (Grafana, Loki, Prometheus)**
     *   **Rationale:** Centralized visibility shouldn't rely on local accounts.
-    *   **Implementation:** Update Grafana to utilize OIDC via Kanidm directly (moving beyond ForwardAuth for better attribute mapping). Configure Loki and Prometheus to support OIDC/Basic Auth backed by Kanidm LDAP for secure endpoint scraping and log access.
+    *   **Implementation:** Update Grafana to utilize OIDC via Kanidm directly. Configure Loki and Prometheus to support OIDC/Basic Auth backed by Kanidm LDAP.
+
+5.  **LLM & AI-Driven SOC Operations (RamaLama) [TODO]**
+    *   **Rationale:** local LLMs provide private, air-gapped log analysis and security auditing.
+    *   **Implementation:** Re-enable the `ramalama` stack. Configure it to scrape logs from Loki and provide automated analysis using local models (e.g., Phi-3 or Llama-3). Setup declarative OIDC for the LLM UI.
 
 ## Phase 3: Long-Term Architectural Shifts (Advanced Identity & Airgap)
 
 1.  **Kanidm / Step-CA SSH Certificate Authority**
-    *   **Rationale:** Eliminate static SSH keys (e.g., `~/.ssh/authorized_keys`) completely.
-    *   **Implementation:** Configure Kanidm OIDC to authenticate users against Step-CA. Step-CA issues short-lived SSH certificates for break-glass operations to the host, ensuring perfectly audited and expiring access.
+    *   **Rationale:** Eliminate static SSH keys completely.
+    *   **Implementation:** Configure Kanidm OIDC to authenticate users against Step-CA. Step-CA issues short-lived SSH certificates for host access.
 
 2.  **Vaultwarden as the SSOT for Infrastructure Secrets**
     *   **Rationale:** Podman secrets are great, but Vaultwarden should hold the encrypted master state.
-    *   **Implementation:** Future deployment scripts will authenticate with Vaultwarden CLI (`bw-cli`) using a machine token, pull required variables, and inject them into `podman secret create` during runtime deployment, leaving zero trace on the disk.
+    *   **Implementation:** Future deployment scripts will authenticate with Vaultwarden CLI (`bw-cli`) using a machine token to pull required variables.
