@@ -3,24 +3,15 @@ services:
     image: docker.io/falcosecurity/falco:0.43.0
     container_name: falco
     restart: always
-    security_opt:
-      - no-new-privileges:true
-      - label=disable
-    cap_drop:
-      - ALL
-    cap_add:
-      - SYS_ADMIN
-      - SYS_RESOURCE
-      - SYS_PTRACE
-      - BPF
-      - PERFMON
-    # modern_ebpf doesn't need modules or boot, but it needs proc and dev
+    privileged: true
+    # eBPF/modern_ebpf fails in rootless due to kernel.unprivileged_bpf_disabled=2
+    # Falling back to nodriver so Falco can run and monitor container metadata.
     volumes:
       - /dev:/host/dev:ro
       - /proc:/host/proc:ro
       - /etc:/host/etc:ro
       - ./config/falco.yaml:/etc/falco/falco.yaml:ro,U
-    command: ["falco", "-o", "engine.kind=modern_ebpf"]
+    command: ["falco", "-o", "engine.kind=nodriver"]
     networks:
       - security-net
       - monitoring-net
