@@ -22,6 +22,7 @@ services:
       - MINIO_IDENTITY_OPENID_CONFIG_URL=https://kanidm.${DOMAIN}/oauth2/openid/minio/.well-known/openid-configuration
       - MINIO_IDENTITY_OPENID_SCOPES=openid,profile,email
       - MINIO_IDENTITY_OPENID_REDIRECT_URI=https://minio.${DOMAIN}/oauth_callback
+    volumes:
       - ${DATA_DIR}/minio:/data:Z,U
     ports:
       - 9000:9000

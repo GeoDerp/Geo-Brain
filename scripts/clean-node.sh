@@ -5,14 +5,23 @@
 set -euo pipefail
 
 if [ -f .env ]; then
-  # shellcheck disable=SC2046
-  export $(grep -v '^#' .env | xargs)
+  set -a
+  # shellcheck source=/dev/null
+  source .env
+  set +a
 fi
 
 REMOTE_HOST="${REMOTE_HOST:-brain.home.lan}"
 REMOTE_USER="${REMOTE_USER:-admin}"
 DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
 DATA_DIR="${DATA_DIR/#\~/$HOME}"
+
+# Safety guard: refuse to operate if DATA_DIR is empty, root, or a system path
+if [[ -z "$DATA_DIR" || "$DATA_DIR" == "/" || "$DATA_DIR" == "/var" || "$DATA_DIR" == "/home" ]]; then
+    echo "❌ FATAL: DATA_DIR is empty or a system root path ('$DATA_DIR'). Refusing to wipe."
+    exit 1
+fi
+
 SSH_KEY="${SSH_KEY:-~/.ssh/id_ed25519}"
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
 
@@ -45,7 +54,8 @@ if [ "$confirm" != "yes" ]; then
     exit 0
 fi
 
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "${REMOTE_USER}@${REMOTE_HOST}" "
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "${REMOTE_USER}@${REMOTE_HOST}" bash -s -- "$DATA_DIR" << 'REMOTE_CLEAN'
+DATA_DIR="$1"
   echo '>>> Stopping and removing all containers...'
   podman stop --all || true
   podman rm --all --force || true
@@ -54,9 +64,9 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "${REMOTE_USER}@${REMOTE_H
   podman network prune -f || true
   podman volume prune -f || true
 
-  echo '>>> Removing project files in $DATA_DIR...'
-  sudo rm -rf $DATA_DIR || podman unshare rm -rf $DATA_DIR || true
+  echo ">>> Removing project files in $DATA_DIR..."
+  sudo rm -rf "$DATA_DIR" || podman unshare rm -rf "$DATA_DIR" || true
   rm -rf ~/Geo-Brain || true
-"
+REMOTE_CLEAN
 
 echo "✅ Clean complete."

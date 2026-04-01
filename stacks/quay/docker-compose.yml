@@ -3,6 +3,20 @@ services:
     image: docker.io/postgres:15-alpine
     container_name: quay-db
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
     environment:
       - POSTGRES_USER=${QUAY_DB_USER}
       - POSTGRES_PASSWORD=${QUAY_DB_PASSWORD}
@@ -22,11 +36,28 @@ services:
         limits:
           memory: 512M
           cpus: '0.5'
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=database"
 
   clair-db:
     image: docker.io/postgres:15-alpine
     container_name: clair-db
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
     environment:
       - POSTGRES_USER=${CLAIR_DB_USER}
       - POSTGRES_PASSWORD=${CLAIR_DB_PASSWORD}
@@ -46,6 +77,9 @@ services:
         limits:
           memory: 1G
           cpus: '0.5'
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=database"
 
   quay-redis:
     image: docker.io/redis:7-alpine
@@ -71,11 +105,18 @@ services:
         limits:
           memory: 256M
           cpus: '0.2'
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=cache"
 
   quay:
     image: quay.io/projectquay/quay:v3.13.0
     container_name: quay
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       quay-db:
         condition: service_healthy
@@ -119,6 +160,10 @@ services:
     image: quay.io/projectquay/clair:4.7.3
     container_name: clair
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       clair-db:
         condition: service_healthy
@@ -137,9 +182,12 @@ services:
       timeout: 10s
       retries: 5
     command: ["-conf", "/config/clair-config.yaml"]
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=scanner"
 
 networks:
   quay-net:
-    driver: bridge
+    internal: true
   proxy-net:
     external: true

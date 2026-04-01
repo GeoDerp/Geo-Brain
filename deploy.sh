@@ -448,19 +448,22 @@ check_security() {
     echo ">>> Running STIG & Security validation for $stack_label..."
 
     # 1. Image Pinning (Mandate Digest or specific version, reject :latest)
-    if grep -qE 'image:.*:latest($|\s)' "$compose_file"; then
+    if grep -qE 'image:.*:latest($|[[:space:]])' "$compose_file"; then
         echo "[ERROR] Image ':latest' tag found. Use digests or specific versions for air-gap reliability."
         errors=$((errors + 1))
     fi
     # Also flag untagged images (implicit :latest)
-    if grep -qE '^\s+image:\s+[^:@]+\s*$' "$compose_file"; then
+    if grep -qP '^\s+image:\s+[^:@\s]+\s*$' "$compose_file"; then
         echo "[ERROR] Untagged image found (implicit :latest). Pin to a specific version or digest."
         errors=$((errors + 1))
     fi
 
-    # 2. Resource Limits (Reliability)
+    # 2. Resource Limits (Reliability) — verify non-empty limits with actual values
     if ! grep -q "limits:" "$compose_file"; then
         echo "[ERROR] No resource limits defined (deploy.resources.limits). This is required for reliability."
+        errors=$((errors + 1))
+    elif ! grep -qE '(memory:|cpus:)' "$compose_file"; then
+        echo "[ERROR] Resource limits block found but contains no memory/cpus values."
         errors=$((errors + 1))
     fi
 
@@ -476,12 +479,19 @@ check_security() {
         errors=$((errors + 1))
     fi
 
-    # 5. STIG Labels
+    # 5. Container Hardening (security_opt + cap_drop)
+    if ! grep -q "no-new-privileges" "$compose_file"; then
+        if ! grep -q "security.stig.bypass_privileged=true" "$compose_file"; then
+            echo "[WARNING] No 'security_opt: no-new-privileges:true' found. Recommended for all services."
+        fi
+    fi
+
+    # 6. STIG Labels
     if ! grep -q "security.stig" "$compose_file"; then
         echo "[WARNING] No 'security.stig' labels found. While not an error yet, it is recommended for compliance tracking."
     fi
 
-    # 6. Rootless hints (Check for privileged: true)
+    # 7. Rootless hints (Check for privileged: true)
     if grep -q "privileged: true" "$compose_file"; then
         if grep -q "security.stig.bypass_privileged=true" "$compose_file"; then
             echo "[WARNING] 'privileged: true' detected, but bypass label is present. Proceeding with caution (Kernel/Security tool exception)."

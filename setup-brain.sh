@@ -7,8 +7,10 @@ set -euo pipefail
 
 # --- Configuration & Seed Variables ---
 if [ -f .env ]; then
-  # shellcheck disable=SC2046
-  export $(grep -v '^#' .env | xargs)
+  set -a
+  # shellcheck source=/dev/null
+  source .env
+  set +a
 fi
 
 # Fallback/Default variables if not in .env

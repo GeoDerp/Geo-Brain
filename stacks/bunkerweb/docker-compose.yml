@@ -6,6 +6,12 @@ services:
     image: bunkerity/bunkerweb-all-in-one:1.6.8
     container_name: bunkerweb
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
     # AIO image runs internally as UID 101:101 (nginx); cannot override.
     ports:
       - "8081:8080/tcp"

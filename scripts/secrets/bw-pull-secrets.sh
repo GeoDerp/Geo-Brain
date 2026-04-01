@@ -5,6 +5,15 @@
 
 set -euo pipefail
 
+# Ensure session is cleaned up on exit
+cleanup() {
+    if [ -n "${BW_SESSION:-}" ]; then
+        bw logout 2>/dev/null || true
+        unset BW_SESSION
+    fi
+}
+trap cleanup EXIT
+
 # Check for Bitwarden CLI
 if ! command -v bw >/dev/null 2>&1; then
     echo "❌ Error: Bitwarden CLI (bw) is not installed."
@@ -23,7 +32,13 @@ echo "Authenticating with Vaultwarden at ${BW_URL}..."
 bw config server "${BW_URL}"
 
 # Login using API key
-export BW_SESSION=$(bw login --apikey --raw)
+BW_SESSION=$(bw login --apikey --raw)
+export BW_SESSION
+
+if [ -z "${BW_SESSION}" ]; then
+    echo "❌ Error: Authentication failed. Check BW_CLIENTID and BW_CLIENTSECRET."
+    exit 1
+fi
 
 # Function to fetch and provision a secret
 provision_secret() {
@@ -51,6 +66,3 @@ echo "Provisioning secrets from Vaultwarden to Podman..."
 bw sync
 
 echo "✅ Secret provisioning complete."
-
-# Logout / lock session
-bw logout
