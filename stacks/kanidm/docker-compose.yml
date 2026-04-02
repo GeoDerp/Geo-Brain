@@ -17,8 +17,8 @@ services:
       - "8443:8443"
     volumes:
       - ${DATA_DIR}/kanidm:/data:Z,U
-      - ${DATA_DIR}/kanidm/certs/kanidm-chain.crt:/data/chain.pem:ro,U
-      - ${DATA_DIR}/kanidm/certs/kanidm.key:/data/key.pem:ro,U
+      - ../../certs/kanidm-chain.crt:/data/chain.pem:ro,Z
+      - ../../certs/kanidm.key:/data/key.pem:ro,Z
       - ./config/server.toml:/data/server.toml:z,U
     networks:
       - identity-net

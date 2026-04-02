@@ -1,0 +1,34 @@
+{
+    # Internal Step-CA config for ACME
+    pki step_ca {
+        ca_url https://step-ca.sec_net
+        root /run/secrets/step_ca_root.crt
+    }
+
+    # CrowdSec Bouncer configuration
+    crowdsec {
+        api_url http://crowdsec.sec_net:8080
+        api_key {env.CROWDSEC_BOUNCER_KEY}
+    }
+}
+
+# Note: Proxying raw TCP (Postgres) over mTLS in Caddy requires the Layer4 app.
+# The following assumes an HTTP equivalent or custom L4 Caddy compilation.
+:5432 {
+    tls {
+        issuer acme {
+            dir https://step-ca.sec_net/acme/acme/directory
+            trusted_roots /run/secrets/step_ca_root.crt
+        }
+        client_auth {
+            mode require_and_verify
+            trusted_ca_certs /run/secrets/step_ca_root.crt
+        }
+    }
+    
+    # Check internal IP against CrowdSec Local API before proxying
+    crowdsec
+
+    # Reverse proxy to the unmodified database bound purely to localhost
+    reverse_proxy 127.0.0.1:5432
+}

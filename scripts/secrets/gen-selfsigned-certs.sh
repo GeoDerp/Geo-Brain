@@ -10,7 +10,7 @@
 # Also installs the CA into the local and remote host trust stores.
 #
 # Usage:
-#   ./scripts/gen-selfsigned-certs.sh [OPTIONS]
+#   ./scripts/secrets/gen-selfsigned-certs.sh [OPTIONS]
 #
 # Options:
 #   --deploy        Deploy certs to remote host and restart affected containers
@@ -42,6 +42,7 @@ CERT_DAYS=825   # Leaf cert valid ~2.25 years (Apple max)
 KEY_SIZE=4096
 CA_SUBJECT="/C=US/ST=Local/L=Homelab/O=GEO-Brain/OU=SSOF/CN=${DOMAIN} Temporary CA"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+SSH_KEY="${SSH_KEY/#\~/$HOME}"
 REMOTE_HOST="${REMOTE_HOST:-homelab.local}"
 REMOTE_USER="${REMOTE_USER:-$USER}"
 DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
@@ -55,18 +56,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ -n "${SSH_KEY:-}" ]] && { $DO_DEPLOY || $DO_TRUST_REMOTE; }; then
-    if [[ -z "${SSH_AUTH_SOCK:-}" ]] || ! ssh-add -l &>/dev/null; then
-        echo ">>> Starting temporary ssh-agent..."
-        eval "$(ssh-agent -s)" >/dev/null
-        _SCRIPT_STARTED_AGENT=1
-    fi
-    key_fp=$(ssh-keygen -lf "$SSH_KEY" 2>/dev/null | awk '{print $2}')
-    if ! ssh-add -l 2>/dev/null | grep -qF "$key_fp"; then
-        echo ">>> Adding SSH key to agent (enter passphrase if prompted)..."
-        ssh-add "$SSH_KEY"
-    fi
-fi
 DO_DEPLOY=false
 DO_TRUST_LOCAL=false
 DO_TRUST_REMOTE=false
@@ -102,6 +91,19 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "${SSH_KEY:-}" ]] && { $DO_DEPLOY || $DO_TRUST_REMOTE; }; then
+    if [[ -z "${SSH_AUTH_SOCK:-}" ]] || ! ssh-add -l &>/dev/null; then
+        echo ">>> Starting temporary ssh-agent..."
+        eval "$(ssh-agent -s)" >/dev/null
+        _SCRIPT_STARTED_AGENT=1
+    fi
+    key_fp=$(ssh-keygen -lf "$SSH_KEY" 2>/dev/null | awk '{print $2}')
+    if ! ssh-add -l 2>/dev/null | grep -qF "$key_fp"; then
+        echo ">>> Adding SSH key to agent (enter passphrase if prompted)..."
+        ssh-add "$SSH_KEY"
+    fi
+fi
 
 ssh_cmd() {
   ssh -i "$SSH_KEY" -o ConnectTimeout=15 "${REMOTE_USER}@${REMOTE_HOST}" "$@"
@@ -396,7 +398,7 @@ echo "  Traefik TLS:   stacks/traefik/config/dynamic/tls.yml"
 echo "  Traefik certs: stacks/traefik/config/certs/"
 echo ""
 echo "Next steps:"
-echo "  1. Run: ./scripts/gen-selfsigned-certs.sh --all"
+echo "  1. Run: ./scripts/secrets/gen-selfsigned-certs.sh --all"
 echo "     (to deploy + trust on both hosts)"
 echo "  2. Or manually: bash deploy.sh traefik up && bash deploy.sh kanidm up"
 echo "  3. Verify: curl -v https://home.$DOMAIN (should show valid cert)"

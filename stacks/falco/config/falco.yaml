@@ -1,9 +1,9 @@
 # Falco Configuration
 # Ref: https://falco.org/docs/reference/daemon/config-options/
 
-# Engine configuration — use modern eBPF
+# Engine configuration — use nodriver because eBPF fails in rootless
 engine:
-  kind: modern_ebpf
+  kind: nodriver
 
 # Plugins
 plugins:

@@ -68,3 +68,13 @@ sinks:
     inputs:
       - internal_metrics
     address: "0.0.0.0:9598"
+
+  # Forward Falco alerts to CrowdSec LAPI (Air-gapped)
+  crowdsec:
+    type: http
+    inputs:
+      - falco_normalize
+    uri: "http://crowdsec:8080/v1/alerts"
+    method: post
+    encoding:
+      codec: json

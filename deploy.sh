@@ -28,10 +28,16 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
     set +a
 fi
 
+# Expand tilde in DATA_DIR and SSH_KEY if they exist
+DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
+DATA_DIR="${DATA_DIR/#\~/$HOME}"
+SSH_KEY="${SSH_KEY:-~/.ssh/id_ed25519}"
+SSH_KEY="${SSH_KEY/#\~/$HOME}"
+
 if [[ "$COMMAND" == "up" ]]; then
     if [[ ! -f "$REPO_ROOT/certs/ca.crt" ]] || [[ ! -f "$REPO_ROOT/certs/wildcard.crt" ]]; then
         echo -e "\n[WARNING] Missing core certificates (ca.crt or wildcard.crt) in $REPO_ROOT/certs/."
-        echo "Did you forget to run: ./scripts/gen-selfsigned-certs.sh ?"
+        echo "Did you forget to run: ./scripts/secrets/gen-selfsigned-certs.sh ?"
         echo -n "Press ENTER to continue anyway, or Ctrl+C to abort..."
         read -r
     fi
@@ -43,7 +49,6 @@ fi
 
 ensure_ssh_agent() {
     [[ -z "${SSH_KEY:-}" ]] && return 0
-    SSH_KEY="${SSH_KEY/#\~/$HOME}"
     if [[ ! -f "$SSH_KEY" ]]; then
         echo "[ERROR] SSH key not found: $SSH_KEY"
         exit 1
@@ -112,16 +117,23 @@ get_base_stacks() {
         "quay"
         "defectdojo"
         "grafana"
-        "ramalama"
         "dockge"
         "homepage"
     )
 
+    local exclude_stacks=("ramalama" "prometheus")
     local found_stacks=()
     for dir in "$REPO_ROOT"/stacks/*/; do
         local name
         name="$(basename "$dir")"
         [[ "$name" == "_template" || "$name" == "user" ]] && continue
+        
+        # Skip excluded stacks
+        local skip=0
+        for ex in "${exclude_stacks[@]}"; do
+            if [[ "$name" == "$ex" ]]; then skip=1; break; fi
+        done
+        [[ "$skip" -eq 1 ]] && continue
         if [[ -f "$dir/docker-compose.yml" ]] && ! grep -q '^[[:space:]]*services:' "$dir/docker-compose.yml"; then
             continue
         fi
@@ -177,6 +189,12 @@ rsync_to_remote() {
         --exclude='*.log' \
         "$REPO_ROOT/${stack_dir}/" \
         "${REMOTE_USER}@${REMOTE_HOST}:~/${REMOTE_BASE}/${stack_dir}/"
+
+    # Sync certs if they exist (needed by some stacks like Quay OIDC)
+    if [[ -d "$REPO_ROOT/certs" ]]; then
+        "${SSH_CMD[@]}" "mkdir -p ~/${REMOTE_BASE}/certs"
+        rsync -rlpt -e "$rsync_ssh" "$REPO_ROOT/certs/" "${REMOTE_USER}@${REMOTE_HOST}:~/${REMOTE_BASE}/certs/"
+    fi
 
     # Sync root .env to remote project base
     if [[ -f "$REPO_ROOT/.env" ]]; then
@@ -263,8 +281,7 @@ set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
 command -v envsubst &>/dev/null || exit 0
 
 # Whitelist: only expand variables defined in .env (prevents clobbering app-specific patterns)
-VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD}'
-
+VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY} ${N8N_OIDC_SECRET}'
 find . -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
     if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
         envsubst "$VARLIST" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
@@ -276,7 +293,7 @@ RENDER_SCRIPT
         local config_dir="$REPO_ROOT/$stack_dir/config"
         [[ -d "$config_dir" ]] || return 0
         command -v envsubst &>/dev/null || return 0
-        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD}'
+        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY} ${N8N_OIDC_SECRET}'
         find "$config_dir" -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
             if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
                 envsubst "$varlist" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
@@ -431,19 +448,22 @@ check_security() {
     echo ">>> Running STIG & Security validation for $stack_label..."
 
     # 1. Image Pinning (Mandate Digest or specific version, reject :latest)
-    if grep -qE 'image:.*:latest($|\s)' "$compose_file"; then
+    if grep -qE 'image:.*:latest($|[[:space:]])' "$compose_file"; then
         echo "[ERROR] Image ':latest' tag found. Use digests or specific versions for air-gap reliability."
         errors=$((errors + 1))
     fi
     # Also flag untagged images (implicit :latest)
-    if grep -qE '^\s+image:\s+[^:@]+\s*$' "$compose_file"; then
+    if grep -qP '^\s+image:\s+[^:@\s]+\s*$' "$compose_file"; then
         echo "[ERROR] Untagged image found (implicit :latest). Pin to a specific version or digest."
         errors=$((errors + 1))
     fi
 
-    # 2. Resource Limits (Reliability)
+    # 2. Resource Limits (Reliability) — verify non-empty limits with actual values
     if ! grep -q "limits:" "$compose_file"; then
         echo "[ERROR] No resource limits defined (deploy.resources.limits). This is required for reliability."
+        errors=$((errors + 1))
+    elif ! grep -qE '(memory:|cpus:)' "$compose_file"; then
+        echo "[ERROR] Resource limits block found but contains no memory/cpus values."
         errors=$((errors + 1))
     fi
 
@@ -459,12 +479,19 @@ check_security() {
         errors=$((errors + 1))
     fi
 
-    # 5. STIG Labels
+    # 5. Container Hardening (security_opt + cap_drop)
+    if ! grep -q "no-new-privileges" "$compose_file"; then
+        if ! grep -q "security.stig.bypass_privileged=true" "$compose_file"; then
+            echo "[WARNING] No 'security_opt: no-new-privileges:true' found. Recommended for all services."
+        fi
+    fi
+
+    # 6. STIG Labels
     if ! grep -q "security.stig" "$compose_file"; then
         echo "[WARNING] No 'security.stig' labels found. While not an error yet, it is recommended for compliance tracking."
     fi
 
-    # 6. Rootless hints (Check for privileged: true)
+    # 7. Rootless hints (Check for privileged: true)
     if grep -q "privileged: true" "$compose_file"; then
         if grep -q "security.stig.bypass_privileged=true" "$compose_file"; then
             echo "[WARNING] 'privileged: true' detected, but bypass label is present. Proceeding with caution (Kernel/Security tool exception)."
@@ -489,11 +516,22 @@ check_security() {
 # --- TRAEFIK DYNAMIC CONFIG GENERATOR ---
 
 cleanup_traefik_configs() {
+    local stack_filter="${1:-}"
     local gen_dir="$REPO_ROOT/stacks/traefik/config/dynamic"
-    echo ">>> Cleaning up old generated Traefik configs..."
-    rm -f "$gen_dir"/gen_*.yml
-    if [[ "$DEPLOY_MODE" == "remote" ]]; then
-        "${SSH_CMD[@]}" "rm -f ~/${REMOTE_BASE}/stacks/traefik/config/dynamic/gen_*.yml"
+    
+    if [[ -z "$stack_filter" ]]; then
+        echo ">>> Cleaning up all old generated Traefik configs..."
+        rm -f "$gen_dir"/gen_*.yml
+        if [[ "$DEPLOY_MODE" == "remote" ]]; then
+            "${SSH_CMD[@]}" "rm -f ~/${REMOTE_BASE}/stacks/traefik/config/dynamic/gen_*.yml"
+        fi
+    else
+        local filter_name="${stack_filter/\//_}"
+        echo ">>> Cleaning up old generated Traefik config for $stack_filter..."
+        rm -f "$gen_dir"/gen_"${filter_name}"_*.yml
+        if [[ "$DEPLOY_MODE" == "remote" ]]; then
+            "${SSH_CMD[@]}" "rm -f ~/${REMOTE_BASE}/stacks/traefik/config/dynamic/gen_${filter_name}_*.yml"
+        fi
     fi
 }
 
@@ -528,6 +566,8 @@ generate_traefik_config() {
     local port=$(grep "traefik.http.services.*.port" "$compose_file" | sed -E 's/.*port[=:]"?([0-9]+)"?.*/\1/' | head -n 1)
     local scheme=$(grep "traefik.http.services.*.scheme" "$compose_file" | sed -E 's/.*scheme[=:]"?([https]+)"?.*/\1/' | head -n 1)
     local resolver=$(grep "traefik.http.routers.*.certresolver" "$compose_file" | sed -E 's/.*certresolver[=:]"?([^"]+)"?.*/\1/' | head -n 1)
+    local middlewares=$(grep "traefik.http.routers.*.middlewares" "$compose_file" | sed -E 's/.*middlewares[=:]"?([^"]+)"?.*/\1/' | head -n 1)
+    local serverstransport=$(grep -i "traefik.http.services.*.serverstransport" "$compose_file" | sed -E 's/.*[sS]ervers[tT]ransport[=:]"?([^"]+)"?.*/\1/' | head -n 1)
     
     # Defaults
     [[ -z "$port" ]] && port="80"
@@ -547,8 +587,8 @@ generate_traefik_config() {
     fi
     
     # Core overrides
-    [[ "$service_name" == "quay" ]] && target_host="quay-core"
-    [[ "$service_name" == "wazuh" ]] && target_host="wazuh-dashboard"
+    # [[ "$service_name" == "quay" ]] && target_host="quay-core"
+    # [[ "$service_name" == "wazuh" ]] && target_host="wazuh-dashboard"
 
     echo ">>> Generating Traefik dynamic config: $rule -> $target_host:$port"
 
@@ -563,12 +603,27 @@ http:
       service: ${stack_name/\//_}_${service_name}
       tls:
         certResolver: $resolver
+EOF
+
+    if [[ -n "$middlewares" ]]; then
+        echo "      middlewares:" >> "$output_file"
+        IFS=',' read -ra ADDR <<< "$middlewares"
+        for i in "${ADDR[@]}"; do
+            echo "        - $i" >> "$output_file"
+        done
+    fi
+
+    cat <<EOF >> "$output_file"
   services:
     ${stack_name/\//_}_${service_name}:
       loadBalancer:
         servers:
           - url: "$scheme://$target_host:$port"
 EOF
+
+    if [[ -n "$serverstransport" ]]; then
+        echo "        serversTransport: $serverstransport" >> "$output_file"
+    fi
 
     # If stack is remote, sync the generated file
     if [[ "$DEPLOY_MODE" == "remote" ]]; then
@@ -747,7 +802,7 @@ case $STACK_NAME in
     *)
         # Always cleanup old generated configs at the start of a run (if up/redeploy)
         if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
-            cleanup_traefik_configs
+            cleanup_traefik_configs "$STACK_NAME"
         fi
         deploy_single "$STACK_NAME"
         echo ">>> Done."

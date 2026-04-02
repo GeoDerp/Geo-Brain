@@ -1,0 +1,13 @@
+- rule: Inter-Container Network Bypass Detected
+  desc: Detects when an internal application container attempts to establish a direct network connection bypassing the local mTLS Caddy sidecar proxy.
+  condition: >
+    outbound and container 
+    and not fd.sip="127.0.0.1" 
+    and not fd.cip="127.0.0.1"
+    and not proc.name in ("caddy", "envoy")
+    and container.network_mode != "host"
+  output: >
+    Direct inter-container connection attempt bypassed mTLS sidecar 
+    (user=%user.name container_id=%container.id command=%proc.cmdline sip=%fd.sip dip=%fd.dip dport=%fd.dport)
+  priority: WARNING
+  tags: [network, mitre_defense_evasion, stig_bypass, zero_trust_violation]

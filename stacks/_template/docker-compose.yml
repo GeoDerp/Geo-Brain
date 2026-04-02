@@ -1,90 +1,113 @@
 # =============================================================================
-# Stack Name: <STACK_NAME>
-# Description: <Brief description of the service>
-# License: <License identifier>
+# GEO-BRAIN USER STACK TEMPLATE
 # =============================================================================
-# Usage:
-#   1. Copy this directory:  cp -r _template stacks/<your-stack-name>
-#   2. Update image, ports, volumes, and labels below.
-#   3. Add any required secrets as Podman secrets and reference them.
-#   4. Deploy:  ./deploy.sh <your-stack-name> up
-#
-# DISA STIG / GEMINI.md Checklist:
-#   [x] Image pinned to exact version (no :latest)
-#   [x] deploy.resources.limits defined (memory + cpus)
-#   [x] healthcheck defined
-#   [x] Runs rootless via ${PUID}:${PGID}
-#   [x] Dedicated network (no inter-stack unless justified)
-#   [x] STIG compliance labels present
-#   [x] read_only: true, cap_drop: ALL, and tmpfs mounted for STIG compliance
-#   [x] No hardcoded secrets (use podman secrets instead)
-# =============================================================================
+# Use this template to deploy your own web applications securely.
+# 
+# Instructions:
+# 1. Copy this folder to a new name: `cp -r stacks/_template stacks/user/my-app`
+# 2. Update all instances of `my-app` to your application's name.
+# 3. Add your application image, volumes, and specific environment variables.
+# 4. Deploy using: `./deploy.sh user/my-app up`
 
 services:
-  <service-name>:
-    image: <registry>/<image>:<pinned-version>
-    container_name: <service-name>
+  web:
+    image: docker.io/library/nginx:1.27.2-alpine # REPLACE WITH YOUR APP IMAGE
+    container_name: my-app
     restart: always
-    user: "${PUID:-1000}:${PGID:-1000}"
-    userns_mode: keep-id
     security_opt:
       - no-new-privileges:true
-    read_only: true
     cap_drop:
       - ALL
+    read_only: true
     tmpfs:
       - /tmp
       - /run
-    ports:
-      - "${<SERVICE>_PORT:-<default-host-port>}:<container-port>"
-    volumes:
-      - ${DATA_DIR}/<service-name>:/data:Z,U
-      # - ./config:/config:z    # Uncomment if the service needs config mounts
-    # Use secrets instead of environment variables for sensitive data
-    environment:
-      # - EXAMPLE_VAR=${EXAMPLE_VAR:-default_value}
-      # - DISABLE_TELEMETRY=true # Always disable telemetry in apps that support it
-    # secrets:
-    #   - source: example_secret
-    #     target: /run/secrets/example_secret
+    # Run as a non-root user for STIG compliance (most images support this)
+    # user: "${PUID:-1000}:${PGID:-1000}"
+    # userns_mode: keep-id
     networks:
-      - <stack>-net
-      # - proxy-net
+      - proxy-net
+      # - app-db-net # Uncomment if using a backend database
+    volumes:
+      # Map persistent data to the centralized DATA_DIR
+      - ${DATA_DIR}/my-app/data:/usr/share/nginx/html:Z,U
     deploy:
       resources:
         limits:
-          memory: 512M
-          cpus: '0.3'
+          memory: 256M
+          cpus: '0.5'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:<container-port>/health"]
-      interval: 5m
+      # Ensure you define a valid healthcheck for your app
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 5m
     labels:
       - "security.stig.compliance=true"
-      - "security.stig.role=<role>"
-      # Declarative Zero-Trust Proxy labels (Traefik)
-      # - "traefik.enable=true"
-      # - "traefik.http.routers.<service-name>.rule=Host(`<subdomain>.${DOMAIN}`)"
-      # - "traefik.http.routers.<service-name>.entrypoints=websecure"
-      # - "traefik.http.routers.<service-name>.tls=true"
-      # - "traefik.http.routers.<service-name>.middlewares=authelia@file,security-headers@file"
-      # - "traefik.http.services.<service-name>.loadbalancer.server.port=<container-port>"
-      # Uncomment and customise for Homepage dashboard integration:
-      # - "homepage.group=<Group>"
-      # - "homepage.name=<Display Name>"
-      # - "homepage.icon=<icon>.png"
-      # - "homepage.description=<Short description>"
-      # - "homepage.href=https://<subdomain>.${DOMAIN}"
+      
+      # --- Traefik Routing & TLS ---
+      - "traefik.enable=true"
+      - "traefik.http.routers.my-app.rule=Host(`my-app.${DOMAIN}`)"
+      - "traefik.http.routers.my-app.entrypoints=websecure"
+      - "traefik.http.routers.my-app.tls=true"
+      - "traefik.http.routers.my-app.tls.certresolver=stepca"
+      - "traefik.http.services.my-app.loadbalancer.server.port=80" # Change to your app's internal port
 
-# secrets:
-#   example_secret:
-#     external: true
+      # --- Authelia SSO Protection (Optional but Recommended) ---
+      # Remove 'authelia@file,' below if your app handles its own authentication or is public
+      - "traefik.http.routers.my-app.middlewares=authelia@file,security-headers@file"
+
+      # --- Homepage Integration (Optional) ---
+      - "homepage.group=Services"
+      - "homepage.name=My App"
+      - "homepage.icon=nginx.png"
+      - "homepage.description=My Custom Web Application"
+      - "homepage.href=https://my-app.${DOMAIN}"
+
+  # =========================================================================
+  # OPTIONAL BACKEND DATABASE
+  # =========================================================================
+  # db:
+  #   image: docker.io/library/postgres:16-alpine
+  #   container_name: my-app-db
+  #   restart: always
+  #   security_opt:
+  #     - no-new-privileges:true
+  #   cap_drop:
+  #     - ALL
+  #   cap_add:
+  #     - CHOWN
+  #     - DAC_OVERRIDE
+  #     - FOWNER
+  #     - SETGID
+  #     - SETUID
+  #   read_only: true
+  #   tmpfs:
+  #     - /tmp
+  #     - /run
+  #   environment:
+  #     - POSTGRES_USER=appuser
+  #     - POSTGRES_PASSWORD=${MY_APP_DB_PASSWORD} # Set in .env
+  #     - POSTGRES_DB=appdb
+  #   networks:
+  #     - app-db-net
+  #   volumes:
+  #     - ${DATA_DIR}/my-app/db:/var/lib/postgresql/data:Z,U
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 512M
+  #         cpus: '1.0'
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U appuser -d appdb"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   labels:
+  #     - "security.stig.compliance=true"
 
 networks:
-  <stack>-net:
-    driver: bridge
-    # If this stack needs to talk to Traefik, replace with:
-    # proxy-net:
-    #   external: true
+  proxy-net:
+    external: true
+  # app-db-net:
+  #   internal: true # Internal network drops default gateway routing

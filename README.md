@@ -22,8 +22,6 @@ The Geo-Brain homelab is organized into discrete **stacks**:
 - **Observability:** `prometheus` & `grafana` (Metrics), `vector` & `loki` (Logs)
 - **Management:** `homepage` (Dashboard), `dockge` (Stack UI)
 
-All traffic is encrypted, and user access is governed by strict SSO (Single Sign-On).
-
 ---
 
 ## 🚀 Quick Start Guide
@@ -52,7 +50,7 @@ Run the node initialization script to install dependencies (Podman, Ansible), co
 Generate the root CA and required SSL certificates for `step-ca`, `quay`, and `kanidm`:
 
 ```bash
-./scripts/gen-selfsigned-certs.sh
+./scripts/secrets/gen-selfsigned-certs.sh
 ```
 
 ### Step 4: Deploy the Infrastructure
@@ -68,7 +66,7 @@ Deploy all stacks. The script automatically handles bootstrapping Quay and Step-
 Run the setup script to initialize identities, integrate Step-CA with Traefik via ACME, and configure rootless service accounts:
 
 ```bash
-./setup-geo-brain.sh
+./setup-brain.sh
 ```
 
 ### Step 6: Trust the Root Certificate
@@ -83,7 +81,7 @@ To avoid browser warnings, install the generated Root CA onto your local worksta
   ```bash
   sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain certs/ca.crt
   ```
-*(You can also use `./scripts/gen-selfsigned-certs.sh --trust-local` to automate this).*
+*(You can also use `./scripts/secrets/gen-selfsigned-certs.sh --trust-local` to automate this).*
 
 ### Step 7: Initial Logins & User Setup
 
@@ -95,27 +93,34 @@ Before logging into downstream apps, you **must** bootstrap your identity provid
    - First, run the manual bootstrap command shown at the end of the setup script to recover the `idm_admin` account.
    - Log in using the recovery password, then navigate to **Persons** and set a permanent password.
    - Create a service account named `authelia_svc` (used by Authelia for SSO/MFA). Set its password to the `AUTHELIA_LDAP_PASSWORD` defined in your `.env`.
-   - **User Management:** Create new users here. Add administrators to the `system_admins` group.
+   - **OIDC Configuration:** The following stacks are **already pre-configured** to use OIDC. You only need to create the corresponding **OIDC Clients** in Kanidm using the values from the `setup-brain.sh` summary:
+     - **Quay** (Redirect: `https://quay.<DOMAIN>/oauth2/oidc/callback`)
+     - **DefectDojo** (Redirect: `https://defectdojo.<DOMAIN>/complete/oidc/`)
+     - **MinIO** (Redirect: `https://minio.<DOMAIN>/oauth_callback`)
+     - **Wazuh** (Redirect: `https://wazuh.<DOMAIN>/api/v1/auth/login`)
+
 
 2. **Quay (Registry):** `https://quay.<DOMAIN>`
-   - **Local Admin:** Set up a local admin account on your first visit to the UI.
-   - **SSO:** You can also log in via OIDC (Kanidm). Users in the `system_admins` Kanidm group will automatically receive admin privileges.
-   - Use this to host your custom Docker images, with Clair handling vulnerability scanning.
+   - **SSO:** Already configured declaratively. Simply click 'OIDC' on the login screen once the Kanidm client is created.
+   - **Local Admin:** Use for break-glass only. Set up during first visit if OIDC is not yet active.
 
 3. **Wazuh (SIEM):** `https://wazuh.<DOMAIN>`
-   - Log in using Kanidm SSO.
-   - If a local break-glass login is needed, the default credentials are `admin` / `admin`. Change this immediately upon your first login.
+   - **SSO:** Already configured declaratively. Uses `Preferred_Username` claim from Kanidm.
+   - **Local Admin:** Default credentials are `admin` / `admin`. Change this immediately.
 
 4. **DefectDojo (Vulnerability Management):** `https://defectdojo.<DOMAIN>`
-   - Log in via Kanidm SSO.
-   - If manual login is needed, check the `defectdojo-initializer` container logs for the randomly generated local admin password:
+   - **SSO:** Already configured declaratively. Click "Log in via Kanidm SSO."
+   - **Local Admin:** Extract randomly generated password from initializer logs:
      `podman logs defectdojo-initializer 2>&1 | grep "Admin password:"`
 
 5. **MinIO (Object Storage):** `https://minio.<DOMAIN>`
-   - Log in using OIDC (Kanidm SSO).
-   - Alternatively, use the `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD` defined in your `.env` file.
+   - **SSO:** Already configured declaratively. Click "Login with OpenID."
+   - **Local Admin:** Uses `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` from your `.env`.
 
-6. **Dockge (Stack Management):** `https://dockge.<DOMAIN>`
+7. **Grafana (Observability):** `https://grafana.<DOMAIN>`
+   - **SSO:** Automatic via Authelia ForwardAuth headers. No manual setup required.
+
+8. **Dockge (Stack Management):** `https://dockge.<DOMAIN>`
    - First-time access will prompt you to create the local admin account.
    - Use Dockge to visually manage, start, stop, and read logs of all your deployed Compose stacks.
 

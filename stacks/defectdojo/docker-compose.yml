@@ -11,8 +11,12 @@ services:
       - defectdojo-db
       - defectdojo-redis
     environment:
+      - DD_SECRET_KEY=${DOJO_SECRET_KEY}
       - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
       - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
+      - DD_SOCIAL_AUTH_OIDC_OIDC_ENDPOINT=https://kanidm.${DOMAIN}/oauth2/openid/defectdojo
+      - DD_SOCIAL_AUTH_OIDC_KEY=defectdojo
+      - DD_SOCIAL_AUTH_OIDC_SECRET=${DOJO_OIDC_SECRET}
     networks:
       - vulnerability-net
       - proxy-net
@@ -46,6 +50,20 @@ services:
     image: docker.io/library/postgres:15-alpine
     container_name: defectdojo-db
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
     environment:
       - POSTGRES_DB=defectdojo
       - POSTGRES_USER=${DEFECTDOJO_DB_USER:-defectdojo}
@@ -73,10 +91,19 @@ services:
     image: docker.io/valkey/valkey:7.2.12
     container_name: defectdojo-redis
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
     read_only: true
     tmpfs:
       - /tmp
       - /run
+      - /data
     networks:
       - vulnerability-net
     deploy:
