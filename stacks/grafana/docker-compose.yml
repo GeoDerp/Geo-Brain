@@ -13,8 +13,6 @@ services:
       - /run
     user: "${PUID:-1000}:${PGID:-1000}"
     userns_mode: keep-id
-    ports:
-      - 3001:3000
     volumes:
       - ${DATA_DIR}/grafana:/var/lib/grafana:Z,U
       - ./config/provisioning:/etc/grafana/provisioning:z,U

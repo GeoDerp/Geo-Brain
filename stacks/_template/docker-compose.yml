@@ -11,7 +11,7 @@
 
 services:
   web:
-    image: docker.io/library/nginx:alpine # REPLACE WITH YOUR APP IMAGE
+    image: docker.io/library/nginx:1.27.2-alpine # REPLACE WITH YOUR APP IMAGE
     container_name: my-app
     restart: always
     security_opt:

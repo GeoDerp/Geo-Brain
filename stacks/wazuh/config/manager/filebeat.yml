@@ -15,8 +15,7 @@ setup.ilm.enabled: false
 
 output.elasticsearch:
   hosts:
-    - "https://wazuh.indexer:9200"
+    - "http://wazuh.indexer:9200"
   index: "wazuh-alerts-4.x-%{+yyyy.MM.dd}"
-  ssl.verification_mode: none
 
 logging.level: info

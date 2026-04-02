@@ -25,7 +25,7 @@ services:
           memory: 1G
           cpus: '0.5'
     healthcheck:
-      test: ["CMD", "curl", "-sk", "https://localhost:9200"]
+      test: ["CMD", "curl", "-sf", "http://localhost:9200"]
       interval: 5m
       timeout: 10s
       retries: 5
@@ -92,10 +92,6 @@ services:
     environment:
       - WAZUH_MANAGER_URL=http://wazuh-manager
       - INDEXER_URL=http://wazuh-indexer:9200
-      - OPENSEARCH_SECURITY_AUTH_TYPE=openid
-      - OPENSEARCH_SECURITY_OPENID_CLIENT_ID=wazuh
-      - OPENSEARCH_SECURITY_OPENID_CLIENT_SECRET=${WAZUH_OIDC_SECRET}
-      - OPENSEARCH_SECURITY_OPENID_BASE_REDIRECT_URL=https://wazuh.${DOMAIN}
     #secrets:
       #- wazuh_oidc_secret
     networks:
@@ -137,5 +133,5 @@ networks:
     external: true
 
 #secrets:
-  wazuh_oidc_secret:
-    external: true
+#  wazuh_oidc_secret:
+#    external: true

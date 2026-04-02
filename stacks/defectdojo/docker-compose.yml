@@ -28,7 +28,7 @@ services:
           memory: 2G
           cpus: '1.0'
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8081/healthcheck')\""]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthcheck')\""]
       interval: 5m
       timeout: 10s
       retries: 3
@@ -129,5 +129,5 @@ networks:
     external: true
 
 #secrets:
-  dojo_oidc_secret:
-    external: true
+#  dojo_oidc_secret:
+#    external: true

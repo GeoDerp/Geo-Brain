@@ -23,6 +23,10 @@ DATA_DIR="${DATA_DIR/#\~/$HOME}"
 
 echo "Starting Geo Brain post-deployment rootless bootstrapper..."
 
+# Global state variables
+KANIDM_RECOVERY=""
+DD_ADMIN_PASSWORD=""
+
 # --- Podman Connection Wrapper ---
 PODMAN="podman"
 if [[ -n "${REMOTE_HOST:-}" ]]; then
@@ -76,6 +80,39 @@ create_secret() {
   fi
 }
 
+# Persist a secret value into .env without overwriting existing entries.
+write_env_secret() {
+  local var_name="$1"
+  local secret_value="$2"
+
+  if [ ! -f .env ]; then
+    touch .env
+    chmod 600 .env
+  fi
+
+  if ! grep -q "^${var_name}=" .env 2>/dev/null; then
+    printf '%s=%s\n' "$var_name" "$secret_value" >> .env
+  fi
+  export "${var_name}=${secret_value}"
+}
+
+# Ensure both a Podman secret and a matching .env entry exist.
+ensure_secret_and_env() {
+  local var_name="$1"
+  local secret_name="$2"
+
+  local current_value="${!var_name-}"
+  local secret_value
+  if [ -n "$current_value" ]; then
+    secret_value="$current_value"
+  else
+    secret_value="$(openssl rand -base64 32)"
+  fi
+
+  create_secret "$secret_name" "$secret_value"
+  write_env_secret "$var_name" "$secret_value"
+}
+
 # --- 1) Quay Initialization ---
 init_quay() {
   echo "--- 1) Quay Initialization ---"
@@ -118,8 +155,12 @@ setup_pki() {
   traefik_container=$($PODMAN ps -a --format "{{.Names}}" | grep traefik | head -n 1 || echo "traefik")
   
   echo "Injecting Step-CA Root into Traefik..."
-  $PODMAN exec "$step_ca_container" cat /home/step/certs/root_ca.crt > ./stacks/traefik/config/certs/root_ca.crt || true
-  echo "✅ Traefik now trusts Step-CA."
+  mkdir -p ./stacks/traefik/config/certs
+  if $PODMAN exec "$step_ca_container" cat /home/step/certs/root_ca.crt > ./stacks/traefik/config/certs/root_ca.crt; then
+    echo "✅ Traefik now trusts Step-CA."
+  else
+    echo "⚠️ Failed to inject Step-CA Root into Traefik. Traefik may not trust Step-CA."
+  fi
 }
 
 # --- 3) Identity (Kanidm) ---
@@ -131,19 +172,25 @@ setup_identity() {
   kanidm_container=$($PODMAN ps -a --format "{{.Names}}" | grep kanidm | head -n 1 || echo "kanidm")
 
   echo "Initializing Kanidm Admin Account..."
-  $PODMAN exec "$kanidm_container" /sbin/kanidmd recover-account -c /data/server.toml idm_admin || echo "⚠️ Admin account recovery skipped."
+  KANIDM_RECOVERY=$($PODMAN exec "$kanidm_container" /sbin/kanidmd recover-account -c /data/server.toml idm_admin 2>&1 | grep new_password | grep -o '"[^"]*"' | tr -d '"' || echo "")
+  if [[ -n "$KANIDM_RECOVERY" ]]; then
+    echo "✅ Kanidm idm_admin recovery password captured."
+  else
+    KANIDM_RECOVERY="Check container logs"
+    echo "⚠️ Admin account recovery skipped or password not captured."
+  fi
 }
 
 # --- 4) Storage & SOC Secrets ---
 setup_storage() {
   echo "--- 4) Secret Provisioning ---"
-  create_secret "minio_oidc_secret" "$(openssl rand -base64 32)"
-  create_secret "vaultwarden_oidc_secret" "$(openssl rand -base64 32)"
-  create_secret "quay_oidc_secret" "$(openssl rand -base64 32)"
-  create_secret "wazuh_oidc_secret" "$(openssl rand -base64 32)"
-  create_secret "dojo_oidc_secret" "$(openssl rand -base64 32)"
-  create_secret "dojo_secret_key" "$(openssl rand -base64 32)"
-  create_secret "n8n_oidc_secret" "$(openssl rand -base64 32)"
+  ensure_secret_and_env "MINIO_OIDC_SECRET" "minio_oidc_secret"
+  ensure_secret_and_env "VAULTWARDEN_OIDC_SECRET" "vaultwarden_oidc_secret"
+  ensure_secret_and_env "QUAY_OIDC_SECRET" "quay_oidc_secret"
+  ensure_secret_and_env "WAZUH_OIDC_SECRET" "wazuh_oidc_secret"
+  ensure_secret_and_env "DOJO_OIDC_SECRET" "dojo_oidc_secret"
+  ensure_secret_and_env "DOJO_SECRET_KEY" "dojo_secret_key"
+  ensure_secret_and_env "N8N_OIDC_SECRET" "n8n_oidc_secret"
 }
 
 # --- 5) SOC (Wazuh & DefectDojo) ---
@@ -204,14 +251,10 @@ main() {
   echo "================================================="
   echo "🔐 BREAKGLASS & SSO SUMMARY"
   echo "================================================="
-  local kanidm_container
-  kanidm_container=$($PODMAN ps -a --format "{{.Names}}" | grep kanidm | head -n 1 || echo "kanidm")
-  
-  KANIDM_RECOVERY=$($PODMAN exec "$kanidm_container" /sbin/kanidmd recover-account -c /data/server.toml idm_admin 2>&1 | grep new_password | grep -o '"[^"]*"' | tr -d '"' || echo "Check container logs")
-  echo "1. Kanidm: https://kanidm.${DOMAIN} | Admin: idm_admin | Recovery: $KANIDM_RECOVERY"
+  echo "1. Kanidm: https://kanidm.${DOMAIN} | Admin: idm_admin | Recovery: ${KANIDM_RECOVERY:-Check container logs}"
   echo "2. MinIO: https://minio.${DOMAIN} | Admin: ${MINIO_ROOT_USER:-minioadmin} / ${MINIO_ROOT_PASSWORD:-[REDACTED]}"
   echo "3. Quay: https://quay.${DOMAIN} | OIDC SSO Ready"
-  echo "4. Wazuh: https://wazuh.${DOMAIN} | OIDC SSO Ready"
+  echo "4. Wazuh: https://wazuh.${DOMAIN} | SSO via Authelia"
   echo "5. n8n: https://n8n.${DOMAIN} | OIDC SSO Ready"
   echo "================================================="
 }

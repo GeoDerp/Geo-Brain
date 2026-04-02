@@ -72,12 +72,12 @@ def check_stack(filepath):
                 else:
                     host_path = vol.split(":")[0]
 
-                allowed_prefixes = ("./", "../", "${DATA_DIR}", "/var/run/", "/dev", "/proc", "/etc", "/var/log", "${PODMAN_SOCK")
+                allowed_prefixes = ("./", "../", "${DATA_DIR}", "/var/run/", "/dev", "/proc", "/etc", "/var/log", "${PODMAN_SOCK}", "${PODMAN_SOCK:-")
                 if not any(host_path.startswith(prefix) for prefix in allowed_prefixes):
                      errors.append(f"Service '{service_name}' uses absolute or non-DATA_DIR volume: '{host_path}'")
             elif isinstance(vol, dict):
                 host_path = vol.get("source", "")
-                allowed_prefixes = ("./", "../", "${DATA_DIR}", "/var/run/", "/dev", "/proc", "/etc", "/var/log", "${PODMAN_SOCK")
+                allowed_prefixes = ("./", "../", "${DATA_DIR}", "/var/run/", "/dev", "/proc", "/etc", "/var/log", "${PODMAN_SOCK}", "${PODMAN_SOCK:-")
                 if not any(host_path.startswith(prefix) for prefix in allowed_prefixes):
                      errors.append(f"Service '{service_name}' uses non-DATA_DIR volume source: '{host_path}'")
 
