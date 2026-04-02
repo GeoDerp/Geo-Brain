@@ -103,6 +103,7 @@ services:
     tmpfs:
       - /tmp
       - /run
+      - /data
     networks:
       - vulnerability-net
     deploy:

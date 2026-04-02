@@ -80,7 +80,7 @@ create_secret() {
   fi
 }
 
-# Persist a secret value into .env without overwriting existing entries.
+# Persist a secret value into .env, updating empty values from .env-template.
 write_env_secret() {
   local var_name="$1"
   local secret_value="$2"
@@ -90,7 +90,11 @@ write_env_secret() {
     chmod 600 .env
   fi
 
-  if ! grep -q "^${var_name}=" .env 2>/dev/null; then
+  if grep -q "^${var_name}=$" .env 2>/dev/null; then
+    # Key exists but is empty (e.g., copied from .env-template) — update in place
+    sed -i "s|^${var_name}=$|${var_name}=${secret_value}|" .env
+  elif ! grep -q "^${var_name}=" .env 2>/dev/null; then
+    # Key doesn't exist at all — append
     printf '%s=%s\n' "$var_name" "$secret_value" >> .env
   fi
   export "${var_name}=${secret_value}"

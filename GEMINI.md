@@ -31,7 +31,7 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 
 ### Security Operations Center (SOC)
 - **Wazuh (SIEM/XDR):** Centralized security monitoring and log indexing.
-- **Falco:** Runtime security monitoring using modern eBPF. Detects anomalies, including inter-container network bypasses.
+- **Falco:** Runtime security monitoring using the nodriver (userspace) engine. Detects anomalies, including inter-container network bypasses.
 - **CrowdSec:** Intrusion prevention and multi-layer blocking. Configured strictly as Air-Gapped (Zero Telemetry/Upload). Powers the automated remediation loop by parsing Falco alerts via Vector and updating Caddy sidecar bouncers.
 - **DefectDojo:** Vulnerability management and orchestration of scan results.
 

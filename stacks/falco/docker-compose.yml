@@ -35,7 +35,7 @@ services:
       - "homepage.group=SOC"
       - "homepage.name=Falco"
       - "homepage.icon=falco.png"
-      - "homepage.description=Runtime Security (eBPF)"
+      - "homepage.description=Runtime Security (nodriver)"
 
 networks:
   security-net:
