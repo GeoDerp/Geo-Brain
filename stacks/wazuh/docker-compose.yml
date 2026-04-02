@@ -92,8 +92,6 @@ services:
     environment:
       - WAZUH_MANAGER_URL=http://wazuh-manager
       - INDEXER_URL=http://wazuh-indexer:9200
-    #secrets:
-      #- wazuh_oidc_secret
     networks:
       - wazuh-net
       - monitoring-net
@@ -131,7 +129,3 @@ networks:
     external: true
   proxy-net:
     external: true
-
-#secrets:
-#  wazuh_oidc_secret:
-#    external: true
