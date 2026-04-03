@@ -28,7 +28,7 @@ set -euo pipefail
 
 # --- Configuration ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 if [ -f "$REPO_ROOT/.env" ]; then
   # shellcheck disable=SC2046
@@ -261,7 +261,46 @@ SANEOF
 
   # --- Step 4: Generate Kanidm cert (needs specific SANs) ---
   echo ">>> Generating Kanidm certificate..."
-  # ... (existing Kanidm logic)
+  cat > "$CERT_DIR/kanidm.cnf" <<EOF
+[req]
+default_bits = 4096
+prompt = no
+default_md = sha256
+req_extensions = req_ext
+distinguished_name = dn
+
+[dn]
+C = US
+ST = Local
+L = Homelab
+O = GEO-Brain
+OU = SSOF
+CN = idm.$DOMAIN
+
+[req_ext]
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = idm.$DOMAIN
+DNS.2 = kanidm.$DOMAIN
+EOF
+
+  openssl genrsa -out "$CERT_DIR/kanidm.key" 4096
+  openssl req -new -key "$CERT_DIR/kanidm.key" -out "$CERT_DIR/kanidm.csr" -config "$CERT_DIR/kanidm.cnf"
+  openssl x509 -req -in "$CERT_DIR/kanidm.csr" \
+    -CA "$CERT_DIR/ca.crt" \
+    -CAkey "$CERT_DIR/ca.key" \
+    -CAcreateserial \
+    -out "$CERT_DIR/kanidm.crt" \
+    -days "$CERT_DAYS" \
+    -sha256 \
+    -extfile "$CERT_DIR/kanidm.cnf" \
+    -extensions req_ext
+
+  cat "$CERT_DIR/kanidm.crt" "$CERT_DIR/ca.crt" > "$CERT_DIR/kanidm-chain.crt"
+  cp "$CERT_DIR/kanidm.key" "$CERT_DIR/kanidm-chain.key"
+  echo "    Kanidm cert:   $CERT_DIR/kanidm-chain.crt"
+  echo "    Kanidm key:    $CERT_DIR/kanidm-chain.key"
 fi  # end import/generate
 
 # --- Step 5: Write Traefik dynamic TLS config ---

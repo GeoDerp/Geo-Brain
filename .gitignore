@@ -32,3 +32,4 @@ stacks/harbor/config/registry/root.crt
 stacks/harbor/config/core/private_key.pem
 stacks/harbor/config/core/root.crt
 stacks/traefik/config/dynamic/gen_*.yml
+/certs/

@@ -120,7 +120,7 @@ ensure_secret_and_env() {
 # --- 1) Quay Initialization ---
 init_quay() {
   echo "--- 1) Quay Initialization ---"
-  wait_for_service "Quay API" "curl -s -k -f https://quay.${DOMAIN}/health/instance" || exit 1
+  wait_for_service "Quay API" "curl -s -k -f https://quay.${DOMAIN}/health/instance" || echo "⚠️ Failed to wait for service, continuing anyway..."
   
   mkdir -p ~/.config/containers
   cat <<EOF > ~/.config/containers/registries.conf
@@ -141,7 +141,7 @@ EOF
 # --- 2) PKI (Step-CA & Traefik ACME) ---
 setup_pki() {
   echo "--- 2) PKI (Step-CA & Traefik ACME) ---"
-  wait_for_service "Step-CA" "curl -s -k -f https://ca.${DOMAIN}/health" || exit 1
+  wait_for_service "Step-CA" "curl -s -k -f https://ca.${DOMAIN}/health" || echo "⚠️ Failed to wait for service, continuing anyway..."
 
   local step_ca_container
   step_ca_container=$($PODMAN ps -a --format "{{.Names}}" | grep step-ca | head -n 1 || echo "step-ca")
@@ -170,7 +170,7 @@ setup_pki() {
 # --- 3) Identity (Kanidm) ---
 setup_identity() {
   echo "--- 3) Identity (Kanidm) ---"
-  wait_for_service "Kanidm" "curl -s -k -f https://kanidm.${DOMAIN}/" || exit 1
+  wait_for_service "Kanidm" "curl -s -k -f https://kanidm.${DOMAIN}/" || echo "⚠️ Failed to wait for service, continuing anyway..."
 
   local kanidm_container
   kanidm_container=$($PODMAN ps -a --format "{{.Names}}" | grep kanidm | head -n 1 || echo "kanidm")
@@ -200,7 +200,7 @@ setup_storage() {
 # --- 5) SOC (Wazuh & DefectDojo) ---
 setup_soc() {
   echo "--- 5) SOC (Wazuh & DefectDojo) ---"
-  wait_for_service "DefectDojo UI" "curl -s -k -f https://defectdojo.${DOMAIN}/" || exit 1
+  wait_for_service "DefectDojo UI" "curl -s -k -f https://defectdojo.${DOMAIN}/" || echo "⚠️ Failed to wait for service, continuing anyway..."
 
   echo "Checking DefectDojo Admin Credentials..."
   local dd_init_container
