@@ -682,6 +682,7 @@ HEADER
 
     # Sync to remote
     if [[ "$DEPLOY_MODE" == "remote" ]]; then
+        "${SSH_CMD[@]}" "mkdir -p ~/${REMOTE_BASE}/$(dirname "$rel_output")"
         rsync -lpt "$output_file" "$REMOTE_USER@$REMOTE_HOST:~/${REMOTE_BASE}/$rel_output"
     fi
 }
