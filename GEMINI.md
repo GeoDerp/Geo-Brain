@@ -57,7 +57,7 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - **`ansible/init-node.yml`:** Ansible playbook that provisions the remote homelab node (Podman, `podman.socket`, `auditd`, SELinux, firewalld, subuids, linger, sysctl), then registers a local `podman system connection` for remote access. Confirms major changes (package installs, firewall rules, SELinux, podman-remote registration) unless `--yes` / `-e auto_yes=true` is passed.
 - **`deploy.sh`:** STIG-compliant deployment wrapper. Validates image pinning, resource limits, and network isolation locally, then syncs and deploys stacks to the remote node via SSH. Falls back to local deployment if no remote is configured.
 - **`setup-brain.sh`:** Idempotent rootless Podman post-deployment bootstrapper. It configures Quay as the primary registry, injects the Step-CA root certificate into Traefik, handles automated generation and storage of OIDC secrets, and securely bridges initial application credentials (e.g., DefectDojo).
-- **`scripts/sast/sast-scan.sh`:** Automated security scanning using Trivy, Checkov, Gitleaks, and Semgrep.
+- **`scripts/sast/sast-scan.sh`:** Automated security scanning using Checkov, Gitleaks, Grype, and Semgrep.
 - **`scripts/secrets/gen-selfsigned-certs.sh`:** Generates required certificate/key bundles with normalized filenames for required stacks (Traefik, Kanidm). Also supports importing existing certificates and converting them to the required filenames and bundle formats.
 
 ## Health Monitoring

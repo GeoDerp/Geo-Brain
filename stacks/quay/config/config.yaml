@@ -36,6 +36,9 @@ USER_EVENTS_REDIS:
 FEATURE_SECURITY_SCANNER: true
 SECURITY_SCANNER_V4_ENDPOINT: http://clair:8080
 
+# Pull-Through Proxy Cache (mirror docker.io, ghcr.io, quay.io)
+FEATURE_PROXY_CACHE: true
+
 # DISA STIG / Privacy
 FEATURE_TELEMETRY_LOGGING: false
 FEATURE_APP_SPECIFIC_TOKENS: true

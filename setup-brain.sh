@@ -136,6 +136,44 @@ location = "quay.${DOMAIN}"
 insecure = false
 EOF
   echo "✅ Configured Podman registries.conf."
+
+  # Create proxy cache organizations for upstream registries
+  local QUAY_API="https://quay.${DOMAIN}/api/v1"
+  local QUAY_TOKEN=""
+
+  # Initialize admin user if first run (FEATURE_USER_INITIALIZE=true)
+  local init_resp
+  init_resp=$(curl -s -k -X POST "${QUAY_API}/user/initialize" \
+    -H "Content-Type: application/json" \
+    -d "{\"username\": \"quayadmin\", \"password\": \"${ADMIN_PASSWORD}\", \"email\": \"admin@${DOMAIN}\"}" 2>/dev/null) || true
+  QUAY_TOKEN=$(echo "$init_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null) || true
+
+  if [[ -z "$QUAY_TOKEN" ]]; then
+    # Already initialized — login to get token
+    QUAY_TOKEN=$(curl -s -k -X POST "${QUAY_API}/user/login" \
+      -H "Content-Type: application/json" \
+      -d "{\"user\": \"quayadmin\", \"password\": \"${ADMIN_PASSWORD}\"}" 2>/dev/null \
+      | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null) || true
+  fi
+
+  if [[ -n "$QUAY_TOKEN" ]]; then
+    for upstream in "docker.io" "ghcr.io" "quay.io"; do
+      local org_name="${upstream//./-}-cache"
+      # Create organization
+      curl -s -k -X POST "${QUAY_API}/organization/" \
+        -H "Authorization: Bearer ${QUAY_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{\"name\": \"${org_name}\", \"email\": \"${org_name}@${DOMAIN}\"}" 2>/dev/null || true
+      # Enable proxy cache for the org
+      curl -s -k -X POST "${QUAY_API}/organization/${org_name}/proxycache" \
+        -H "Authorization: Bearer ${QUAY_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{\"upstream_registry\": \"${upstream}\"}" 2>/dev/null || true
+    done
+    echo "✅ Configured proxy cache organizations for docker.io, ghcr.io, quay.io."
+  else
+    echo "⚠️ Could not authenticate to Quay API. Proxy cache orgs not configured."
+  fi
 }
 
 # --- 2) PKI (Step-CA & Traefik ACME) ---

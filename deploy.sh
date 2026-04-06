@@ -121,7 +121,7 @@ get_base_stacks() {
         "homepage"
     )
 
-    local exclude_stacks=("ramalama" "prometheus")
+    local exclude_stacks=("prometheus")
     local found_stacks=()
     for dir in "$REPO_ROOT"/stacks/*/; do
         local name
@@ -791,10 +791,14 @@ deploy_batch() {
             
             if [ "$login_success" -eq 1 ]; then
                 "${SSH_CMD[@]}" "mkdir -p ~/.config/containers && cat <<EOF > ~/.config/containers/registries.conf
-unqualified-search-registries = [\"docker.io\"]
+unqualified-search-registries = [\"quay.${DOMAIN:-example.local}\", \"docker.io\"]
 
 [[registry]]
 prefix = \"docker.io\"
+location = \"quay.${DOMAIN:-example.local}\"
+mirror-by-digest-only = false
+
+[[registry]]
 location = \"quay.${DOMAIN:-example.local}\"
 insecure = true
 EOF
@@ -811,10 +815,14 @@ EOF
             if [ "$login_success" -eq 1 ]; then
                 mkdir -p ~/.config/containers
                 cat <<EOF > ~/.config/containers/registries.conf
-unqualified-search-registries = ["docker.io"]
+unqualified-search-registries = ["quay.${DOMAIN:-example.local}", "docker.io"]
 
 [[registry]]
 prefix = "docker.io"
+location = "quay.${DOMAIN:-example.local}"
+mirror-by-digest-only = false
+
+[[registry]]
 location = "quay.${DOMAIN:-example.local}"
 insecure = true
 EOF

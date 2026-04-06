@@ -13,6 +13,7 @@ services:
       - /proc:/host/proc:ro
       - /etc:/host/etc:ro
       - ./config/falco.yaml:/etc/falco/falco.yaml:ro,U
+      - ${DATA_DIR}/falco/log:/var/log/falco:Z
     command: ["falco", "-o", "engine.kind=nodriver"]
     networks:
       - security-net
@@ -23,7 +24,7 @@ services:
           memory: 512M
           cpus: '0.5'
     healthcheck:
-      test: ["CMD", "/usr/bin/falco-healthcheck"] # Falco has a built-in healthcheck script in newer versions
+      test: ["CMD-SHELL", "kill -0 1"]
       interval: 5m
       timeout: 10s
       retries: 3

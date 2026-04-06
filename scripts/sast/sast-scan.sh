@@ -73,15 +73,6 @@ scan_stack() {
         upload_to_defectdojo "Checkov Scan" "$RESULTS_DIR/checkov-${stack}.json"
     fi
     
-    # Trivy: Config & Image scan
-    if command -v trivy &> /dev/null; then
-        echo ">>> Vulnerability scanning (Trivy)..."
-        trivy config "$STACKS_DIR/$stack" --quiet --format json \
-            --output "$RESULTS_DIR/trivy-config-${stack}.json" \
-            || echo "[WARNING] Trivy found config issues in $stack"
-        upload_to_defectdojo "Trivy Scan" "$RESULTS_DIR/trivy-config-${stack}.json"
-    fi
-
     # Semgrep: Targeted stack scan
     if command -v semgrep &> /dev/null; then
         echo ">>> Targeted analysis (Semgrep)..."

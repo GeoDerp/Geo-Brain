@@ -26,7 +26,6 @@ This document provides an educational overview of all tools and technologies use
   - [RamaLama](#ramalama)
   - [DefectDojo](#defectdojo)
 - [Vulnerability Management & Compliance](#vulnerability-management--compliance)
-  - [Trivy](#trivy)
   - [Grype](#grype)
   - [Dockle](#dockle)
   - [Checkov](#checkov)
@@ -95,7 +94,6 @@ graph TD
             end
 
             subgraph SCAN ["Vulnerability Scanning"]
-                TV["Trivy — Image/SCA Scan"]
                 CV["Checkov — IaC Scan"]
                 GL["Gitleaks — Secrets"]
                 SG["Semgrep — SAST"]
@@ -425,7 +423,7 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 **What it is:** DefectDojo is an open-source vulnerability management platform that correlates and tracks security findings.
 
 **Why it's used:**
-- **Unified View:** Aggregates findings from multiple security tools (Trivy, Grype, OpenSCAP, etc.).
+- **Unified View:** Aggregates findings from multiple security tools (Grype, Clair, OpenSCAP, etc.).
 - **Deduplication:** Automatically identifies and merges duplicate findings.
 - **Trend Analysis:** Tracks vulnerability metrics over time.
 - **Workflow Management:** Assigns findings to team members and tracks remediation.
@@ -434,24 +432,13 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 
 ## Vulnerability Management & Compliance
 
-### Trivy
-
-**What it is:** Trivy is a comprehensive security scanner that detects vulnerabilities, misconfigurations, secrets, and license issues.
-
-**Why it's used:**
-- **Multi-Target:** Scans container images, filesystems, Git repositories, and IaC files.
-- **Comprehensive Database:** Maintains an extensive CVE database with fast updates.
-- **Air-Gap Support:** Can operate with locally cached vulnerability databases.
-
----
-
 ### Grype
 
 **What it is:** Grype is an open-source vulnerability scanner focused on container images and filesystems.
 
 **Why it's used:**
 - **Anchore Database:** Leverages Anchore's comprehensive vulnerability feed.
-- **Alternative Perspective:** Provides a second opinion alongside Trivy for thorough coverage.
+- **Alternative Perspective:** Provides a second opinion alongside Clair for thorough coverage.
 
 ---
 
@@ -561,7 +548,7 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 | **Log Pipeline** | Vector | Log collection and forwarding |
 | **Runtime Security** | Falco | Real-time threat detection |
 | **Vuln Management** | DefectDojo | Finding aggregation and tracking |
-| **Image Scanning** | Trivy, Grype | CVE detection |
+| **Image Scanning** | Clair, Grype | CVE detection |
 | **Image Linting** | Dockle | Best practice validation |
 | **IaC Scanning** | Checkov, Terrascan | Configuration security |
 | **Secret Detection** | Gitleaks | Credential leak prevention |
