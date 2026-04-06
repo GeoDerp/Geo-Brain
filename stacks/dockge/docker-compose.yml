@@ -37,6 +37,7 @@ services:
       - "traefik.http.routers.dockge.entrypoints=websecure"
       - "traefik.http.routers.dockge.tls=true"
       - "traefik.http.routers.dockge.middlewares=authelia@file,security-headers@file"
+      - "authelia.access_control.policy=two_factor"
       - "traefik.http.services.dockge.loadbalancer.server.port=5001"
       - "security.stig.compliance=true"
       - "security.stig.role=management"

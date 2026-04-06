@@ -45,6 +45,7 @@ services:
       - "traefik.http.routers.grafana.entrypoints=websecure"
       - "traefik.http.routers.grafana.tls=true"
       - "traefik.http.routers.grafana.middlewares=authelia@file,security-headers@file"
+      - "authelia.access_control.policy=two_factor"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
       - "security.stig.compliance=true"
       - "security.stig.role=visualization"

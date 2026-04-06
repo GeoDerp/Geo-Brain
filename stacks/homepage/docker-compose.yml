@@ -36,6 +36,7 @@ services:
       - "traefik.http.routers.homepage.entrypoints=websecure"
       - "traefik.http.routers.homepage.tls=true"
       - "traefik.http.routers.homepage.middlewares=authelia@file,security-headers@file"
+      - "authelia.access_control.policy=one_factor"
       - "traefik.http.services.homepage.loadbalancer.server.port=3000"
       - "security.stig.compliance=true"
       - "security.stig.role=dashboard"

@@ -120,7 +120,7 @@ ensure_secret_and_env() {
 # --- 1) Quay Initialization ---
 init_quay() {
   echo "--- 1) Quay Initialization ---"
-  wait_for_service "Quay API" "curl -s -k -f https://quay.${DOMAIN}/health/instance" || echo "⚠️ Failed to wait for service, continuing anyway..."
+  wait_for_service "Quay API" "curl -m 5 -s -k -f https://quay.${DOMAIN}/health/instance" || echo "⚠️ Failed to wait for service, continuing anyway..."
   
   mkdir -p ~/.config/containers
   cat <<EOF > ~/.config/containers/registries.conf
@@ -141,7 +141,7 @@ EOF
 # --- 2) PKI (Step-CA & Traefik ACME) ---
 setup_pki() {
   echo "--- 2) PKI (Step-CA & Traefik ACME) ---"
-  wait_for_service "Step-CA" "curl -s -k -f https://ca.${DOMAIN}/health" || echo "⚠️ Failed to wait for service, continuing anyway..."
+  wait_for_service "Step-CA" "curl -m 5 -s -k -f https://ca.${DOMAIN}/health" || echo "⚠️ Failed to wait for service, continuing anyway..."
 
   local step_ca_container
   step_ca_container=$($PODMAN ps -a --format "{{.Names}}" | grep step-ca | head -n 1 || echo "step-ca")
@@ -170,7 +170,7 @@ setup_pki() {
 # --- 3) Identity (Kanidm) ---
 setup_identity() {
   echo "--- 3) Identity (Kanidm) ---"
-  wait_for_service "Kanidm" "curl -s -k -f https://kanidm.${DOMAIN}/" || echo "⚠️ Failed to wait for service, continuing anyway..."
+  wait_for_service "Kanidm" "curl -m 5 -s -k -f https://kanidm.${DOMAIN}/" || echo "⚠️ Failed to wait for service, continuing anyway..."
 
   local kanidm_container
   kanidm_container=$($PODMAN ps -a --format "{{.Names}}" | grep kanidm | head -n 1 || echo "kanidm")
@@ -183,24 +183,122 @@ setup_identity() {
     KANIDM_RECOVERY="Check container logs"
     echo "⚠️ Admin account recovery skipped or password not captured."
   fi
+
+  echo "Automating Kanidm Service Accounts and OIDC Clients..."
+  if [[ -n "$KANIDM_RECOVERY" ]] && [[ "$KANIDM_RECOVERY" != "Check container logs" ]]; then
+    local CA_CERT_CONTENT
+    CA_CERT_CONTENT=$(cat ./certs/ca.crt)
+    
+    local EXPECTED_APPS
+    EXPECTED_APPS=$(find ./stacks -type f -name "docker-compose.yml" -exec grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' {} \; 2>/dev/null | sort -u | tr '\n' ' ')
+
+    local payload=$(cat <<EOF
+#!/bin/sh
+set -e
+export KANIDM_URL="https://kanidm.${DOMAIN}"
+export KANIDM_NAME="idm_admin"
+export KANIDM_PASSWORD="${KANIDM_RECOVERY}"
+
+cat << 'CAEOF' > /tmp/ca.crt
+${CA_CERT_CONTENT}
+CAEOF
+
+kanidm login -C /tmp/ca.crt >/dev/null 2>&1 || exit 1
+
+kanidm service-account create auth_svc 'Authelia Service Account' idm_admin -C /tmp/ca.crt >/dev/null 2>&1 || true
+kanidm group add-members idm_unix_authentication_read auth_svc -C /tmp/ca.crt >/dev/null 2>&1 || true
+kanidm group add-members idm_people_pii_read auth_svc -C /tmp/ca.crt >/dev/null 2>&1 || true
+kanidm group add-members idm_account_mail_read auth_svc -C /tmp/ca.crt >/dev/null 2>&1 || true
+
+if ! kanidm service-account api-token status auth_svc -C /tmp/ca.crt 2>/dev/null | grep -q "default"; then
+   TOKEN=\$(kanidm service-account api-token generate auth_svc default -w -C /tmp/ca.crt 2>/dev/null | tail -n 1)
+   echo "AUTHELIA_LDAP_PASSWORD_VALUE=\${TOKEN}"
+fi
+
+EXPECTED_APPS="${EXPECTED_APPS}"
+for APP in \$EXPECTED_APPS; do
+    kanidm system oauth2 create "\$APP" "\$APP OIDC" "https://\$APP.${DOMAIN}/" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    
+    # Map idm_all_persons to the standard scopes so all users can access the app
+    kanidm system oauth2 update-scope-map "\$APP" idm_all_persons openid profile email -C /tmp/ca.crt >/dev/null 2>&1 || true
+    
+    # Set the landing URL so the app appears on the Kanidm portal dashboard
+    kanidm system oauth2 set-landing-url "\$APP" "https://\$APP.${DOMAIN}/" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    
+    SECRET=\$(kanidm system oauth2 show-basic-secret "\$APP" -C /tmp/ca.crt 2>/dev/null | tail -n 1)
+    if [ "\$SECRET" = "No secret configured" ] || [ -z "\$SECRET" ]; then
+        kanidm system oauth2 reset-basic-secret "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
+        SECRET=\$(kanidm system oauth2 show-basic-secret "\$APP" -C /tmp/ca.crt 2>/dev/null | tail -n 1)
+    fi
+    echo "\${APP}_OIDC_SECRET_VALUE=\${SECRET}"
+done
+
+# Cleanup orphaned clients (Idempotency)
+EXISTING_APPS=\$(kanidm system oauth2 list -C /tmp/ca.crt 2>/dev/null | grep "^name:" | awk '{print \$2}')
+for EXISTING in \$EXISTING_APPS; do
+    if echo "\$EXPECTED_APPS" | grep -qw "\$EXISTING"; then
+        continue
+    fi
+    echo "⚠️ Deleting orphaned Kanidm OIDC client: \$EXISTING"
+    kanidm system oauth2 delete "\$EXISTING" -C /tmp/ca.crt >/dev/null 2>&1 || true
+done
+EOF
+)
+
+    local setup_output
+    setup_output=$(echo "$payload" | $PODMAN run -i --rm --network host --env KANIDM_PASSWORD="${KANIDM_RECOVERY}" docker.io/kanidm/tools:1.9.2 sh 2>/dev/null)
+    
+    # Process Authelia Password
+    local authelia_pw
+    authelia_pw=$(echo "$setup_output" | grep "^AUTHELIA_LDAP_PASSWORD_VALUE=" | cut -d'=' -f2-)
+    if [[ -n "$authelia_pw" ]]; then
+       # Force-update: the real Kanidm token must overwrite any placeholder
+       sed -i "s|^AUTHELIA_LDAP_PASSWORD=.*|AUTHELIA_LDAP_PASSWORD=${authelia_pw}|" .env 2>/dev/null || true
+       export AUTHELIA_LDAP_PASSWORD="$authelia_pw"
+       echo "✅ Generated Kanidm API Token for Authelia."
+       echo "⚠️ Note: You must restart Authelia to pick up the new AUTHELIA_LDAP_PASSWORD: ./deploy.sh authelia restart"
+    fi
+
+    # Process OIDC Secrets dynamically
+    for APP in $EXPECTED_APPS; do
+       local secret_val
+       secret_val=$(echo "$setup_output" | grep -i "^${APP}_OIDC_SECRET_VALUE=" | cut -d'=' -f2-)
+       if [[ -n "$secret_val" ]] && [[ "$secret_val" != "No secret configured" ]]; then
+          local var_name=$(echo "${APP}_OIDC_SECRET" | tr '[:lower:]-' '[:upper:]_')
+          write_env_secret "$var_name" "$secret_val"
+       fi
+    done
+    echo "✅ Kanidm programmatic setup complete."
+  fi
 }
 
 # --- 4) Storage & SOC Secrets ---
 setup_storage() {
   echo "--- 4) Secret Provisioning ---"
-  ensure_secret_and_env "MINIO_OIDC_SECRET" "minio_oidc_secret"
-  ensure_secret_and_env "VAULTWARDEN_OIDC_SECRET" "vaultwarden_oidc_secret"
-  ensure_secret_and_env "QUAY_OIDC_SECRET" "quay_oidc_secret"
-  ensure_secret_and_env "WAZUH_OIDC_SECRET" "wazuh_oidc_secret"
-  ensure_secret_and_env "DOJO_OIDC_SECRET" "dojo_oidc_secret"
+  
+  local EXPECTED_APPS
+  EXPECTED_APPS=$(find ./stacks -type f -name "docker-compose.yml" -exec grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' {} \; 2>/dev/null | sort -u)
+  
+  for APP in $EXPECTED_APPS; do
+     local VAR_NAME="$(echo "${APP}_OIDC_SECRET" | tr '[:lower:]-' '[:upper:]_')"
+     local SEC_NAME="${APP}_oidc_secret"
+     ensure_secret_and_env "$VAR_NAME" "$SEC_NAME"
+  done
+  
+  # Hardcoded required secrets (non-OIDC)
   ensure_secret_and_env "DOJO_SECRET_KEY" "dojo_secret_key"
-  ensure_secret_and_env "N8N_OIDC_SECRET" "n8n_oidc_secret"
+
+  # Authelia secrets — placeholders so Authelia can start before setup_identity() runs
+  ensure_secret_and_env "AUTHELIA_JWT_SECRET" "authelia_jwt_secret"
+  ensure_secret_and_env "AUTHELIA_ENCRYPTION_KEY" "authelia_encryption_key"
+  ensure_secret_and_env "AUTHELIA_LDAP_PASSWORD" "authelia_ldap_password"
 }
 
 # --- 5) SOC (Wazuh & DefectDojo) ---
 setup_soc() {
   echo "--- 5) SOC (Wazuh & DefectDojo) ---"
-  wait_for_service "DefectDojo UI" "curl -s -k -f https://defectdojo.${DOMAIN}/" || echo "⚠️ Failed to wait for service, continuing anyway..."
+  wait_for_service "DefectDojo UI" "curl -m 5 -s -k -f https://defectdojo.${DOMAIN}/" || echo "⚠️ Failed to wait for service, continuing anyway..."
 
   echo "Checking DefectDojo Admin Credentials..."
   local dd_init_container
@@ -232,7 +330,7 @@ setup_crowdsec() {
 
 wait_proxies() {
   echo "Waiting for Proxies..."
-  wait_for_service "Traefik" "curl -s -k -f https://traefik.${DOMAIN}/dashboard/" || echo "⚠️ Traefik dashboard not reachable"
+  wait_for_service "Traefik" "curl -m 5 -s -k -f https://traefik.${DOMAIN}/dashboard/" || echo "⚠️ Traefik dashboard not reachable"
 }
 
 # --- Main execution ---
@@ -245,11 +343,17 @@ main() {
   fi
 
   init_quay
+  echo ">>> [main] calling setup_pki"
   setup_pki
+  echo ">>> [main] calling setup_storage"
   setup_storage
+  echo ">>> [main] calling setup_identity"
   setup_identity
+  echo ">>> [main] calling wait_proxies"
   wait_proxies
+  echo ">>> [main] calling setup_soc"
   setup_soc
+  echo ">>> [main] calling setup_crowdsec"
   setup_crowdsec
   
   echo "================================================="

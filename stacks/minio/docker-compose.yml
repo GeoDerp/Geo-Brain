@@ -42,6 +42,7 @@ services:
       retries: 3
       start_period: 5m
     labels:
+      - "kanidm.oidc.client_id=minio"
       - "traefik.enable=true"
       - "traefik.http.routers.minio-console.rule=Host(`minio.${DOMAIN}`)"
       - "traefik.http.routers.minio-console.entrypoints=websecure"

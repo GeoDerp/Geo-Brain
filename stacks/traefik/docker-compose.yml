@@ -57,6 +57,7 @@ services:
       - "traefik.http.routers.traefik-dashboard.tls.certresolver=stepca"
       - "traefik.http.routers.traefik-dashboard.service=api@internal"
       - "traefik.http.routers.traefik-dashboard.middlewares=authelia@file,security-headers@file"
+      - "authelia.access_control.policy=two_factor"
       - "security.stig.compliance=true"
       - "security.stig.role=proxy"
       - "homepage.group=Management"

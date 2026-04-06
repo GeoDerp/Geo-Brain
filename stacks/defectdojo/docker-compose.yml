@@ -32,11 +32,13 @@ services:
       retries: 3
       start_period: 5m
     labels:
+      - "kanidm.oidc.client_id=defectdojo"
       - "traefik.enable=true"
       - "traefik.http.routers.defectdojo.rule=Host(`defectdojo.${DOMAIN}`)"
       - "traefik.http.routers.defectdojo.entrypoints=websecure"
       - "traefik.http.routers.defectdojo.tls=true"
       - "traefik.http.routers.defectdojo.middlewares=authelia@file,security-headers@file"
+      - "authelia.access_control.policy=two_factor"
       - "traefik.http.services.defectdojo.loadbalancer.server.port=8080"
       - "security.stig.compliance=true"
       - "security.stig.role=vulnerability-mgmt"

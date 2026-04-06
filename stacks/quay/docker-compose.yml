@@ -142,8 +142,8 @@ services:
       timeout: 10s
       retries: 5
     labels:
+      - "kanidm.oidc.client_id=quay"
       - "security.stig.compliance=true"
-      - "security.stig.role=registry"
       - "traefik.enable=true"
       - "traefik.http.routers.quay.rule=Host(`quay.${DOMAIN}`)"
       - "traefik.http.routers.quay.entrypoints=websecure"

@@ -90,14 +90,16 @@ Your central access point for all services is the **Homepage (Dashboard):** `htt
 Before logging into downstream apps, you **must** bootstrap your identity provider:
 
 1. **Kanidm (Identity):** `https://kanidm.<DOMAIN>`
-   - First, run the manual bootstrap command shown at the end of the setup script to recover the `idm_admin` account.
-   - Log in using the recovery password, then navigate to **Persons** and set a permanent password.
-   - Create a service account named `authelia_svc` (used by Authelia for SSO/MFA). Set its password to the `AUTHELIA_LDAP_PASSWORD` defined in your `.env`.
-   - **OIDC Configuration:** The following stacks are **already pre-configured** to use OIDC. You only need to create the corresponding **OIDC Clients** in Kanidm using the values from the `setup-brain.sh` summary:
-     - **Quay** (Redirect: `https://quay.<DOMAIN>/oauth2/oidc/callback`)
-     - **DefectDojo** (Redirect: `https://defectdojo.<DOMAIN>/complete/oidc/`)
-     - **MinIO** (Redirect: `https://minio.<DOMAIN>/oauth_callback`)
-     - **Wazuh** (Redirect: `https://wazuh.<DOMAIN>/api/v1/auth/login`)
+   - `setup-brain.sh` automatically configures Kanidm (creating the `authelia_svc` service account, setting up OIDC clients, and injecting the generated secrets back into your `.env`).
+   - Use the `idm_admin` recovery password shown at the end of the setup script to log in.
+   - **Create Your User Account:**
+     - The Kanidm Web UI for the `idm_admin` account does not expose user creation natively. The intended method is via the Kanidm CLI.
+     - We have provided a wrapper script to automate creating your first daily-driver user account (e.g., `admin`). Run:
+       ```bash
+       ./scripts/create-kanidm-user.sh admin "Global Admin"
+       ```
+     - It will prompt you for the `idm_admin` recovery password and then automatically generate a secure, temporary initial password for your new account.
+     - You will use this new account and password to log into all SSO-protected services (Quay, Grafana, DefectDojo, etc.). You can change the password later by logging into the Kanidm Web UI (`https://kanidm.<DOMAIN>`).
 
 
 2. **Quay (Registry):** `https://quay.<DOMAIN>`
