@@ -17,6 +17,7 @@ services:
       - DD_SOCIAL_AUTH_OIDC_OIDC_ENDPOINT=https://kanidm.${DOMAIN}/oauth2/openid/defectdojo
       - DD_SOCIAL_AUTH_OIDC_KEY=defectdojo
       - DD_SOCIAL_AUTH_OIDC_SECRET=${DOJO_OIDC_SECRET}
+      - DD_INITIALIZE=true
     networks:
       - vulnerability-net
       - proxy-net
@@ -39,7 +40,7 @@ services:
       - "traefik.http.routers.defectdojo.tls=true"
       - "traefik.http.routers.defectdojo.middlewares=authelia@file,security-headers@file"
       - "authelia.access_control.policy=two_factor"
-      - "traefik.http.services.defectdojo.loadbalancer.server.port=8080"
+      - "traefik.http.services.defectdojo.loadbalancer.server.port=8081"
       - "security.stig.compliance=true"
       - "security.stig.role=vulnerability-mgmt"
       - "homepage.group=SOC"

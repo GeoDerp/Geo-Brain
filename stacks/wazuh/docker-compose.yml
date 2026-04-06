@@ -102,7 +102,7 @@ services:
           memory: 1G
           cpus: '0.5'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5601"]
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/5601'"]
       interval: 5m
       timeout: 10s
       retries: 3

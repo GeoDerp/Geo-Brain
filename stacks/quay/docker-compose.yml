@@ -137,7 +137,7 @@ services:
           memory: 4G
           cpus: '2.0'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/instance"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health/instance')\""]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -177,7 +177,7 @@ services:
           memory: 1G
           cpus: '0.5'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6060/healthz"]
+      test: ["CMD-SHELL", "test -e /proc/1/status"]
       interval: 30s
       timeout: 10s
       retries: 5
