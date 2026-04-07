@@ -44,6 +44,23 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
   fi
 fi
 
+# --- SSH Wrapper ---
+# podman remote (--connection) can hang on exec, ps, logs, and kill.
+# SSH executes these operations directly on the node for reliability.
+SSH_CMD=""
+if [[ -n "${REMOTE_HOST:-}" ]] && [[ -n "${SSH_KEY:-}" ]]; then
+    _ssh_key="${SSH_KEY/#\~/$HOME}"
+    SSH_CMD="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=120 -o ServerAliveInterval=10 -o ServerAliveCountMax=30 -i ${_ssh_key} -p ${SSH_PORT:-22} ${REMOTE_USER}@${REMOTE_HOST}"
+fi
+
+run_on_node() {
+    if [[ -n "$SSH_CMD" ]]; then
+        $SSH_CMD "$@"
+    else
+        eval "$@"
+    fi
+}
+
 # --- Helper Functions ---
 
 wait_for_service() {
@@ -129,6 +146,7 @@ unqualified-search-registries = ["quay.${DOMAIN}", "docker.io"]
 [[registry]]
 prefix = "docker.io"
 location = "quay.${DOMAIN}"
+insecure = false
 mirror-by-digest-only = false
 
 [[registry]]
@@ -143,14 +161,14 @@ EOF
 
   # Initialize admin user if first run (FEATURE_USER_INITIALIZE=true)
   local init_resp
-  init_resp=$(curl -s -k -X POST "${QUAY_API}/user/initialize" \
+  init_resp=$(curl -m 10 -s -k -X POST "${QUAY_API}/user/initialize" \
     -H "Content-Type: application/json" \
     -d "{\"username\": \"quayadmin\", \"password\": \"${ADMIN_PASSWORD}\", \"email\": \"admin@${DOMAIN}\"}" 2>/dev/null) || true
   QUAY_TOKEN=$(echo "$init_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null) || true
 
   if [[ -z "$QUAY_TOKEN" ]]; then
     # Already initialized — login to get token
-    QUAY_TOKEN=$(curl -s -k -X POST "${QUAY_API}/user/login" \
+    QUAY_TOKEN=$(curl -m 10 -s -k -X POST "${QUAY_API}/user/login" \
       -H "Content-Type: application/json" \
       -d "{\"user\": \"quayadmin\", \"password\": \"${ADMIN_PASSWORD}\"}" 2>/dev/null \
       | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null) || true
@@ -160,12 +178,12 @@ EOF
     for upstream in "docker.io" "ghcr.io" "quay.io"; do
       local org_name="${upstream//./-}-cache"
       # Create organization
-      curl -s -k -X POST "${QUAY_API}/organization/" \
+      curl -m 10 -s -k -X POST "${QUAY_API}/organization/" \
         -H "Authorization: Bearer ${QUAY_TOKEN}" \
         -H "Content-Type: application/json" \
         -d "{\"name\": \"${org_name}\", \"email\": \"${org_name}@${DOMAIN}\"}" 2>/dev/null || true
       # Enable proxy cache for the org
-      curl -s -k -X POST "${QUAY_API}/organization/${org_name}/proxycache" \
+      curl -m 10 -s -k -X POST "${QUAY_API}/organization/${org_name}/proxycache" \
         -H "Authorization: Bearer ${QUAY_TOKEN}" \
         -H "Content-Type: application/json" \
         -d "{\"upstream_registry\": \"${upstream}\"}" 2>/dev/null || true
@@ -181,24 +199,18 @@ setup_pki() {
   echo "--- 2) PKI (Step-CA & Traefik ACME) ---"
   wait_for_service "Step-CA" "curl -m 5 -s -k -f https://ca.${DOMAIN}/health" || echo "⚠️ Failed to wait for service, continuing anyway..."
 
-  local step_ca_container
-  step_ca_container=$($PODMAN ps -a --format "{{.Names}}" | grep step-ca | head -n 1 || echo "step-ca")
-
   echo "Adding ACME provisioner to Step-CA..."
-  if $PODMAN exec "$step_ca_container" step ca provisioner list --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt | grep -q '"name": "acme"'; then
+  if run_on_node "podman exec step-ca step ca provisioner list --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt" | grep -q '"name": "acme"'; then
      echo "🔹 ACME provisioner already exists."
   else
-     $PODMAN exec "$step_ca_container" step ca provisioner add acme --type ACME --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt
-     $PODMAN kill -s SIGHUP "$step_ca_container"
+     run_on_node "podman exec step-ca step ca provisioner add acme --type ACME --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt"
+     run_on_node "podman kill -s SIGHUP step-ca"
      echo "✅ Added ACME provisioner to Step-CA."
   fi
 
-  local traefik_container
-  traefik_container=$($PODMAN ps -a --format "{{.Names}}" | grep traefik | head -n 1 || echo "traefik")
-  
   echo "Injecting Step-CA Root into Traefik..."
   mkdir -p ./stacks/traefik/config/certs
-  if $PODMAN exec "$step_ca_container" cat /home/step/certs/root_ca.crt > ./stacks/traefik/config/certs/root_ca.crt; then
+  if run_on_node "podman exec step-ca cat /home/step/certs/root_ca.crt" > ./stacks/traefik/config/certs/root_ca.crt; then
     echo "✅ Traefik now trusts Step-CA."
   else
     echo "⚠️ Failed to inject Step-CA Root into Traefik. Traefik may not trust Step-CA."
@@ -210,11 +222,8 @@ setup_identity() {
   echo "--- 3) Identity (Kanidm) ---"
   wait_for_service "Kanidm" "curl -m 5 -s -k -f https://kanidm.${DOMAIN}/" || echo "⚠️ Failed to wait for service, continuing anyway..."
 
-  local kanidm_container
-  kanidm_container=$($PODMAN ps -a --format "{{.Names}}" | grep kanidm | head -n 1 || echo "kanidm")
-
   echo "Initializing Kanidm Admin Account..."
-  KANIDM_RECOVERY=$($PODMAN exec "$kanidm_container" /sbin/kanidmd recover-account -c /data/server.toml idm_admin 2>&1 | grep new_password | grep -o '"[^"]*"' | tr -d '"' || echo "")
+  KANIDM_RECOVERY=$(run_on_node "timeout 120 podman exec kanidm /sbin/kanidmd recover-account -c /data/server.toml idm_admin 2>&1" | grep new_password | grep -o '"[^"]*"' | tr -d '"' || echo "")
   if [[ -n "$KANIDM_RECOVERY" ]]; then
     echo "✅ Kanidm idm_admin recovery password captured."
   else
@@ -228,7 +237,7 @@ setup_identity() {
     CA_CERT_CONTENT=$(cat ./certs/ca.crt)
     
     local EXPECTED_APPS
-    EXPECTED_APPS=$(find ./stacks -type f -name "docker-compose.yml" -exec grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' {} \; 2>/dev/null | sort -u | tr '\n' ' ')
+    EXPECTED_APPS=$(find ./stacks -not -path './stacks/_template/*' -type f -name "docker-compose.yml" -exec grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' {} \; 2>/dev/null | sort -u | tr '\n' ' ')
 
     local payload=$(cat <<EOF
 #!/bin/sh
@@ -273,7 +282,7 @@ for APP in \$EXPECTED_APPS; do
 done
 
 # Cleanup orphaned clients (Idempotency)
-EXISTING_APPS=\$(kanidm system oauth2 list -C /tmp/ca.crt 2>/dev/null | grep "^name:" | awk '{print \$2}')
+EXISTING_APPS=\$(kanidm system oauth2 list -C /tmp/ca.crt 2>/dev/null | grep "^name:" | cut -d' ' -f2)
 for EXISTING in \$EXISTING_APPS; do
     if echo "\$EXPECTED_APPS" | grep -qw "\$EXISTING"; then
         continue
@@ -285,11 +294,14 @@ EOF
 )
 
     local setup_output
-    setup_output=$(echo "$payload" | $PODMAN run -i --rm --network host --env KANIDM_PASSWORD="${KANIDM_RECOVERY}" docker.io/kanidm/tools:1.9.2 sh 2>/dev/null)
-    
+    setup_output=$(echo "$payload" | $PODMAN run -i --rm --network host --env KANIDM_PASSWORD="${KANIDM_RECOVERY}" docker.io/kanidm/tools:1.9.2 sh 2>&1) || {
+      echo "⚠️ Kanidm OIDC automation failed (exit $?). Output:"
+      echo "$setup_output"
+    }
+
     # Process Authelia Password
     local authelia_pw
-    authelia_pw=$(echo "$setup_output" | grep "^AUTHELIA_LDAP_PASSWORD_VALUE=" | cut -d'=' -f2-)
+    authelia_pw=$(echo "$setup_output" | grep "^AUTHELIA_LDAP_PASSWORD_VALUE=" | cut -d'=' -f2- || true)
     if [[ -n "$authelia_pw" ]]; then
        # Force-update: the real Kanidm token must overwrite any placeholder
        sed -i "s|^AUTHELIA_LDAP_PASSWORD=.*|AUTHELIA_LDAP_PASSWORD=${authelia_pw}|" .env 2>/dev/null || true
@@ -301,7 +313,7 @@ EOF
     # Process OIDC Secrets dynamically
     for APP in $EXPECTED_APPS; do
        local secret_val
-       secret_val=$(echo "$setup_output" | grep -i "^${APP}_OIDC_SECRET_VALUE=" | cut -d'=' -f2-)
+       secret_val=$(echo "$setup_output" | grep -i "^${APP}_OIDC_SECRET_VALUE=" | cut -d'=' -f2- || true)
        if [[ -n "$secret_val" ]] && [[ "$secret_val" != "No secret configured" ]]; then
           local var_name=$(echo "${APP}_OIDC_SECRET" | tr '[:lower:]-' '[:upper:]_')
           write_env_secret "$var_name" "$secret_val"
@@ -316,7 +328,7 @@ setup_storage() {
   echo "--- 4) Secret Provisioning ---"
   
   local EXPECTED_APPS
-  EXPECTED_APPS=$(find ./stacks -type f -name "docker-compose.yml" -exec grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' {} \; 2>/dev/null | sort -u)
+  EXPECTED_APPS=$(find ./stacks -not -path './stacks/_template/*' -type f -name "docker-compose.yml" -exec grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' {} \; 2>/dev/null | sort -u)
   
   for APP in $EXPECTED_APPS; do
      local VAR_NAME="$(echo "${APP}_OIDC_SECRET" | tr '[:lower:]-' '[:upper:]_')"
@@ -339,13 +351,11 @@ setup_soc() {
   wait_for_service "DefectDojo UI" "curl -m 5 -s -k -f https://defectdojo.${DOMAIN}/" || echo "⚠️ Failed to wait for service, continuing anyway..."
 
   echo "Checking DefectDojo Admin Credentials..."
-  local dd_init_container
-  dd_init_container=$($PODMAN ps -a --format "{{.Names}}" | grep defectdojo-initializer | head -n 1 || true)
-  if [[ -n "$dd_init_container" ]]; then
-    DD_ADMIN_PASSWORD=$($PODMAN logs "$dd_init_container" 2>&1 | grep "Admin password:" | awk -F': ' '{print $2}' | tr -d '\r' || echo "Already initialized")
+  if run_on_node "podman container exists defectdojo-django" 2>/dev/null; then
+    DD_ADMIN_PASSWORD=$(run_on_node "podman logs defectdojo-django 2>&1" | grep "Admin password:" | awk -F': ' '{print $2}' | tr -d '\r' || echo "Already initialized")
     echo "✅ DefectDojo Local Admin Password: $DD_ADMIN_PASSWORD"
   else
-    echo "⚠️ DefectDojo initializer container not found."
+    echo "⚠️ DefectDojo container not found."
   fi
 }
 
@@ -353,11 +363,9 @@ setup_soc() {
 setup_crowdsec() {
   echo "--- 6) CrowdSec integration ---"
   if [[ "${ENABLE_CROWDSEC:-false}" == "true" ]]; then
-    local crowdsec_container
-    crowdsec_container=$($PODMAN ps --format "{{.Names}}" | grep crowdsec | head -n 1 || true)
-    if [[ -n "$crowdsec_container" ]]; then
-      if ! $PODMAN exec "$crowdsec_container" cscli bouncers list -o json | grep -q "bunkerweb-bouncer"; then
-        CROWDSEC_BOUNCER_KEY=$($PODMAN exec "$crowdsec_container" cscli bouncers add bunkerweb-bouncer -o raw)
+    if run_on_node "podman container exists crowdsec" 2>/dev/null; then
+      if ! run_on_node "podman exec crowdsec cscli bouncers list -o json" | grep -q "bunkerweb-bouncer"; then
+        CROWDSEC_BOUNCER_KEY=$(run_on_node "podman exec crowdsec cscli bouncers add bunkerweb-bouncer -o raw")
         echo "✅ Created CrowdSec Bouncer Key for BunkerWeb: $CROWDSEC_BOUNCER_KEY"
       fi
     fi
@@ -397,7 +405,8 @@ main() {
   echo "================================================="
   echo "🔐 BREAKGLASS & SSO SUMMARY"
   echo "================================================="
-  echo "1. Kanidm: https://kanidm.${DOMAIN} | Admin: idm_admin | Recovery: ${KANIDM_RECOVERY:-Check container logs}"
+  echo "1. Kanidm: https://kanidm.${DOMAIN} | idm_admin Recovery: ${KANIDM_RECOVERY:-Check container logs}"
+  echo "   ➡️  Create a UI login: ./scripts/create-kanidm-user.sh myadmin \"Global Admin\""
   echo "2. MinIO: https://minio.${DOMAIN} | Admin: ${MINIO_ROOT_USER:-minioadmin} / ${MINIO_ROOT_PASSWORD:-[REDACTED]}"
   echo "3. Quay: https://quay.${DOMAIN} | OIDC SSO Ready"
   echo "4. Wazuh: https://wazuh.${DOMAIN} | SSO via Authelia"
