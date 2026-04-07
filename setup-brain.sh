@@ -257,10 +257,10 @@ kanidm group add-members idm_unix_authentication_read auth_svc -C /tmp/ca.crt >/
 kanidm group add-members idm_people_pii_read auth_svc -C /tmp/ca.crt >/dev/null 2>&1 || true
 kanidm group add-members idm_account_mail_read auth_svc -C /tmp/ca.crt >/dev/null 2>&1 || true
 
-if ! kanidm service-account api-token status auth_svc -C /tmp/ca.crt 2>/dev/null | grep -q "default"; then
-   TOKEN=\$(kanidm service-account api-token generate auth_svc default -w -C /tmp/ca.crt 2>/dev/null | tail -n 1)
-   echo "AUTHELIA_LDAP_PASSWORD_VALUE=\${TOKEN}"
-fi
+# Always regenerate the token — previous signing keys may have rotated (KP0022)
+kanidm service-account api-token destroy auth_svc default -C /tmp/ca.crt >/dev/null 2>&1 || true
+TOKEN=\$(kanidm service-account api-token generate auth_svc default -w -C /tmp/ca.crt 2>/dev/null | tail -n 1)
+echo "AUTHELIA_LDAP_PASSWORD_VALUE=\${TOKEN}"
 
 EXPECTED_APPS="${EXPECTED_APPS}"
 for APP in \$EXPECTED_APPS; do
@@ -307,7 +307,8 @@ EOF
        sed -i "s|^AUTHELIA_LDAP_PASSWORD=.*|AUTHELIA_LDAP_PASSWORD=${authelia_pw}|" .env 2>/dev/null || true
        export AUTHELIA_LDAP_PASSWORD="$authelia_pw"
        echo "✅ Generated Kanidm API Token for Authelia."
-       echo "⚠️ Note: You must restart Authelia to pick up the new AUTHELIA_LDAP_PASSWORD: ./deploy.sh authelia restart"
+       echo ">>> Redeploying Authelia to pick up fresh token..."
+       ./deploy.sh authelia up 2>&1 || echo "⚠️ Authelia redeploy failed — run manually: ./deploy.sh authelia up"
     fi
 
     # Process OIDC Secrets dynamically
@@ -381,6 +382,8 @@ wait_proxies() {
 
 # --- Main execution ---
 main() {
+  local section="${1:-all}"
+
   echo "--- 0) Self-Healing & Pre-flight ---"
   if [[ "$PODMAN" == "podman" ]]; then
     for f in ${DATA_DIR}/kanidm/chain.pem ${DATA_DIR}/kanidm/key.pem; do
@@ -388,19 +391,29 @@ main() {
     done
   fi
 
-  init_quay
-  echo ">>> [main] calling setup_pki"
-  setup_pki
-  echo ">>> [main] calling setup_storage"
-  setup_storage
-  echo ">>> [main] calling setup_identity"
-  setup_identity
-  echo ">>> [main] calling wait_proxies"
-  wait_proxies
-  echo ">>> [main] calling setup_soc"
-  setup_soc
-  echo ">>> [main] calling setup_crowdsec"
-  setup_crowdsec
+  if [[ "$section" == "all" || "$section" == "quay" ]]; then
+    init_quay
+  fi
+  if [[ "$section" == "all" || "$section" == "pki" ]]; then
+    echo ">>> [main] calling setup_pki"
+    setup_pki
+  fi
+  if [[ "$section" == "all" || "$section" == "storage" || "$section" == "identity" ]]; then
+    echo ">>> [main] calling setup_storage"
+    setup_storage
+  fi
+  if [[ "$section" == "all" || "$section" == "identity" ]]; then
+    echo ">>> [main] calling setup_identity"
+    setup_identity
+  fi
+  if [[ "$section" == "all" ]]; then
+    echo ">>> [main] calling wait_proxies"
+    wait_proxies
+    echo ">>> [main] calling setup_soc"
+    setup_soc
+    echo ">>> [main] calling setup_crowdsec"
+    setup_crowdsec
+  fi
   
   echo "================================================="
   echo "🔐 BREAKGLASS & SSO SUMMARY"
