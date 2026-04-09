@@ -254,21 +254,36 @@ kanidm login -C /tmp/ca.crt >/dev/null 2>&1 || exit 1
 
 EXPECTED_APPS="${EXPECTED_APPS}"
 for APP in \$EXPECTED_APPS; do
-    # Set redirect URL based on app name
-    if [ "\$APP" = "oauth2-proxy" ]; then
-        REDIRECT_URL="https://auth.${DOMAIN}/oauth2/callback"
-    else
-        REDIRECT_URL="https://\$APP.${DOMAIN}/"
-    fi
+    # Set redirect URL and origin based on app name
+    ORIGIN_URL="https://\$APP.${DOMAIN}"
+    case "\$APP" in
+        oauth2-proxy)
+            ORIGIN_URL="https://auth.${DOMAIN}"
+            REDIRECT_URL="https://auth.${DOMAIN}/oauth2/callback"
+            ;;
+        minio)
+            REDIRECT_URL="https://minio.${DOMAIN}/oauth_callback"
+            ;;
+        quay)
+            REDIRECT_URL="https://quay.${DOMAIN}/oauth2/kanidm/callback"
+            ;;
+        defectdojo)
+            REDIRECT_URL="https://defectdojo.${DOMAIN}/complete/oidc/"
+            ;;
+        *)
+            REDIRECT_URL="https://\$APP.${DOMAIN}/"
+            ;;
+    esac
 
-    kanidm system oauth2 create "\$APP" "\$APP OIDC" "\$REDIRECT_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    kanidm system oauth2 create "\$APP" "\$APP OIDC" "\$ORIGIN_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    kanidm system oauth2 add-redirect-url "\$APP" "\$REDIRECT_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
     kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
     
     # Map idm_all_persons to the standard scopes so all users can access the app
     kanidm system oauth2 update-scope-map "\$APP" idm_all_persons openid profile email -C /tmp/ca.crt >/dev/null 2>&1 || true
     
     # Set the landing URL so the app appears on the Kanidm portal dashboard
-    kanidm system oauth2 set-landing-url "\$APP" "\$REDIRECT_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    kanidm system oauth2 set-landing-url "\$APP" "\$ORIGIN_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
     
     SECRET=\$(kanidm system oauth2 show-basic-secret "\$APP" -C /tmp/ca.crt 2>/dev/null | tail -n 1)
     if [ "\$SECRET" = "No secret configured" ] || [ -z "\$SECRET" ]; then

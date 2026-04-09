@@ -14,9 +14,9 @@ services:
     volumes:
       - ${PODMAN_SOCK}:/var/run/docker.sock:ro
       - ${DATA_DIR}/dockge:/app/data:z,U
-      - ../:/app/stacks:z,U
+      - ${STACKS_PATH}:${STACKS_PATH}:z,U
     environment:
-      - DOCKGE_STACKS_DIR=/app/stacks
+      - DOCKGE_STACKS_DIR=${STACKS_PATH}
     networks:
       - mgmt-net
       - proxy-net

@@ -75,7 +75,7 @@ services:
           memory: 1G
           cpus: '2.0'
     healthcheck:
-      test: ["CMD", "/var/ossec/bin/wazuh-control", "status"]
+      test: ["CMD-SHELL", "/var/ossec/bin/wazuh-control status | grep -q 'wazuh-analysisd is running'"]
       interval: 5m
       timeout: 10s
       retries: 3

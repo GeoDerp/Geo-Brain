@@ -42,3 +42,19 @@ FEATURE_PROXY_CACHE: true
 # DISA STIG / Privacy
 FEATURE_TELEMETRY_LOGGING: false
 FEATURE_APP_SPECIFIC_TOKENS: true
+
+# Kanidm OIDC SSO — DISABLED: Quay validates OIDC on startup via
+# client_credentials grant, which Kanidm does not support (returns 401).
+# The Kanidm client "quay" and secret (QUAY_OIDC_SECRET) are provisioned and
+# ready; re-enable when Kanidm adds client_credentials grant support.
+# FEATURE_DIRECT_LOGIN: true
+# KANIDM_LOGIN_CONFIG:
+#   CLIENT_ID: quay
+#   CLIENT_SECRET: ${QUAY_OIDC_SECRET}
+#   OIDC_SERVER: https://kanidm.${DOMAIN}/oauth2/openid/quay/
+#   LOGIN_SCOPES:
+#     - openid
+#     - profile
+#     - email
+#   PREFERRED_USERNAME_CLAIM_NAME: preferred_username
+#   SERVICE_NAME: Kanidm
