@@ -32,11 +32,10 @@ services:
       start_period: 5m
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.homepage.rule=Host(`home.${DOMAIN}`)"
+      - "traefik.http.routers.homepage.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.homepage.entrypoints=websecure"
       - "traefik.http.routers.homepage.tls=true"
-      - "traefik.http.routers.homepage.middlewares=authelia@file,security-headers@file"
-      - "authelia.access_control.policy=one_factor"
+      - "traefik.http.routers.homepage.middlewares=oauth2-proxy@file,security-headers@file"
       - "traefik.http.services.homepage.loadbalancer.server.port=3000"
       - "security.stig.compliance=true"
       - "security.stig.role=dashboard"
@@ -44,7 +43,7 @@ services:
       - "homepage.name=Dashboard"
       - "homepage.icon=homepage.png"
       - "homepage.description=Service Dashboard"
-      - "homepage.href=https://home.${DOMAIN}"
+      - "homepage.href=https://${DOMAIN}"
 
 networks:
   mgmt-net:

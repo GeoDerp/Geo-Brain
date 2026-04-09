@@ -1,0 +1,3 @@
+---
+# Services are auto-discovered from container labels via Docker/Podman socket.
+# Add manual service entries here if needed.

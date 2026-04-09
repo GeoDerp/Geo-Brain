@@ -19,3 +19,7 @@ output.elasticsearch:
   index: "wazuh-alerts-4.x-%{+yyyy.MM.dd}"
 
 logging.level: info
+
+# Filebeat 7.10.2's built-in seccomp filter lacks clone3 syscall needed by
+# glibc pthread_create on kernel 6.19+, causing SIGABRT. Disable it.
+seccomp.default_action: allow

@@ -1,0 +1,13 @@
+---
+- greeting:
+    text_size: xl
+    text: Geo-Brain
+- datetime:
+    text_size: l
+    format:
+      dateStyle: long
+      timeStyle: short
+      hour12: true
+- search:
+    provider: google
+    target: _blank

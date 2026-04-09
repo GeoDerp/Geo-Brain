@@ -2,7 +2,7 @@ cluster.name: wazuh-cluster
 node.name: wazuh.indexer
 network.host: 0.0.0.0
 discovery.type: single-node
-
-plugins.security.disabled: true
+path.data: /var/lib/opensearch/data
 
 compatibility.override_main_response_version: true
+plugins.security.disabled: true

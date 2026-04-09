@@ -4,16 +4,16 @@
 
 http:
   middlewares:
-    # Authelia ForwardAuth middleware — applied to protected services via labels
-    authelia:
+    # OAuth2 Proxy ForwardAuth — redirects unauthenticated users to Kanidm login
+    oauth2-proxy:
       forwardAuth:
-        address: "http://authelia:9091/api/authz/forward-auth"
+        address: "http://oauth2-proxy:4180/"
         trustForwardHeader: true
         authResponseHeaders:
-          - Remote-User
-          - Remote-Groups
-          - Remote-Email
-          - Remote-Name
+          - X-Auth-Request-User
+          - X-Auth-Request-Email
+          - X-Auth-Request-Groups
+          - X-Auth-Request-Access-Token
 
     # CrowdSec bouncer middleware — requires Traefik plugin installation
     # Uncomment after installing crowdsec-bouncer-traefik-plugin

@@ -67,10 +67,6 @@ for var_name in USERNAME DISPLAY_NAME PASSWORD; do
     fi
 done
 
-# Generate a strong random POSIX password for LDAP/Authelia login
-# (Kanidm LDAP bind uses the UNIX/POSIX password, NOT the primary credential)
-POSIX_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 20)
-
 echo ">>> Creating Kanidm user '${USERNAME}' via kanidm/tools container..."
 
 CA_CERT=$(cat "$REPO_ROOT/certs/ca.crt")
@@ -92,22 +88,6 @@ CAEOF
     echo \">>> Creating person ${USERNAME}...\"
     kanidm person create ${USERNAME} \"${DISPLAY_NAME}\" -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1 || true
 
-    echo \">>> Enabling POSIX attributes (required for LDAP bind via Authelia)...\"
-    kanidm person posix set ${USERNAME} -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1 || true
-
-    echo \">>> Setting POSIX password (used for Authelia/SSO login)...\"
-    TOKEN_JSON=\$(cat /root/.cache/kanidm_tokens 2>/dev/null)
-    API_TOKEN=\$(echo \"\$TOKEN_JSON\" | grep -oP \"idm_admin@[^\\\"]+\\\":\\s*\\\"\\K[^\\\"]+\")
-    POSIX_HTTP=\$(curl -sk -o /dev/null -w \"%{http_code}\" --cacert /tmp/ca.crt -X PUT \
-      -H \"Authorization: Bearer \$API_TOKEN\" \
-      -H \"Content-Type: application/json\" \
-      -d \"{\\\"value\\\":\\\"${POSIX_PASSWORD}\\\"}\" \
-      ${KANIDM_URL}/v1/person/${USERNAME}/_unix/_credential)
-    if [ \"\$POSIX_HTTP\" = \"200\" ]; then
-        echo \"KANIDM_POSIX_PW_OK\"
-    else
-        echo \"KANIDM_POSIX_PW_FAILED (HTTP \$POSIX_HTTP)\"
-    fi
 
     echo \">>> Verifying account exists...\"
     if ! kanidm person get ${USERNAME} -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt >/dev/null 2>&1; then
@@ -139,11 +119,6 @@ if echo "$SETUP_OUTPUT" | grep -q "KANIDM_PERSON_MISSING"; then
     exit 1
 fi
 
-if echo "$SETUP_OUTPUT" | grep -q "KANIDM_POSIX_PW_FAILED"; then
-    echo "⚠️  POSIX password could not be set via API. Authelia/SSO login will not work."
-    echo "   You may need to set it manually via the Kanidm API."
-fi
-
 if echo "$SETUP_OUTPUT" | grep -q "KANIDM_TOKEN_FAILED"; then
     echo "❌ Failed to generate credential reset token."
     exit 1
@@ -157,14 +132,11 @@ if [[ -n "$TOKEN" ]]; then
     RESET_URL="${KANIDM_URL}/ui/reset?token=${TOKEN}"
     echo "✅ User '${USERNAME}' created successfully."
     echo "================================================="
-    echo "🔑 Authelia/SSO Login Password (POSIX):"
-    echo "   ${POSIX_PASSWORD}"
-    echo ""
-    echo "🔗 Kanidm Web UI Reset URL (valid for 1 hour):"
+    echo "� Kanidm Credential Reset URL (valid for 1 hour):"
     echo "   $RESET_URL"
     echo "================================================="
-    echo "Use the POSIX password above to log into Authelia-protected services."
-    echo "Use the reset URL to set a password for the Kanidm web UI."
+    echo "Share this URL with the user to set their password."
+    echo "They will use this password to log into all SSO-protected services via Kanidm."
 else
     echo "⚠️  User '${USERNAME}' was created but could not generate a reset token."
     echo "   You can manually create one:"

@@ -231,7 +231,7 @@ setup_identity() {
     echo "⚠️ Admin account recovery skipped or password not captured."
   fi
 
-  echo "Automating Kanidm Service Accounts and OIDC Clients..."
+  echo "Automating Kanidm OIDC Clients..."
   if [[ -n "$KANIDM_RECOVERY" ]] && [[ "$KANIDM_RECOVERY" != "Check container logs" ]]; then
     local CA_CERT_CONTENT
     CA_CERT_CONTENT=$(cat ./certs/ca.crt)
@@ -252,26 +252,23 @@ CAEOF
 
 kanidm login -C /tmp/ca.crt >/dev/null 2>&1 || exit 1
 
-kanidm service-account create auth_svc 'Authelia Service Account' idm_admin -C /tmp/ca.crt >/dev/null 2>&1 || true
-kanidm group add-members idm_unix_authentication_read auth_svc -C /tmp/ca.crt >/dev/null 2>&1 || true
-kanidm group add-members idm_people_pii_read auth_svc -C /tmp/ca.crt >/dev/null 2>&1 || true
-kanidm group add-members idm_account_mail_read auth_svc -C /tmp/ca.crt >/dev/null 2>&1 || true
-
-# Always regenerate the token — previous signing keys may have rotated (KP0022)
-kanidm service-account api-token destroy auth_svc default -C /tmp/ca.crt >/dev/null 2>&1 || true
-TOKEN=\$(kanidm service-account api-token generate auth_svc default -w -C /tmp/ca.crt 2>/dev/null | tail -n 1)
-echo "AUTHELIA_LDAP_PASSWORD_VALUE=\${TOKEN}"
-
 EXPECTED_APPS="${EXPECTED_APPS}"
 for APP in \$EXPECTED_APPS; do
-    kanidm system oauth2 create "\$APP" "\$APP OIDC" "https://\$APP.${DOMAIN}/" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    # Set redirect URL based on app name
+    if [ "\$APP" = "oauth2-proxy" ]; then
+        REDIRECT_URL="https://auth.${DOMAIN}/oauth2/callback"
+    else
+        REDIRECT_URL="https://\$APP.${DOMAIN}/"
+    fi
+
+    kanidm system oauth2 create "\$APP" "\$APP OIDC" "\$REDIRECT_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
     kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
     
     # Map idm_all_persons to the standard scopes so all users can access the app
     kanidm system oauth2 update-scope-map "\$APP" idm_all_persons openid profile email -C /tmp/ca.crt >/dev/null 2>&1 || true
     
     # Set the landing URL so the app appears on the Kanidm portal dashboard
-    kanidm system oauth2 set-landing-url "\$APP" "https://\$APP.${DOMAIN}/" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    kanidm system oauth2 set-landing-url "\$APP" "\$REDIRECT_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
     
     SECRET=\$(kanidm system oauth2 show-basic-secret "\$APP" -C /tmp/ca.crt 2>/dev/null | tail -n 1)
     if [ "\$SECRET" = "No secret configured" ] || [ -z "\$SECRET" ]; then
@@ -299,20 +296,19 @@ EOF
       echo "$setup_output"
     }
 
-    # Process Authelia Password
-    local authelia_pw
-    authelia_pw=$(echo "$setup_output" | grep "^AUTHELIA_LDAP_PASSWORD_VALUE=" | cut -d'=' -f2- || true)
-    if [[ -n "$authelia_pw" ]]; then
-       # Force-update: the real Kanidm token must overwrite any placeholder
-       sed -i "s|^AUTHELIA_LDAP_PASSWORD=.*|AUTHELIA_LDAP_PASSWORD=${authelia_pw}|" .env 2>/dev/null || true
-       export AUTHELIA_LDAP_PASSWORD="$authelia_pw"
-       echo "✅ Generated Kanidm API Token for Authelia."
-       echo ">>> Redeploying Authelia to pick up fresh token..."
-       ./deploy.sh authelia up 2>&1 || echo "⚠️ Authelia redeploy failed — run manually: ./deploy.sh authelia up"
+    # Process OAuth2 Proxy OIDC secret and redeploy
+    local oauth2_proxy_secret
+    oauth2_proxy_secret=$(echo "$setup_output" | grep "^oauth2-proxy_OIDC_SECRET_VALUE=" | cut -d'=' -f2- || true)
+    if [[ -n "$oauth2_proxy_secret" ]] && [[ "$oauth2_proxy_secret" != "No secret configured" ]]; then
+       write_env_secret "OAUTH2_PROXY_CLIENT_SECRET" "$oauth2_proxy_secret"
+       echo "✅ Generated Kanidm OIDC secret for OAuth2 Proxy."
+       echo ">>> Redeploying OAuth2 Proxy to pick up fresh OIDC config..."
+       ./deploy.sh oauth2-proxy up 2>&1 || echo "⚠️ OAuth2 Proxy redeploy failed — run manually: ./deploy.sh oauth2-proxy up"
     fi
 
-    # Process OIDC Secrets dynamically
+    # Process OIDC Secrets dynamically for all other apps
     for APP in $EXPECTED_APPS; do
+       [[ "$APP" == "oauth2-proxy" ]] && continue
        local secret_val
        secret_val=$(echo "$setup_output" | grep -i "^${APP}_OIDC_SECRET_VALUE=" | cut -d'=' -f2- || true)
        if [[ -n "$secret_val" ]] && [[ "$secret_val" != "No secret configured" ]]; then
@@ -340,10 +336,13 @@ setup_storage() {
   # Hardcoded required secrets (non-OIDC)
   ensure_secret_and_env "DOJO_SECRET_KEY" "dojo_secret_key"
 
-  # Authelia secrets — placeholders so Authelia can start before setup_identity() runs
-  ensure_secret_and_env "AUTHELIA_JWT_SECRET" "authelia_jwt_secret"
-  ensure_secret_and_env "AUTHELIA_ENCRYPTION_KEY" "authelia_encryption_key"
-  ensure_secret_and_env "AUTHELIA_LDAP_PASSWORD" "authelia_ldap_password"
+  # OAuth2 Proxy cookie secret (must be exactly 16, 24, or 32 raw bytes)
+  if [ -z "${OAUTH2_PROXY_COOKIE_SECRET:-}" ]; then
+    local cookie_secret
+    cookie_secret="$(openssl rand -hex 16)"
+    create_secret "oauth2_proxy_cookie_secret" "$cookie_secret"
+    write_env_secret "OAUTH2_PROXY_COOKIE_SECRET" "$cookie_secret"
+  fi
 }
 
 # --- 5) SOC (Wazuh & DefectDojo) ---
@@ -422,8 +421,7 @@ main() {
   echo "   ➡️  Create a UI login: ./scripts/create-kanidm-user.sh myadmin \"Global Admin\""
   echo "2. MinIO: https://minio.${DOMAIN} | Admin: ${MINIO_ROOT_USER:-minioadmin} / ${MINIO_ROOT_PASSWORD:-[REDACTED]}"
   echo "3. Quay: https://quay.${DOMAIN} | OIDC SSO Ready"
-  echo "4. Wazuh: https://wazuh.${DOMAIN} | SSO via Authelia"
-  echo "5. n8n: https://n8n.${DOMAIN} | OIDC SSO Ready"
+  echo "4. Wazuh: https://wazuh.${DOMAIN} | SSO via OAuth2 Proxy"
   echo "================================================="
 }
 

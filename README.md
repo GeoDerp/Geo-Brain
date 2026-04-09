@@ -17,7 +17,7 @@ For a detailed breakdown of every tool and architectural choice, see **[TOOLS_EX
 The Geo-Brain homelab is organized into discrete **stacks**:
 
 - **Core Infrastructure:** `step-ca` (Internal PKI), `quay` (Container Registry), `traefik` (Reverse Proxy)
-- **Identity & Access:** `kanidm` (Identity Provider), `authelia` (SSO/MFA)
+- **Identity & Access:** `kanidm` (Identity Provider), `oauth2-proxy` (SSO via OIDC)
 - **Security Operations:** `wazuh` (SIEM), `falco` (Runtime Security), `crowdsec` (IPS)
 - **Observability:** `prometheus` & `grafana` (Metrics), `vector` & `loki` (Logs)
 - **Management:** `homepage` (Dashboard), `dockge` (Stack UI)
@@ -90,13 +90,13 @@ Your central access point for all services is the **Homepage (Dashboard):** `htt
 Before logging into downstream apps, you **must** bootstrap your identity provider:
 
 1. **Kanidm (Identity):** `https://kanidm.<DOMAIN>`
-   - `setup-brain.sh` automatically configures Kanidm (creating the `authelia_svc` service account, setting up OIDC clients, and injecting the generated secrets back into your `.env`).
+   - `setup-brain.sh` automatically configures Kanidm (registering OIDC clients and injecting the generated secrets back into your `.env`).
    - Use the `idm_admin` recovery password shown at the end of the setup script to log in.
    - **Create Your User Account:**
      - The Kanidm Web UI for the `idm_admin` account does not expose user creation natively. The intended method is via the Kanidm CLI.
      - We have provided a wrapper script to automate creating your first daily-driver user account (e.g., `admin`). Run:
        ```bash
-       ./scripts/create-kanidm-user.sh admin "Global Admin"
+       ./scripts/create-kanidm-user.sh supercoolusername "Global Admin"
        ```
      - It will prompt you for the `idm_admin` recovery password and then automatically generate a secure, temporary initial password for your new account.
      - You will use this new account and password to log into all SSO-protected services (Quay, Grafana, DefectDojo, etc.). You can change the password later by logging into the Kanidm Web UI (`https://kanidm.<DOMAIN>`).
@@ -120,7 +120,7 @@ Before logging into downstream apps, you **must** bootstrap your identity provid
    - **Local Admin:** Uses `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` from your `.env`.
 
 7. **Grafana (Observability):** `https://grafana.<DOMAIN>`
-   - **SSO:** Automatic via Authelia ForwardAuth headers. No manual setup required.
+   - **SSO:** Automatic via OAuth2 Proxy ForwardAuth headers. No manual setup required.
 
 8. **Dockge (Stack Management):** `https://dockge.<DOMAIN>`
    - First-time access will prompt you to create the local admin account.

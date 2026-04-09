@@ -1,0 +1,15 @@
+---
+title: Geo-Brain
+favicon: /images/logo.svg
+theme: dark
+color: stone
+background:
+  image: ""
+  blur: sm
+  saturate: 50
+  brightness: 50
+  opacity: 50
+headerStyle: clean
+cardBlur: md
+providers:
+  docker: podman

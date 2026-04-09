@@ -32,7 +32,7 @@ This document provides an educational overview of all tools and technologies use
   - [Terrascan](#terrascan)
   - [Gitleaks](#gitleaks)
 - [Strategic Infrastructure](#strategic-infrastructure)
-  - [Kanidm / Authelia](#kanidm--authelia)
+  - [Kanidm / OAuth2 Proxy](#kanidm--oauth2-proxy)
   - [Quay](#quay)
   - [Step-CA](#step-ca)
   - [MinIO](#minio)
@@ -70,7 +70,7 @@ graph TD
 
             subgraph AUTH ["Identity & Access"]
                 IAM["Kanidm — Identity / LDAP"]
-                AU["Authelia — SSO + MFA"]
+                AU["OAuth2 Proxy — OIDC Forward-Auth"]
             end
 
             subgraph ZT_MTLS ["Zero-Trust mTLS Network (Internal)"]
@@ -117,7 +117,7 @@ graph TD
     SD -- "127.0.0.1" --> APPS
 
     TR -- "ForwardAuth (MFA check)" --> AU
-    AU -- "LDAP Verify" --> IAM
+    AU -- "OIDC Verify" --> IAM
     AU -. "auth OK" .-> TR
     TR -- "proxy" --> HP & DG & GF & WZ & DD
 
@@ -296,12 +296,12 @@ labels:
 **Why it's used:**
 - **Dynamic Configuration:** Automatically discovers services via Podman labels.
 - **TLS Termination:** Manages internal TLS certificates issued by Step-CA.
-- **SSO Integration:** Forwards authentication requests to Authelia for centralized SSO.
+- **SSO Integration:** Forwards authentication requests to OAuth2 Proxy for centralized SSO.
 - **Rootless Compatible:** Runs efficiently in a rootless Podman environment.
 
 **Protection Workflow:**
 ```
-User → Traefik (TLS) → Authelia (MFA) → Backend Service
+User → Traefik (TLS) → OAuth2 Proxy (OIDC) → Kanidm Login → Backend Service
 ```
 
 ---
@@ -491,15 +491,16 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 **Why it's used:**
 - **Centralized IAM:** Kanidm provides Single Sign-On (SSO) via OpenID Connect (OIDC) for all supported web interfaces (Quay, Wazuh, DefectDojo, MinIO, etc.).
 - **Role-Based Access Control (RBAC):** We define groups (like `system_admins`) in Kanidm. When an OIDC token is minted for an application like Quay or DefectDojo, Kanidm passes these group memberships as "scopes" or "roles" within the JWT claims. The downstream application maps these claims to its internal admin tags. This means you grant administrative access centrally in Kanidm, rather than per-stack.
-- **Service Accounts:** It securely handles service-to-service authentication (e.g., Authelia validating user passwords against Kanidm's LDAP interface using a dedicated `authelia_svc` account).
+- **OIDC Clients:** Applications that support OIDC natively (Quay, Wazuh, DefectDojo, MinIO, etc.) authenticate directly against Kanidm. For applications that don't support OIDC, OAuth2 Proxy acts as a forward-auth middleware, redirecting unauthenticated users to Kanidm's login page.
 
-### Authelia
+### OAuth2 Proxy
 
-**What it is:** Authelia is an authentication and authorization server that acts as a middleware companion to Traefik.
+**What it is:** OAuth2 Proxy is a reverse proxy and forward-auth provider that authenticates users via OpenID Connect (OIDC).
 
 **Why it's used:**
-- **MFA enforcement:** While Kanidm handles the primary identity, Authelia can enforce Two-Factor Authentication (2FA) for applications that do not natively support OIDC.
-- **Forward-Auth:** Traefik intercepts incoming requests and asks Authelia if the user is authorized. Authelia checks against Kanidm via LDAP. If authorized, Traefik lets the request through.
+- **OIDC-Based Forward-Auth:** Traefik intercepts incoming requests and asks OAuth2 Proxy if the user is authenticated. OAuth2 Proxy redirects unauthenticated users to Kanidm's OIDC login page. Once authenticated, Traefik lets the request through.
+- **No LDAP Required:** Unlike Authelia, OAuth2 Proxy uses the OIDC protocol natively, eliminating the need for LDAP service accounts or POSIX passwords.
+- **Seamless SSO:** Users authenticate once via Kanidm's web UI and gain access to all protected services via cookie-based sessions.
 
 ---
 
@@ -552,7 +553,7 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 | **Image Linting** | Dockle | Best practice validation |
 | **IaC Scanning** | Checkov, Terrascan | Configuration security |
 | **Secret Detection** | Gitleaks | Credential leak prevention |
-| **Identity** | Kanidm, Authelia | Authentication and authorization |
+| **Identity** | Kanidm, OAuth2 Proxy | Authentication and authorization |
 | **Registry** | Quay | Image caching and scanning |
 | **PKI** | Step-CA | Internal certificate authority |
 | **IPS** | CrowdSec | Intrusion prevention |

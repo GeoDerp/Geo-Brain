@@ -1,0 +1,58 @@
+/* Geo-Brain Homepage Theme — matches logo.svg terracotta/peach palette */
+/* Primary: #D4836B  Accent: #E8A087  Light: #F2BBA7  Stroke: #C07058 */
+
+:root {
+  --geo-primary: #D4836B;
+  --geo-accent: #E8A087;
+  --geo-light: #F2BBA7;
+  --geo-stroke: #C07058;
+  --geo-dark: #1a1412;
+  --geo-surface: #231c19;
+  --geo-card: #2a2220;
+}
+
+/* Dark background with warm undertone */
+#page_container {
+  background: linear-gradient(160deg, var(--geo-dark) 0%, #1f1815 50%, #241a17 100%) !important;
+}
+
+/* Service cards — warm dark surface */
+div[class*="service"] > div {
+  background-color: var(--geo-card) !important;
+  border: 1px solid rgba(212, 131, 107, 0.12) !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+div[class*="service"] > div:hover {
+  border-color: rgba(212, 131, 107, 0.35) !important;
+  box-shadow: 0 4px 20px rgba(212, 131, 107, 0.08) !important;
+}
+
+/* Group headers — terracotta accent */
+h2 {
+  color: var(--geo-accent) !important;
+}
+
+/* Service names */
+div[class*="service"] span[class*="name"] {
+  color: var(--geo-light) !important;
+}
+
+/* Links / titles with warm tone */
+a {
+  color: var(--geo-light) !important;
+}
+
+a:hover {
+  color: var(--geo-primary) !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar-thumb {
+  background-color: var(--geo-stroke) !important;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: var(--geo-dark) !important;
+}

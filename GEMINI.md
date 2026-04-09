@@ -43,13 +43,12 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 
 ### Identity & Security Infrastructure
 - **Kanidm (IDM):** Primary Identity Management server (LDAP/OIDC).
-- **Authelia (Auth Portal):** Single Sign-On portal and 2FA provider.
-- **Step-CA (PKI):** Internal Certificate Authority for automated TLS (`*.example.local`).
+- **OAuth2 Proxy (Auth Portal):** OIDC-based forward-auth proxy for SSO via Kanidm.- **Step-CA (PKI):** Internal Certificate Authority for automated TLS (`*.example.local`).
 - **Quay (Registry):** Local OCI registry and pull-through cache with integrated Clair scanning.
 - **MinIO (Storage):** S3-compatible object storage for Loki chunks and Velero/Restic backups.
 
 ### Optional Stacks (WIP)
-- **Pangolin (Tunnel Proxy):** Identity-aware reverse proxy and WireGuard VPN for zero-trust remote access. Replaces Traefik + Authelia when used.
+- **Pangolin (Tunnel Proxy):** Identity-aware reverse proxy and WireGuard VPN for zero-trust remote access. Replaces Traefik + OAuth2 Proxy when used.
 - **BunkerWeb (WAF):** L7 Web Application Firewall with ModSecurity + OWASP CRS, rate limiting, DDoS protection, and CrowdSec integration. Sits in front of Traefik.
 
 ## Tooling & Automation
