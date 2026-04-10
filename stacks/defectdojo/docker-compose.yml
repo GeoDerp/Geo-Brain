@@ -46,7 +46,7 @@ services:
       - "traefik.http.routers.defectdojo.rule=Host(`defectdojo.${DOMAIN}`)"
       - "traefik.http.routers.defectdojo.entrypoints=websecure"
       - "traefik.http.routers.defectdojo.tls=true"
-      - "traefik.http.routers.defectdojo.middlewares=oauth2-proxy@file,security-headers@file"
+      - "traefik.http.routers.defectdojo.middlewares=oauth2-proxy-admin@file,security-headers@file"
       - "traefik.http.services.defectdojo.loadbalancer.server.port=8081"
       - "security.stig.compliance=true"
       - "security.stig.role=vulnerability-mgmt"

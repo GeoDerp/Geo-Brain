@@ -49,7 +49,7 @@ services:
       - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
       - "traefik.http.routers.grafana.entrypoints=websecure"
       - "traefik.http.routers.grafana.tls=true"
-      - "traefik.http.routers.grafana.middlewares=oauth2-proxy@file,security-headers@file"
+      - "traefik.http.routers.grafana.middlewares=oauth2-proxy-admin@file,security-headers@file"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
       - "security.stig.compliance=true"
       - "security.stig.role=visualization"

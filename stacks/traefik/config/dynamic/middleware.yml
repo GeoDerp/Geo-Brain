@@ -15,6 +15,17 @@ http:
           - X-Auth-Request-Groups
           - X-Auth-Request-Access-Token
 
+    # OAuth2 Proxy Admin ForwardAuth — only brain_admins group can access
+    oauth2-proxy-admin:
+      forwardAuth:
+        address: "http://oauth2-proxy-admin:4180/"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Auth-Request-User
+          - X-Auth-Request-Email
+          - X-Auth-Request-Groups
+          - X-Auth-Request-Access-Token
+
     # CrowdSec bouncer middleware — requires Traefik plugin installation
     # Uncomment after installing crowdsec-bouncer-traefik-plugin
     # crowdsec:

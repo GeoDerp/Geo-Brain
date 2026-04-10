@@ -125,7 +125,7 @@ services:
       - "traefik.http.routers.wazuh.rule=Host(`wazuh.${DOMAIN}`)"
       - "traefik.http.routers.wazuh.entrypoints=websecure"
       - "traefik.http.routers.wazuh.tls=true"
-      - "traefik.http.routers.wazuh.middlewares=oauth2-proxy@file,security-headers@file"
+      - "traefik.http.routers.wazuh.middlewares=oauth2-proxy-admin@file,security-headers@file"
       - "traefik.http.services.wazuh.loadbalancer.server.port=5601"
       - "security.stig.compliance=true"
       - "security.stig.role=dashboard"

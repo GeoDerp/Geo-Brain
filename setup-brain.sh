@@ -252,6 +252,11 @@ CAEOF
 
 kanidm login -C /tmp/ca.crt >/dev/null 2>&1 || exit 1
 
+# --- Create RBAC groups (idempotent) ---
+echo ">>> Creating RBAC groups..."
+kanidm group create brain_admins -C /tmp/ca.crt >/dev/null 2>&1 || true
+kanidm group create brain_users -C /tmp/ca.crt >/dev/null 2>&1 || true
+
 EXPECTED_APPS="${EXPECTED_APPS}"
 for APP in \$EXPECTED_APPS; do
     # Set redirect URL and origin based on app name
@@ -279,8 +284,14 @@ for APP in \$EXPECTED_APPS; do
     kanidm system oauth2 add-redirect-url "\$APP" "\$REDIRECT_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
     kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
     
-    # Map idm_all_persons to the standard scopes so all users can access the app
-    kanidm system oauth2 update-scope-map "\$APP" idm_all_persons openid profile email -C /tmp/ca.crt >/dev/null 2>&1 || true
+    # Remove legacy idm_all_persons scope map (replaced by group-based maps)
+    kanidm system oauth2 delete-scope-map "\$APP" idm_all_persons -C /tmp/ca.crt >/dev/null 2>&1 || true
+    
+    # Admins always get access; regular users only get oauth2-proxy (SSO gateway)
+    kanidm system oauth2 update-scope-map "\$APP" brain_admins openid profile email groups -C /tmp/ca.crt >/dev/null 2>&1 || true
+    if [ "\$APP" = "oauth2-proxy" ]; then
+        kanidm system oauth2 update-scope-map "\$APP" brain_users openid profile email groups -C /tmp/ca.crt >/dev/null 2>&1 || true
+    fi
     
     # Set the landing URL so the app appears on the Kanidm portal dashboard
     kanidm system oauth2 set-landing-url "\$APP" "\$ORIGIN_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true

@@ -26,7 +26,10 @@ services:
       - --cookie-domain=.${DOMAIN}
       - --email-domain=*
       - --oidc-email-claim=preferred_username
-      - --scope=openid profile email
+      - --oidc-groups-claim=groups
+      - --scope=openid profile email groups
+      - --allowed-group=brain_admins
+      - --allowed-group=brain_users
       - --redirect-url=https://auth.${DOMAIN}/oauth2/callback
       - --whitelist-domain=.${DOMAIN}
       - --set-xauthrequest=true
@@ -69,6 +72,67 @@ services:
       - "homepage.icon=oauth.png"
       - "homepage.description=SSO Auth Portal"
       - "homepage.href=https://auth.${DOMAIN}"
+
+  oauth2-proxy-admin:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+    container_name: oauth2-proxy-admin
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    user: "${PUID:-1000}:${PGID:-1000}"
+    userns_mode: keep-id
+    command:
+      - --http-address=0.0.0.0:4180
+      - --reverse-proxy=true
+      - --provider=oidc
+      - --provider-display-name=Kanidm
+      - --oidc-issuer-url=https://kanidm.${DOMAIN}/oauth2/openid/oauth2-proxy
+      - --client-id=oauth2-proxy
+      - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET}
+      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
+      - --cookie-secure=true
+      - --cookie-samesite=lax
+      - --cookie-domain=.${DOMAIN}
+      - --email-domain=*
+      - --oidc-email-claim=preferred_username
+      - --oidc-groups-claim=groups
+      - --scope=openid profile email groups
+      - --allowed-group=brain_admins
+      - --redirect-url=https://auth.${DOMAIN}/oauth2/callback
+      - --whitelist-domain=.${DOMAIN}
+      - --set-xauthrequest=true
+      - --set-authorization-header=true
+      - --pass-authorization-header=true
+      - --skip-provider-button=true
+      - --upstream=static://202
+      - --ssl-insecure-skip-verify=true
+      - --cookie-expire=1h
+      - --cookie-refresh=30m
+      - --cookie-name=_oauth2_proxy_admin
+    networks:
+      - identity-net
+      - proxy-net
+    ports:
+      - "4181:4180"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+    healthcheck:
+      test: ["CMD", "/bin/oauth2-proxy", "--version"]
+      interval: 5m
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=auth-proxy"
 
 networks:
   identity-net:
