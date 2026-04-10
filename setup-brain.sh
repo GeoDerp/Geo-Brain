@@ -391,15 +391,21 @@ setup_soc() {
 # --- 6) CrowdSec integration ---
 setup_crowdsec() {
   echo "--- 6) CrowdSec integration ---"
-  if [[ "${ENABLE_CROWDSEC:-false}" == "true" ]]; then
-    if run_on_node "podman container exists crowdsec" 2>/dev/null; then
-      if ! run_on_node "podman exec crowdsec cscli bouncers list -o json" | grep -q "bunkerweb-bouncer"; then
-        CROWDSEC_BOUNCER_KEY=$(run_on_node "podman exec crowdsec cscli bouncers add bunkerweb-bouncer -o raw")
-        echo "✅ Created CrowdSec Bouncer Key for BunkerWeb: $CROWDSEC_BOUNCER_KEY"
+  if run_on_node "podman container exists crowdsec" 2>/dev/null; then
+    # Register a bouncer for the Traefik plugin if not already present
+    if ! run_on_node "podman exec crowdsec cscli bouncers list -o json" 2>/dev/null | grep -q "traefik-bouncer"; then
+      CROWDSEC_KEY=$(run_on_node "podman exec crowdsec cscli bouncers add traefik-bouncer -o raw" 2>/dev/null)
+      if [[ -n "$CROWDSEC_KEY" ]]; then
+        write_env_secret "CROWDSEC_BOUNCER_API_KEY" "$CROWDSEC_KEY"
+        echo "✅ Created CrowdSec Bouncer API Key for Traefik."
+        echo ">>> Redeploying Traefik to pick up bouncer key..."
+        ./deploy.sh traefik up
       fi
+    else
+      echo "🔹 CrowdSec traefik-bouncer already registered."
     fi
   else
-    echo "🔹 CrowdSec integration disabled."
+    echo "⚠️ CrowdSec container not found. Skipping bouncer setup."
   fi
 }
 

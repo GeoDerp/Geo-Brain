@@ -19,9 +19,13 @@ transforms:
       - journald
       - podman_logs
     source: |
-      .labels.host = get_env_var!("HOSTNAME")
+      .labels.host = get_env_var("HOSTNAME") ?? "unknown"
       .labels.pipeline = "vector"
-      msg = to_string(.MESSAGE) ?? ""
+      src = "system"
+      if exists(.SYSLOG_IDENTIFIER) { src = to_string!(.SYSLOG_IDENTIFIER) }
+      if src == "system" && exists(.container_name) { src = to_string!(.container_name) }
+      .labels.source = src
+      msg = to_string(.MESSAGE) ?? to_string(.message) ?? ""
       if match(msg, r'(?i)(authentication|failed|denied|unauthorized|error|CVE|alert)') {
         .labels.security = "true"
       }
@@ -34,7 +38,24 @@ transforms:
     source: |
       .labels.source = "falco"
       .labels.security = "true"
-      .labels.host = get_env_var!("HOSTNAME")
+      .labels.host = get_env_var("HOSTNAME") ?? "unknown"
+
+  # Compact security logs for Wazuh (strip large container metadata to fit remoted buffer)
+  wazuh_compact:
+    type: remap
+    inputs:
+      - classify_logs
+      - falco_normalize
+    source: |
+      msg = to_string(.message) ?? to_string(.MESSAGE) ?? encode_json(.)
+      host = to_string(.labels.host) ?? "-"
+      src = to_string(.labels.source) ?? "-"
+      cname = to_string(.container_name) ?? "-"
+      .message = host + " " + src + "[" + cname + "]: " + msg
+      del(.label)
+      del(.container_id)
+      del(.container_created_at)
+      del(.image)
 
 sinks:
   # All logs → Loki
@@ -51,16 +72,15 @@ sinks:
       source: "{{ labels.source }}"
       pipeline: vector
 
-  # Security logs → Wazuh Manager (syslog)
+  # Security logs → Wazuh Manager (syslog on port 1514)
   wazuh:
     type: socket
     inputs:
-      - classify_logs
-      - falco_normalize
+      - wazuh_compact
     mode: tcp
     address: "wazuh-manager:1514"
     encoding:
-      codec: json
+      codec: text
 
   # Vector internal metrics → Prometheus
   vector_metrics:
@@ -69,12 +89,5 @@ sinks:
       - internal_metrics
     address: "0.0.0.0:9598"
 
-  # Forward Falco alerts to CrowdSec LAPI (Air-gapped)
-  crowdsec:
-    type: http
-    inputs:
-      - falco_normalize
-    uri: "http://crowdsec:8080/v1/alerts"
-    method: post
-    encoding:
-      codec: json
+  # Note: CrowdSec parses Traefik access logs and host logs directly
+  # via its own acquisition pipeline (acquis.yaml). No Vector sink needed.

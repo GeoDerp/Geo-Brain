@@ -8,6 +8,11 @@
       dateStyle: long
       timeStyle: short
       hour12: true
+- openmeteo:
+    label: Local
+    timezone: America/New_York
+    units: imperial
+    cache: 15
 - search:
-    provider: google
+    provider: duckduckgo
     target: _blank

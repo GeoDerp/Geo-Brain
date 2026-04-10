@@ -26,15 +26,14 @@ http:
           - X-Auth-Request-Groups
           - X-Auth-Request-Access-Token
 
-    # CrowdSec bouncer middleware — requires Traefik plugin installation
-    # Uncomment after installing crowdsec-bouncer-traefik-plugin
-    # crowdsec:
-    #   plugin:
-    #     crowdsec-bouncer-traefik-plugin:
-    #       enabled: true
-    #       crowdsecLapiScheme: http
-    #       crowdsecLapiHost: "crowdsec:8080"
-    #       crowdsecLapiKey: '{{env "CROWDSEC_BOUNCER_API_KEY"}}'
+    # CrowdSec bouncer middleware — blocks IPs flagged by CrowdSec LAPI
+    crowdsec:
+      plugin:
+        crowdsec-bouncer-traefik-plugin:
+          enabled: true
+          crowdsecLapiScheme: http
+          crowdsecLapiHost: "crowdsec:8080"
+          crowdsecLapiKey: '${CROWDSEC_BOUNCER_API_KEY}'
 
     # Security headers
     security-headers:

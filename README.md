@@ -85,46 +85,58 @@ To avoid browser warnings, install the generated Root CA onto your local worksta
 
 ### Step 7: Initial Logins & User Setup
 
-Your central access point for all services is the **Homepage (Dashboard):** `https://home.<DOMAIN>`
+Your central access point for all services is the **Homepage Dashboard:** `https://<DOMAIN>`
 
 Before logging into downstream apps, you **must** bootstrap your identity provider:
 
 1. **Kanidm (Identity):** `https://kanidm.<DOMAIN>`
    - `setup-brain.sh` automatically configures Kanidm (registering OIDC clients and injecting the generated secrets back into your `.env`).
    - Use the `idm_admin` recovery password shown at the end of the setup script to log in.
-   - **Create Your User Account:**
-     - The Kanidm Web UI for the `idm_admin` account does not expose user creation natively. The intended method is via the Kanidm CLI.
-     - We have provided a wrapper script to automate creating your first daily-driver user account (e.g., `admin`). Run:
-       ```bash
-       ./scripts/create-kanidm-user.sh supercoolusername "Global Admin"
-       ```
-     - It will prompt you for the `idm_admin` recovery password and then automatically generate a secure, temporary initial password for your new account.
-     - You will use this new account and password to log into all SSO-protected services (Quay, Grafana, DefectDojo, etc.). You can change the password later by logging into the Kanidm Web UI (`https://kanidm.<DOMAIN>`).
+   - **Create Your First User Account:**
+     ```bash
+     # Create an admin with full access to all applications
+     ./scripts/create-kanidm-user.sh --role admin myadmin "Global Admin"
 
+     # Create a regular user with access to user stacks only
+     ./scripts/create-kanidm-user.sh --role user jdoe "John Doe"
+     ```
+     The script prompts for the `idm_admin` recovery password and generates a one-time credential reset URL (valid for 1 hour). Share the URL with the user to set their password.
+
+   **RBAC Model — Groups & Scopes:**
+
+   | Group | Role | Access |
+   |-------|------|--------|
+   | `brain_admins` | Admin | **All** applications — infrastructure, SOC, observability, and user stacks |
+   | `brain_users` | User | **User stacks only** — moodle, n8n, notes, and other `user/` applications |
+
+   OAuth2 Proxy enforces group-based access at the Traefik ForwardAuth layer:
+   - **Admin-only routes** (Traefik, Wazuh, Dockge, DefectDojo) use the `oauth2-proxy-admin` middleware — requires `brain_admins` membership.
+   - **All other routes** use the `oauth2-proxy` middleware — requires `brain_admins` OR `brain_users` membership.
+   - OIDC scopes requested: `openid`, `profile`, `email`, `groups`.
 
 2. **Quay (Registry):** `https://quay.<DOMAIN>`
-   - **SSO:** Already configured declaratively. Simply click 'OIDC' on the login screen once the Kanidm client is created.
+   - **SSO:** Already configured declaratively. Click 'OIDC' on the login screen.
    - **Local Admin:** Use for break-glass only. Set up during first visit if OIDC is not yet active.
 
 3. **Wazuh (SIEM):** `https://wazuh.<DOMAIN>`
-   - **SSO:** Already configured declaratively. Uses `Preferred_Username` claim from Kanidm.
-   - **Local Admin:** Default credentials are `admin` / `admin`. Change this immediately.
+   - **SSO:** Protected behind OAuth2 Proxy (admin-only). Kanidm SSO enforced automatically.
+   - **Local Admin:** Default credentials are `admin` / `admin`. Change immediately.
 
 4. **DefectDojo (Vulnerability Management):** `https://defectdojo.<DOMAIN>`
-   - **SSO:** Already configured declaratively. Click "Log in via Kanidm SSO."
-   - **Local Admin:** Extract randomly generated password from initializer logs:
+   - **SSO:** Click "Log in via Kanidm SSO."
+   - **Local Admin:** Extract from initializer logs:
      `podman logs defectdojo-initializer 2>&1 | grep "Admin password:"`
 
 5. **MinIO (Object Storage):** `https://minio.<DOMAIN>`
-   - **SSO:** Already configured declaratively. Click "Login with OpenID."
+   - **SSO:** Click "Login with OpenID."
    - **Local Admin:** Uses `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` from your `.env`.
 
-7. **Grafana (Observability):** `https://grafana.<DOMAIN>`
+6. **Grafana (Observability):** `https://grafana.<DOMAIN>`
    - **SSO:** Automatic via OAuth2 Proxy ForwardAuth headers. No manual setup required.
 
-8. **Dockge (Stack Management):** `https://dockge.<DOMAIN>`
-   - First-time access will prompt you to create the local admin account.
-   - Use Dockge to visually manage, start, stop, and read logs of all your deployed Compose stacks.
+7. **Dockge (Stack Management):** `https://dockge.<DOMAIN>`
+   - First-time access prompts you to create the local admin account.
+   - Use Dockge to visually manage, start, stop, and read logs of all Compose stacks.
 
 ---
 

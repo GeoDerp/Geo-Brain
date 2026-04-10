@@ -1,2 +1,25 @@
 ---
-# Add bookmarks here if needed.
+- Documentation:
+    - Geo-Brain Repo:
+        - icon: github.png
+          href: https://github.com/
+    - DISA STIGs:
+        - icon: mdi-shield-check
+          href: https://public.cyber.mil/stigs/
+    - Podman Docs:
+        - icon: podman.png
+          href: https://docs.podman.io/
+    - Traefik Docs:
+        - icon: traefik.png
+          href: https://doc.traefik.io/traefik/
+
+- Security Resources:
+    - NIST NVD:
+        - icon: mdi-bug
+          href: https://nvd.nist.gov/
+    - OWASP Top 10:
+        - icon: mdi-web
+          href: https://owasp.org/www-project-top-ten/
+    - CrowdSec Hub:
+        - icon: crowdsec.png
+          href: https://hub.crowdsec.net/

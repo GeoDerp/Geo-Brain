@@ -15,6 +15,8 @@ services:
       - USE_WALTON=false
       # Keep local API enabled for Bouncers and local Vector ingestion
       - DISABLE_LOCAL_API=false
+      # Auto-register Traefik bouncer on startup
+      - BOUNCER_KEY_traefik=${CROWDSEC_BOUNCER_API_KEY}
     ports:
       - "8180:8080" # LAPI for bouncers
     volumes:

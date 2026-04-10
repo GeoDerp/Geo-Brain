@@ -1,3 +1,127 @@
 ---
 # Services are auto-discovered from container labels via Docker/Podman socket.
-# Add manual service entries here if needed.
+# Manual entries below add API-driven widgets for richer status information.
+
+- SOC:
+    - Wazuh:
+        icon: wazuh.png
+        href: "{{HOMEPAGE_VAR_WAZUH_URL}}"
+        description: SIEM & XDR Platform
+        server: podman
+        container: wazuh-dashboard
+    - CrowdSec:
+        icon: crowdsec.png
+        description: Intrusion Prevention System
+        server: podman
+        container: crowdsec
+    - Falco:
+        icon: falco.png
+        description: Runtime Security Monitor
+        server: podman
+        container: falco
+    - DefectDojo:
+        icon: defectdojo.png
+        href: "{{HOMEPAGE_VAR_DEFECTDOJO_URL}}"
+        description: Vulnerability Management
+        server: podman
+        container: defectdojo-django
+    - BunkerWeb:
+        icon: bunkerweb.png
+        description: Web Application Firewall
+        server: podman
+        container: bunkerweb
+    - RamaLama:
+        icon: mdi-robot
+        description: Air-gapped LLM Analysis
+        server: podman
+        container: ramalama
+
+- Observability:
+    - Grafana:
+        icon: grafana.png
+        href: "{{HOMEPAGE_VAR_GRAFANA_URL}}"
+        description: Metrics & Log Visualization
+        server: podman
+        container: grafana
+    - Loki:
+        icon: loki.png
+        description: Log Aggregation
+        server: podman
+        container: loki
+    - Vector:
+        icon: vector.png
+        description: Log Pipeline
+        server: podman
+        container: vector
+    - Prometheus:
+        icon: prometheus.png
+        description: Metrics Collection
+        server: podman
+        container: prometheus
+
+- Identity & Security:
+    - Kanidm:
+        icon: kanidm.png
+        href: "{{HOMEPAGE_VAR_KANIDM_URL}}"
+        description: Identity Provider (OIDC)
+        server: podman
+        container: kanidm
+    - OAuth2 Proxy:
+        icon: oauth2-proxy.png
+        description: SSO ForwardAuth
+        server: podman
+        container: oauth2-proxy
+    - Step-CA:
+        icon: smallstep.png
+        description: Private PKI / ACME
+        server: podman
+        container: step-ca
+    - Quay:
+        icon: quay.png
+        href: "{{HOMEPAGE_VAR_QUAY_URL}}"
+        description: Container Registry
+        server: podman
+        container: quay
+
+- Management:
+    - Traefik:
+        icon: traefik.png
+        href: "{{HOMEPAGE_VAR_TRAEFIK_URL}}"
+        description: Edge Proxy & TLS
+        server: podman
+        container: traefik
+        widget:
+          type: traefik
+          url: "{{HOMEPAGE_VAR_TRAEFIK_API}}"
+    - Dockge:
+        icon: dockge.png
+        href: "{{HOMEPAGE_VAR_DOCKGE_URL}}"
+        description: Stack Manager
+        server: podman
+        container: dockge
+    - MinIO:
+        icon: minio.png
+        href: "{{HOMEPAGE_VAR_MINIO_URL}}"
+        description: Object Storage (S3)
+        server: podman
+        container: minio
+
+- User Apps:
+    - Moodle:
+        icon: moodle.png
+        href: "{{HOMEPAGE_VAR_MOODLE_URL}}"
+        description: Learning Platform
+        server: podman
+        container: moodle
+    - n8n:
+        icon: n8n.png
+        href: "{{HOMEPAGE_VAR_N8N_URL}}"
+        description: Workflow Automation
+        server: podman
+        container: n8n
+    - SilverBullet:
+        icon: silverbullet.png
+        href: "{{HOMEPAGE_VAR_NOTES_URL}}"
+        description: Notes & Knowledge Base
+        server: podman
+        container: silverbullet
