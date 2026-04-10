@@ -50,7 +50,7 @@ metrics:
     addServicesLabels: true
 
 log:
-  level: DEBUG
+  level: WARN
 
 accessLog:
   filePath: /var/log/traefik/access.log

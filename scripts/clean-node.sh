@@ -11,7 +11,7 @@ if [ -f .env ]; then
   set +a
 fi
 
-REMOTE_HOST="${REMOTE_HOST:-brain.home.lan}"
+REMOTE_HOST="${REMOTE_HOST:-example.local}"
 REMOTE_USER="${REMOTE_USER:-admin}"
 DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
 DATA_DIR="${DATA_DIR/#\~/$HOME}"

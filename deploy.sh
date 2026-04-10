@@ -281,7 +281,7 @@ set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
 command -v envsubst &>/dev/null || exit 0
 
 # Whitelist: only expand variables defined in .env (prevents clobbering app-specific patterns)
-VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${OAUTH2_PROXY_CLIENT_SECRET} ${OAUTH2_PROXY_COOKIE_SECRET} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY}  ${OAUTH2_PROXY_OIDC_SECRET}'
+VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${OAUTH2_PROXY_CLIENT_SECRET} ${OAUTH2_PROXY_COOKIE_SECRET} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${QUAY_SECRET_KEY} ${QUAY_DB_SECRET_KEY} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${DEFECTDOJO_ADMIN_PASSWORD} ${WAZUH_API_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY}  ${OAUTH2_PROXY_OIDC_SECRET}'
 find . -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
     if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
         envsubst "$VARLIST" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
@@ -293,7 +293,7 @@ RENDER_SCRIPT
         local config_dir="$REPO_ROOT/$stack_dir/config"
         [[ -d "$config_dir" ]] || return 0
         command -v envsubst &>/dev/null || return 0
-        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${OAUTH2_PROXY_CLIENT_SECRET} ${OAUTH2_PROXY_COOKIE_SECRET} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY}  ${OAUTH2_PROXY_OIDC_SECRET}'
+        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${OAUTH2_PROXY_CLIENT_SECRET} ${OAUTH2_PROXY_COOKIE_SECRET} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${QUAY_SECRET_KEY} ${QUAY_DB_SECRET_KEY} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${DEFECTDOJO_ADMIN_PASSWORD} ${WAZUH_API_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY}  ${OAUTH2_PROXY_OIDC_SECRET}'
         find "$config_dir" -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
             if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
                 envsubst "$varlist" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"

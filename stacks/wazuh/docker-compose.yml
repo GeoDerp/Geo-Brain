@@ -83,6 +83,7 @@ services:
     labels:
       - "kanidm.oidc.client_id=wazuh"
       - "security.stig.compliance=true"
+      - "security.stig.bypass_privileged=true"
       - "security.stig.role=manager"
       - "homepage.group=SOC"
       - "homepage.name=Wazuh Manager"

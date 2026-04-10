@@ -15,7 +15,7 @@ fi
 
 # Fallback/Default variables if not in .env
 DOMAIN=${DOMAIN:-geo-brain.local}
-ADMIN_PASSWORD=${ADMIN_PASSWORD:-"ChangeMe123!"}
+ADMIN_PASSWORD=${ADMIN_PASSWORD:?"ADMIN_PASSWORD must be set in .env — generate with: openssl rand -base64 32"}
 MAX_RETRIES=15
 INITIAL_BACKOFF=2
 DATA_DIR=${DATA_DIR:-/var/Geo-Brain}
@@ -379,7 +379,10 @@ setup_soc() {
   echo "Checking DefectDojo Admin Credentials..."
   if run_on_node "podman container exists defectdojo-django" 2>/dev/null; then
     DD_ADMIN_PASSWORD=$(run_on_node "podman logs defectdojo-django 2>&1" | grep "Admin password:" | awk -F': ' '{print $2}' | tr -d '\r' || echo "Already initialized")
-    echo "✅ DefectDojo Local Admin Password: $DD_ADMIN_PASSWORD"
+    echo "✅ DefectDojo admin credentials captured (see .env for DEFECTDOJO_ADMIN_PASSWORD)."
+    if [[ -n "$DD_ADMIN_PASSWORD" && "$DD_ADMIN_PASSWORD" != "Already initialized" ]]; then
+      write_env_secret "DEFECTDOJO_ADMIN_PASSWORD" "$DD_ADMIN_PASSWORD"
+    fi
   else
     echo "⚠️ DefectDojo container not found."
   fi
@@ -443,9 +446,9 @@ main() {
   echo "================================================="
   echo "🔐 BREAKGLASS & SSO SUMMARY"
   echo "================================================="
-  echo "1. Kanidm: https://kanidm.${DOMAIN} | idm_admin Recovery: ${KANIDM_RECOVERY:-Check container logs}"
-  echo "   ➡️  Create a UI login: ./scripts/create-kanidm-user.sh myadmin \"Global Admin\""
-  echo "2. MinIO: https://minio.${DOMAIN} | Admin: ${MINIO_ROOT_USER:-minioadmin} / ${MINIO_ROOT_PASSWORD:-[REDACTED]}"
+  echo "1. Kanidm: https://kanidm.${DOMAIN} | idm_admin recovery password captured (use ./scripts/create-kanidm-user.sh to create users)"
+  echo "   ➡️  Create a UI login: ./scripts/create-kanidm-user.sh --role admin myadmin \"Global Admin\""
+  echo "2. MinIO: https://minio.${DOMAIN} | Credentials in .env (MINIO_ROOT_USER / MINIO_ROOT_PASSWORD)"
   echo "3. Quay: https://quay.${DOMAIN} | OIDC SSO Ready"
   echo "4. Wazuh: https://wazuh.${DOMAIN} | SSO via OAuth2 Proxy"
   echo "================================================="

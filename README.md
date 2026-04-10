@@ -26,7 +26,7 @@ The Geo-Brain homelab is organized into discrete **stacks**:
 
 ## 🚀 Quick Start Guide
 
-Follow these steps to deploy Geo-Brain from scratch on a remote node (e.g., `brain.home.lan`).
+Follow these steps to deploy Geo-Brain from scratch on a remote node (e.g., `myhost.example.local`).
 
 ### Step 1: Environment Configuration
 
@@ -35,7 +35,7 @@ Copy the template and set your domain and secrets:
 ```bash
 cp .env-template .env
 ```
-Edit `.env` to configure your target `DOMAIN` (default: `brain.home.lan`), connection settings (`REMOTE_HOST`, `REMOTE_USER`), and critical passwords. **Do not commit your `.env` file.**
+Edit `.env` to configure your target `DOMAIN` (default: `example.local`), connection settings (`REMOTE_HOST`, `REMOTE_USER`), and critical passwords. **Do not commit your `.env` file.**
 
 ### Step 2: Initialize the Node
 
