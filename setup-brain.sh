@@ -150,23 +150,65 @@ init_quay() {
   
   mkdir -p ~/.config/containers
   cat <<EOF > ~/.config/containers/registries.conf
-unqualified-search-registries = ["quay.${DOMAIN}", "docker.io"]
+unqualified-search-registries = ["docker.io"]
 
+# Mirror docker.io through Quay proxy cache
 [[registry]]
 prefix = "docker.io"
-location = "quay.${DOMAIN}"
-insecure = false
-mirror-by-digest-only = false
+location = "docker.io"
 
+[[registry.mirror]]
+location = "quay.${DOMAIN}/docker-io-cache"
+insecure = false
+
+# Mirror ghcr.io through Quay proxy cache
+[[registry]]
+prefix = "ghcr.io"
+location = "ghcr.io"
+
+[[registry.mirror]]
+location = "quay.${DOMAIN}/ghcr-io-cache"
+insecure = false
+
+# Mirror quay.io through Quay proxy cache
+[[registry]]
+prefix = "quay.io"
+location = "quay.io"
+
+[[registry.mirror]]
+location = "quay.${DOMAIN}/quay-io-cache"
+insecure = false
+
+# Local Quay registry
 [[registry]]
 location = "quay.${DOMAIN}"
 insecure = false
 EOF
-  echo "✅ Configured Podman registries.conf."
+
+  # Deploy registries.conf to remote node
+  run_on_node "mkdir -p ~/.config/containers"
+  scp -i "${_ssh_key:-$HOME/.ssh/id_debug}" -o StrictHostKeyChecking=accept-new \
+    ~/.config/containers/registries.conf \
+    "${REMOTE_USER}@${REMOTE_HOST}:~/.config/containers/registries.conf"
+
+  echo "✅ Configured Podman registries.conf (local + remote)."
+
+  # Deploy CA cert for Quay TLS trust (self-signed wildcard cert)
+  run_on_node "mkdir -p ~/.config/containers/certs.d/quay.${DOMAIN}"
+  scp -i "${_ssh_key:-$HOME/.ssh/id_debug}" -o StrictHostKeyChecking=accept-new \
+    ./certs/ca.crt \
+    "${REMOTE_USER}@${REMOTE_HOST}:~/.config/containers/certs.d/quay.${DOMAIN}/ca.crt"
+  echo "✅ Deployed CA cert for Quay registry TLS trust."
+
+  # Login to Quay on remote for proxy cache pulls (anonymous access is disabled)
+  run_on_node "podman login --tls-verify=false -u quayadmin -p '${ADMIN_PASSWORD}' quay.${DOMAIN}" || true
+  echo "✅ Authenticated Podman to Quay registry."
 
   # Create proxy cache organizations for upstream registries
   local QUAY_API="https://quay.${DOMAIN}/api/v1"
   local QUAY_TOKEN=""
+  local QUAY_COOKIE_JAR="/tmp/quay-session-$$"
+  local QUAY_AUTH_MODE=""
 
   # Initialize admin user if first run (FEATURE_USER_INITIALIZE=true)
   local init_resp
@@ -175,29 +217,61 @@ EOF
     -d "{\"username\": \"quayadmin\", \"password\": \"${ADMIN_PASSWORD}\", \"email\": \"admin@${DOMAIN}\"}" 2>/dev/null) || true
   QUAY_TOKEN=$(echo "$init_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null) || true
 
-  if [[ -z "$QUAY_TOKEN" ]]; then
-    # Already initialized — login to get token
-    QUAY_TOKEN=$(curl -m 10 -s -k -X POST "${QUAY_API}/user/login" \
-      -H "Content-Type: application/json" \
-      -d "{\"user\": \"quayadmin\", \"password\": \"${ADMIN_PASSWORD}\"}" 2>/dev/null \
-      | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null) || true
+  if [[ -n "$QUAY_TOKEN" ]]; then
+    QUAY_AUTH_MODE="token"
+  else
+    # Already initialized — use CSRF-based signin to get session cookie
+    local csrf_token
+    csrf_token=$(curl -m 10 -s -k -c "$QUAY_COOKIE_JAR" "https://quay.${DOMAIN}/csrf_token" 2>/dev/null \
+      | python3 -c "import sys,json; print(json.load(sys.stdin).get('csrf_token',''))" 2>/dev/null) || true
+    if [[ -n "$csrf_token" ]]; then
+      local signin_resp
+      signin_resp=$(curl -m 10 -s -k -b "$QUAY_COOKIE_JAR" -c "$QUAY_COOKIE_JAR" \
+        -X POST "https://quay.${DOMAIN}/api/v1/signin" \
+        -H "Content-Type: application/json" \
+        -H "X-CSRF-Token: ${csrf_token}" \
+        -d "{\"username\": \"quayadmin\", \"password\": \"${ADMIN_PASSWORD}\"}" 2>/dev/null) || true
+      if echo "$signin_resp" | python3 -c "import sys,json; assert json.load(sys.stdin).get('success')" 2>/dev/null; then
+        QUAY_AUTH_MODE="session"
+      fi
+    fi
   fi
 
-  if [[ -n "$QUAY_TOKEN" ]]; then
+  quay_api_call() {
+    local method="$1" endpoint="$2" data="$3"
+    if [[ "$QUAY_AUTH_MODE" == "token" ]]; then
+      curl -m 10 -s -k -X "$method" "${QUAY_API}${endpoint}" \
+        -H "Authorization: Bearer ${QUAY_TOKEN}" \
+        -H "Content-Type: application/json" \
+        ${data:+-d "$data"} 2>/dev/null || true
+    elif [[ "$QUAY_AUTH_MODE" == "session" ]]; then
+      local csrf
+      csrf=$(curl -m 10 -s -k -b "$QUAY_COOKIE_JAR" -c "$QUAY_COOKIE_JAR" \
+        "https://quay.${DOMAIN}/csrf_token" 2>/dev/null \
+        | python3 -c "import sys,json; print(json.load(sys.stdin).get('csrf_token',''))" 2>/dev/null) || true
+      curl -m 10 -s -k -b "$QUAY_COOKIE_JAR" -c "$QUAY_COOKIE_JAR" \
+        -X "$method" "${QUAY_API}${endpoint}" \
+        -H "Content-Type: application/json" \
+        -H "X-CSRF-Token: ${csrf}" \
+        ${data:+-d "$data"} 2>/dev/null || true
+    fi
+  }
+
+  if [[ -n "$QUAY_AUTH_MODE" ]]; then
+    local -A UPSTREAM_URLS=(
+      ["docker.io"]="docker.io"
+      ["ghcr.io"]="ghcr.io"
+      ["quay.io"]="quay.io"
+    )
     for upstream in "docker.io" "ghcr.io" "quay.io"; do
       local org_name="${upstream//./-}-cache"
-      # Create organization
-      curl -m 10 -s -k -X POST "${QUAY_API}/organization/" \
-        -H "Authorization: Bearer ${QUAY_TOKEN}" \
-        -H "Content-Type: application/json" \
-        -d "{\"name\": \"${org_name}\", \"email\": \"${org_name}@${DOMAIN}\"}" 2>/dev/null || true
-      # Enable proxy cache for the org
-      curl -m 10 -s -k -X POST "${QUAY_API}/organization/${org_name}/proxycache" \
-        -H "Authorization: Bearer ${QUAY_TOKEN}" \
-        -H "Content-Type: application/json" \
-        -d "{\"upstream_registry\": \"${upstream}\"}" 2>/dev/null || true
+      quay_api_call POST "/organization/" \
+        "{\"name\": \"${org_name}\", \"email\": \"${org_name}@${DOMAIN}\"}"
+      quay_api_call POST "/organization/${org_name}/proxycache" \
+        "{\"upstream_registry\": \"${UPSTREAM_URLS[$upstream]}\", \"org_name\": \"${org_name}\", \"expiration_s\": 86400}"
     done
     echo "✅ Configured proxy cache organizations for docker.io, ghcr.io, quay.io."
+    rm -f "$QUAY_COOKIE_JAR" 2>/dev/null
   else
     echo "⚠️ Could not authenticate to Quay API. Proxy cache orgs not configured."
   fi
@@ -221,6 +295,9 @@ setup_pki() {
   mkdir -p ./stacks/traefik/config/certs
   if run_on_node "podman exec step-ca cat /home/step/certs/root_ca.crt" > ./stacks/traefik/config/certs/root_ca.crt; then
     echo "✅ Traefik now trusts Step-CA."
+    # Build combined CA bundle (Step-CA root + self-signed temporary CA)
+    cat ./stacks/traefik/config/certs/root_ca.crt ./certs/ca.crt > ./stacks/traefik/config/certs/ca-bundle.crt
+    echo "✅ Built combined CA bundle for OAuth2 Proxy."
   else
     echo "⚠️ Failed to inject Step-CA Root into Traefik. Traefik may not trust Step-CA."
   fi
@@ -383,7 +460,7 @@ setup_storage() {
 # --- 5) SOC (Wazuh & DefectDojo) ---
 setup_soc() {
   echo "--- 5) SOC (Wazuh & DefectDojo) ---"
-  wait_for_service "DefectDojo UI" "curl -m 5 -s -k -f https://defectdojo.${DOMAIN}/" || echo "⚠️ Failed to wait for service, continuing anyway..."
+  wait_for_service "DefectDojo UI" "curl -m 5 -s -k -o /dev/null -w '%{http_code}' https://defectdojo.${DOMAIN}/ | grep -qE '^[1234]'" || echo "⚠️ Failed to wait for service, continuing anyway..."
 
   echo "Checking DefectDojo Admin Credentials..."
   if run_on_node "podman container exists defectdojo-django" 2>/dev/null; then
@@ -420,7 +497,7 @@ setup_crowdsec() {
 
 wait_proxies() {
   echo "Waiting for Proxies..."
-  wait_for_service "Traefik" "curl -m 5 -s -k -f https://traefik.${DOMAIN}/dashboard/" || echo "⚠️ Traefik dashboard not reachable"
+  wait_for_service "Traefik" "run_on_node 'curl -m 5 -s -o /dev/null -w \"%{http_code}\" http://localhost/ping | grep -q 200'" || echo "⚠️ Traefik not reachable"
 }
 
 # --- Main execution ---

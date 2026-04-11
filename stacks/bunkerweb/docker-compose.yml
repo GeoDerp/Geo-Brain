@@ -3,7 +3,7 @@
 # License: AGPL-3.0
 services:
   bunkerweb:
-    image: bunkerity/bunkerweb-all-in-one:1.6.8
+    image: docker.io/bunkerity/bunkerweb-all-in-one:1.6.8
     container_name: bunkerweb
     restart: always
     security_opt:

@@ -37,11 +37,11 @@ services:
       - --pass-authorization-header=true
       - --skip-provider-button=true
       - --upstream=static://202
-      - --provider-ca-file=/etc/ssl/certs/step-ca.crt
+      - --provider-ca-file=/etc/ssl/certs/ca-bundle.crt
       - --cookie-expire=1h
       - --cookie-refresh=30m
     volumes:
-      - ../traefik/config/certs/root_ca.crt:/etc/ssl/certs/step-ca.crt:ro,z
+      - ../traefik/config/certs/ca-bundle.crt:/etc/ssl/certs/ca-bundle.crt:ro,z
     networks:
       - identity-net
       - proxy-net
@@ -110,12 +110,12 @@ services:
       - --pass-authorization-header=true
       - --skip-provider-button=true
       - --upstream=static://202
-      - --provider-ca-file=/etc/ssl/certs/step-ca.crt
+      - --provider-ca-file=/etc/ssl/certs/ca-bundle.crt
       - --cookie-expire=1h
       - --cookie-refresh=30m
       - --cookie-name=_oauth2_proxy_admin
     volumes:
-      - ../traefik/config/certs/root_ca.crt:/etc/ssl/certs/step-ca.crt:ro,z
+      - ../traefik/config/certs/ca-bundle.crt:/etc/ssl/certs/ca-bundle.crt:ro,z
     networks:
       - identity-net
       - proxy-net
