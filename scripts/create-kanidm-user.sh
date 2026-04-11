@@ -115,7 +115,7 @@ CA_CERT_B64=$(echo "$CA_CERT" | base64 -w0)
 SETUP_OUTPUT=$(run_remote "podman run -i --rm --network host \
   --env KANIDM_PASSWORD='${PASSWORD}' \
   --env CA_CERT_B64='${CA_CERT_B64}' \
-  --env DISPLAY_NAME_VAL=$(printf '%s' "${DISPLAY_NAME}" | base64 -w0) \
+  --env DISPLAY_NAME_VAL="$(printf '%s' "${DISPLAY_NAME}" | base64 -w0)" \
   docker.io/kanidm/tools:1.9.2 sh -c '
     echo \"\$CA_CERT_B64\" | base64 -d > /tmp/ca.crt
     DNAME=\$(echo \"\$DISPLAY_NAME_VAL\" | base64 -d)
