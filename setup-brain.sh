@@ -47,15 +47,24 @@ fi
 # --- SSH Wrapper ---
 # podman remote (--connection) can hang on exec, ps, logs, and kill.
 # SSH executes these operations directly on the node for reliability.
-SSH_CMD=""
+SSH_CMD=()
 if [[ -n "${REMOTE_HOST:-}" ]] && [[ -n "${SSH_KEY:-}" ]]; then
     _ssh_key="${SSH_KEY/#\~/$HOME}"
-    SSH_CMD="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=120 -o ServerAliveInterval=10 -o ServerAliveCountMax=30 -i ${_ssh_key} -p ${SSH_PORT:-22} ${REMOTE_USER}@${REMOTE_HOST}"
+    SSH_CMD=(
+        ssh
+        -o StrictHostKeyChecking=accept-new
+        -o ConnectTimeout=120
+        -o ServerAliveInterval=10
+        -o ServerAliveCountMax=30
+        -i "${_ssh_key}"
+        -p "${SSH_PORT:-22}"
+        "${REMOTE_USER}@${REMOTE_HOST}"
+    )
 fi
 
 run_on_node() {
-    if [[ -n "$SSH_CMD" ]]; then
-        $SSH_CMD "$@"
+    if [[ ${#SSH_CMD[@]} -gt 0 ]]; then
+        "${SSH_CMD[@]}" "$@"
     else
         eval "$@"
     fi
@@ -362,10 +371,10 @@ setup_storage() {
   # Hardcoded required secrets (non-OIDC)
   ensure_secret_and_env "DOJO_SECRET_KEY" "dojo_secret_key"
 
-  # OAuth2 Proxy cookie secret (must be exactly 16, 24, or 32 raw bytes)
+  # OAuth2 Proxy cookie secret (must be base64 that decodes to exactly 16, 24, or 32 raw bytes)
   if [ -z "${OAUTH2_PROXY_COOKIE_SECRET:-}" ]; then
     local cookie_secret
-    cookie_secret="$(openssl rand -hex 16)"
+    cookie_secret="$(openssl rand -base64 32 | tr -d '\n')"
     create_secret "oauth2_proxy_cookie_secret" "$cookie_secret"
     write_env_secret "OAUTH2_PROXY_COOKIE_SECRET" "$cookie_secret"
   fi

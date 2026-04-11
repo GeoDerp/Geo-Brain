@@ -92,25 +92,33 @@ read -s -p "Enter idm_admin password (recovery password from setup-brain.sh): " 
 echo ""
 
 # Validate inputs don't contain shell-unsafe characters (prevent injection via SSH)
-for var_name in USERNAME DISPLAY_NAME PASSWORD; do
+# Note: apostrophes are allowed in DISPLAY_NAME (e.g., "O'Connor"); values are passed
+# via environment variables rather than interpolated into shell strings.
+for var_name in USERNAME PASSWORD; do
     if [[ "${!var_name}" =~ [\'\`\$\;\|] ]]; then
         echo "❌ Error: ${var_name} contains unsafe characters."
         exit 1
     fi
 done
+if [[ "${DISPLAY_NAME}" =~ [\`\$\;\|] ]]; then
+    echo "❌ Error: DISPLAY_NAME contains unsafe characters."
+    exit 1
+fi
 
 echo ">>> Creating Kanidm user '${USERNAME}' via kanidm/tools container..."
 
 CA_CERT=$(cat "$REPO_ROOT/certs/ca.crt")
+CA_CERT_B64=$(echo "$CA_CERT" | base64 -w0)
 
 # All operations use the kanidm CLI tools container via the Kanidm API.
 # (podman exec into the kanidm server container hangs due to the minimal image.)
 SETUP_OUTPUT=$(run_remote "podman run -i --rm --network host \
   --env KANIDM_PASSWORD='${PASSWORD}' \
+  --env CA_CERT_B64='${CA_CERT_B64}' \
+  --env DISPLAY_NAME_VAL=$(printf '%s' "${DISPLAY_NAME}" | base64 -w0) \
   docker.io/kanidm/tools:1.9.2 sh -c '
-    cat << CAEOF > /tmp/ca.crt
-${CA_CERT}
-CAEOF
+    echo \"\$CA_CERT_B64\" | base64 -d > /tmp/ca.crt
+    DNAME=\$(echo \"\$DISPLAY_NAME_VAL\" | base64 -d)
     echo \">>> Logging in as idm_admin...\"
     if ! kanidm login -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1; then
         echo \"KANIDM_LOGIN_FAILED\"
@@ -118,7 +126,7 @@ CAEOF
     fi
 
     echo \">>> Creating person ${USERNAME}...\"
-    kanidm person create ${USERNAME} \"${DISPLAY_NAME}\" -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1 || true
+    kanidm person create ${USERNAME} \"\$DNAME\" -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1 || true
 
     echo \">>> Adding ${USERNAME} to group ${KANIDM_GROUP}...\"
     kanidm group add-members ${KANIDM_GROUP} ${USERNAME} -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1 || true

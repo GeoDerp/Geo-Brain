@@ -25,7 +25,7 @@ services:
       - --cookie-samesite=lax
       - --cookie-domain=.${DOMAIN}
       - --email-domain=*
-      - --oidc-email-claim=preferred_username
+      - --oidc-email-claim=email
       - --oidc-groups-claim=groups
       - --scope=openid profile email groups
       - --allowed-group=brain_admins
@@ -37,14 +37,14 @@ services:
       - --pass-authorization-header=true
       - --skip-provider-button=true
       - --upstream=static://202
-      - --ssl-insecure-skip-verify=true
+      - --provider-ca-file=/etc/ssl/certs/step-ca.crt
       - --cookie-expire=1h
       - --cookie-refresh=30m
+    volumes:
+      - ../traefik/config/certs/root_ca.crt:/etc/ssl/certs/step-ca.crt:ro,z
     networks:
       - identity-net
       - proxy-net
-    ports:
-      - "4180:4180"
     deploy:
       resources:
         limits:
@@ -99,7 +99,7 @@ services:
       - --cookie-samesite=lax
       - --cookie-domain=.${DOMAIN}
       - --email-domain=*
-      - --oidc-email-claim=preferred_username
+      - --oidc-email-claim=email
       - --oidc-groups-claim=groups
       - --scope=openid profile email groups
       - --allowed-group=brain_admins
@@ -110,15 +110,15 @@ services:
       - --pass-authorization-header=true
       - --skip-provider-button=true
       - --upstream=static://202
-      - --ssl-insecure-skip-verify=true
+      - --provider-ca-file=/etc/ssl/certs/step-ca.crt
       - --cookie-expire=1h
       - --cookie-refresh=30m
       - --cookie-name=_oauth2_proxy_admin
+    volumes:
+      - ../traefik/config/certs/root_ca.crt:/etc/ssl/certs/step-ca.crt:ro,z
     networks:
       - identity-net
       - proxy-net
-    ports:
-      - "4181:4180"
     deploy:
       resources:
         limits:

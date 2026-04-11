@@ -116,7 +116,7 @@ graph TD
     TR -- "HTTPS *.example.local" --> SD
     SD -- "127.0.0.1" --> APPS
 
-    TR -- "ForwardAuth (MFA check)" --> AU
+    TR -- "ForwardAuth (OIDC auth / SSO)" --> AU
     AU -- "OIDC Verify" --> IAM
     AU -. "auth OK" .-> TR
     TR -- "proxy" --> HP & DG & GF & WZ & DD

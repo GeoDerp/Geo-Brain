@@ -52,7 +52,7 @@ transforms:
       src = to_string(.labels.source) ?? "-"
       cname = to_string(.container_name) ?? "-"
       .message = host + " " + src + "[" + cname + "]: " + msg
-      del(.label)
+      del(.labels)
       del(.container_id)
       del(.container_created_at)
       del(.image)

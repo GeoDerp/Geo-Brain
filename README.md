@@ -125,7 +125,7 @@ Before logging into downstream apps, you **must** bootstrap your identity provid
 4. **DefectDojo (Vulnerability Management):** `https://defectdojo.<DOMAIN>`
    - **SSO:** Click "Log in via Kanidm SSO."
    - **Local Admin:** Extract from initializer logs:
-     `podman logs defectdojo-initializer 2>&1 | grep "Admin password:"`
+     `podman logs defectdojo-django 2>&1 | grep "Admin password:"`
 
 5. **MinIO (Object Storage):** `https://minio.<DOMAIN>`
    - **SSO:** Click "Login with OpenID."

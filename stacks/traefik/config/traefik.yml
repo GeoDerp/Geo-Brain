@@ -5,6 +5,9 @@ global:
   checkNewVersion: false
   sendAnonymousUsage: false
 
+# NOTE: The CrowdSec bouncer plugin is fetched at runtime from GitHub.
+# For air-gapped deployments, pre-download the plugin or use a container-based
+# bouncer instead. Plugin storage is on tmpfs and will re-download on restart.
 experimental:
   plugins:
     crowdsec-bouncer-traefik-plugin:
