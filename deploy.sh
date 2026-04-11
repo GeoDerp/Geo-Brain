@@ -87,13 +87,16 @@ fi
 
 if [ -z "$STACK_NAME" ]; then
     echo "Usage: $0 [stack-name|all|base|user] [command (default: up)]"
-    echo "Commands: up, down, ps, logs, restart, check, redeploy"
+    echo "Commands: up, down, ps, logs, restart, check, redeploy, full-check"
     echo "Mode: ${DEPLOY_MODE}"
     echo ""
     echo "Special targets:"
     echo "  all   - Deploy all stacks (base + user)"
     echo "  base  - Deploy all base infrastructure stacks"
     echo "  user  - Deploy all user application stacks"
+    echo ""
+    echo "Special commands:"
+    echo "  full-check  - Run all STIG/security checks + Python validator + container health report"
     exit 1
 fi
 
@@ -723,7 +726,7 @@ deploy_single() {
         restart) run_compose "$stack_dir" "restart" ;;
         *)
             echo "[ERROR] Unknown command '$COMMAND'."
-            echo "Valid: up, down, ps, logs, restart, check, redeploy"
+            echo "Valid: up, down, ps, logs, restart, check, redeploy, full-check"
             exit 1
             ;;
     esac
@@ -850,7 +853,121 @@ EOF
     echo ">>> Batch $COMMAND completed successfully for all ${#stacks[@]} stack(s)."
 }
 
+# --- Full Check ---
+# Runs a comprehensive validation of all stacks:
+#   1. STIG/security checks (check_security) for every stack
+#   2. Python validate_stacks.py if available
+#   3. Container health report on the remote node (if remote mode)
+
+# Helper: print a local container health report (used by run_full_check)
+_print_container_health_report() {
+    podman ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null || echo '(none)'
+    echo ""
+    echo "--- Degraded containers (exited, paused, or unhealthy) ---"
+    local unhealthy
+    unhealthy=$(podman ps -a \
+        --filter 'status=exited' \
+        --filter 'status=paused' \
+        --filter 'health=unhealthy' \
+        --format '{{.Names}}: {{.Status}}' 2>/dev/null || true)
+    if [[ -n "$unhealthy" ]]; then
+        echo "$unhealthy"
+    else
+        echo "(none — all containers are running or healthy)"
+    fi
+}
+
+run_full_check() {
+    local total_errors=0
+    local failed_stacks=()
+
+    echo "========================================================"
+    echo ">>> FULL CHECK: Comprehensive validation of all stacks"
+    echo "========================================================"
+    echo ""
+
+    # --- Phase 1: STIG & Security checks ---
+    echo ">>> [1/3] Running STIG & security checks on all stacks..."
+    mapfile -t all_stacks < <(get_all_stacks)
+    for stack in "${all_stacks[@]}"; do
+        local stack_dir="$REPO_ROOT/stacks/$stack"
+        if [[ ! -d "$stack_dir" ]]; then
+            continue
+        fi
+        if ! check_security "$stack_dir" "$stack"; then
+            failed_stacks+=("$stack")
+            total_errors=$((total_errors + 1))
+        fi
+    done
+    echo ""
+
+    # --- Phase 2: Python validator ---
+    echo ">>> [2/3] Running Python stack validator (validate_stacks.py)..."
+    local validator="$REPO_ROOT/scripts/analysis/validate_stacks.py"
+    if [[ -f "$validator" ]] && command -v python3 &>/dev/null; then
+        if ! python3 "$validator"; then
+            echo "[WARN] Python validator reported issues."
+            total_errors=$((total_errors + 1))
+        fi
+    elif [[ -f "$validator" ]] && command -v python &>/dev/null; then
+        if ! python "$validator"; then
+            echo "[WARN] Python validator reported issues."
+            total_errors=$((total_errors + 1))
+        fi
+    else
+        echo "[SKIP] validate_stacks.py not found or Python not available."
+    fi
+    echo ""
+
+    # --- Phase 3: Container health report ---
+    echo ">>> [3/3] Container health report..."
+    if [[ "$DEPLOY_MODE" == "remote" ]]; then
+        echo "    (Remote node: ${REMOTE_HOST})"
+        "${SSH_CMD[@]}" "
+            echo '--- Running containers ---'
+            podman ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null || echo '(none)'
+            echo ''
+            echo '--- Degraded containers (exited, paused, or unhealthy) ---'
+            unhealthy=\$(podman ps -a \
+                --filter 'status=exited' \
+                --filter 'status=paused' \
+                --filter 'health=unhealthy' \
+                --format '{{.Names}}: {{.Status}}' 2>/dev/null || true)
+            if [[ -n \"\$unhealthy\" ]]; then
+                echo \"\$unhealthy\"
+            else
+                echo '(none — all containers are running or healthy)'
+            fi
+        " || echo "[WARN] Could not retrieve container status from remote."
+    else
+        echo "    (Local mode)"
+        _print_container_health_report
+    fi
+    echo ""
+
+    # --- Summary ---
+    echo "========================================================"
+    if [[ "$total_errors" -gt 0 ]]; then
+        echo ">>> FULL CHECK FAILED with $total_errors error(s)."
+        if [[ ${#failed_stacks[@]} -gt 0 ]]; then
+            echo "    Failed stacks: ${failed_stacks[*]}"
+        fi
+        echo "========================================================"
+        return 1
+    else
+        echo ">>> FULL CHECK PASSED — all stacks comply with GEMINI.md mandates."
+        echo "========================================================"
+        return 0
+    fi
+}
+
 # --- Main ---
+
+# full-check is a global command that always runs across all stacks
+if [[ "$COMMAND" == "full-check" ]]; then
+    run_full_check
+    exit $?
+fi
 
 case $STACK_NAME in
     all)

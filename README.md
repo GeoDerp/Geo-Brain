@@ -137,6 +137,18 @@ If you need to completely wipe the installation (destroy all data, volumes, and 
 ```
 *Warning: This script permanently deletes `/var/Geo-Brain` and all rootless podman data on the remote node.*
 
+Pass `--yes` to skip the interactive confirmation (useful for automation), and `--images` to also prune all container images:
+
+```bash
+./scripts/clean-node.sh --yes --images
+```
+
+After cleaning, redeploy all stacks:
+
+```bash
+./deploy.sh all up
+```
+
 ---
 
 ## ⚙️ How to Deploy Individual Stacks
@@ -155,7 +167,18 @@ The `deploy.sh` script dynamically generates Traefik configurations and manages 
 
 # Validate STIG compliance of a stack without deploying
 ./deploy.sh <stack_name> check
+
+# Force-recreate all containers for a stack (pull latest pinned image)
+./deploy.sh <stack_name> redeploy
+
+# Run a comprehensive compliance check across all stacks
+./deploy.sh any full-check
 ```
+
+The `full-check` command runs three validation phases:
+1. **STIG & security checks** — image pinning, resource limits, healthchecks, network isolation.
+2. **Python stack validator** — `scripts/analysis/validate_stacks.py` (requires `python3` and `PyYAML`).
+3. **Container health report** — lists all running containers and flags any exited/unhealthy ones.
 
 ---
 
