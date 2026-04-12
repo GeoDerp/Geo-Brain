@@ -499,7 +499,7 @@ User → Traefik (TLS) → OAuth2 Proxy (OIDC) → Kanidm Login → Backend Serv
 
 **Why it's used:**
 - **OIDC-Based Forward-Auth:** Traefik intercepts incoming requests and asks OAuth2 Proxy if the user is authenticated. OAuth2 Proxy redirects unauthenticated users to Kanidm's OIDC login page. Once authenticated, Traefik lets the request through.
-- **No LDAP Required:** Unlike Authelia, OAuth2 Proxy uses the OIDC protocol natively, eliminating the need for LDAP service accounts or POSIX passwords.
+- **No LDAP Required:** OAuth2 Proxy uses the OIDC protocol natively, eliminating the need for LDAP service accounts or POSIX passwords.
 - **Seamless SSO:** Users authenticate once via Kanidm's web UI and gain access to all protected services via cookie-based sessions.
 
 ---

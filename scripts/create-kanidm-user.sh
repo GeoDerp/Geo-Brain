@@ -18,11 +18,16 @@ fi
 
 # Parse arguments: support --role / -r flag
 ROLE="user"
+EMAIL=""
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -r|--role)
       ROLE="$2"
+      shift 2
+      ;;
+    -e|--email)
+      EMAIL="$2"
       shift 2
       ;;
     *)
@@ -37,17 +42,26 @@ USERNAME="${1:-}"
 DISPLAY_NAME="${2:-}"
 
 if [ -z "$USERNAME" ] || [ -z "$DISPLAY_NAME" ]; then
-  echo "Usage: $0 [--role admin|user] <username> <\"Display Name\">"
+  echo "Usage: $0 [--role admin|user] [--email user@domain] <username> <\"Display Name\">"
   echo ""
   echo "Roles:"
   echo "  admin  — Global Admin: access to ALL applications (infra + user stacks)"
   echo "  user   — Regular User: access to user-assigned stacks only (moodle, n8n, notes)"
   echo ""
+  echo "Options:"
+  echo "  --email  Email address (default: username@DOMAIN)"
+  echo ""
   echo "Examples:"
   echo "  $0 --role admin geoadmin \"Global Admin\""
   echo "  $0 --role user jdoe \"John Doe\""
+  echo "  $0 --email jdoe@corp.com jdoe \"John Doe\""
   echo "  $0 jdoe \"John Doe\"              # defaults to 'user' role"
   exit 1
+fi
+
+# Default email to username@DOMAIN if not explicitly set
+if [[ -z "$EMAIL" ]]; then
+  EMAIL="${USERNAME}@${DOMAIN:-brain.home.lan}"
 fi
 
 if [[ "$ROLE" != "admin" && "$ROLE" != "user" ]]; then
@@ -88,13 +102,29 @@ run_remote() {
     fi
 }
 
-read -s -p "Enter idm_admin password (recovery password from setup-brain.sh): " PASSWORD
-echo ""
+# Resolve idm_admin password: env var → auto-recover → interactive fallback
+if [[ -n "${KANIDM_ADMIN_PASSWORD:-}" ]]; then
+    PASSWORD="$KANIDM_ADMIN_PASSWORD"
+    echo ">>> Using KANIDM_ADMIN_PASSWORD from environment."
+elif [[ -t 0 ]]; then
+    # Interactive terminal: prompt for password
+    read -s -p "Enter idm_admin password (or run ./setup-brain.sh identity to persist it): " PASSWORD
+    echo ""
+else
+    echo "❌ Error: KANIDM_ADMIN_PASSWORD not set in .env."
+    echo "   Run: ./setup-brain.sh identity   (this persists the password to .env)"
+    exit 1
+fi
+
+if [[ -z "$PASSWORD" ]]; then
+    echo "❌ Error: Could not obtain idm_admin password."
+    exit 1
+fi
 
 # Validate inputs don't contain shell-unsafe characters (prevent injection via SSH)
 # Note: apostrophes are allowed in DISPLAY_NAME (e.g., "O'Connor"); values are passed
 # via environment variables rather than interpolated into shell strings.
-for var_name in USERNAME PASSWORD; do
+for var_name in USERNAME PASSWORD EMAIL; do
     if [[ "${!var_name}" =~ [\'\`\$\;\|] ]]; then
         echo "❌ Error: ${var_name} contains unsafe characters."
         exit 1
@@ -127,7 +157,8 @@ SETUP_OUTPUT=$(run_remote "podman run -i --rm --network host \
 
     echo \">>> Creating person ${USERNAME}...\"
     kanidm person create ${USERNAME} \"\$DNAME\" -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1 || true
-
+    echo \">>> Setting email for ${USERNAME}...\"
+    kanidm person update ${USERNAME} --mail ${EMAIL} -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1 || true
     echo \">>> Adding ${USERNAME} to group ${KANIDM_GROUP}...\"
     kanidm group add-members ${KANIDM_GROUP} ${USERNAME} -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1 || true
 

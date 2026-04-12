@@ -28,8 +28,8 @@ services:
       - --oidc-email-claim=email
       - --oidc-groups-claim=groups
       - --scope=openid profile email groups
-      - --allowed-group=brain_admins
-      - --allowed-group=brain_users
+      - --allowed-group=brain_admins@${DOMAIN}
+      - --allowed-group=brain_users@${DOMAIN}
       - --redirect-url=https://auth.${DOMAIN}/oauth2/callback
       - --whitelist-domain=.${DOMAIN}
       - --set-xauthrequest=true
@@ -102,7 +102,7 @@ services:
       - --oidc-email-claim=email
       - --oidc-groups-claim=groups
       - --scope=openid profile email groups
-      - --allowed-group=brain_admins
+      - --allowed-group=brain_admins@${DOMAIN}
       - --redirect-url=https://auth.${DOMAIN}/oauth2/callback
       - --whitelist-domain=.${DOMAIN}
       - --set-xauthrequest=true

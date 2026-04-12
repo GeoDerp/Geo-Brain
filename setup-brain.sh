@@ -312,6 +312,7 @@ setup_identity() {
   KANIDM_RECOVERY=$(run_on_node "timeout 120 podman exec kanidm /sbin/kanidmd recover-account -c /data/server.toml idm_admin 2>&1" | grep new_password | grep -o '"[^"]*"' | tr -d '"' || echo "")
   if [[ -n "$KANIDM_RECOVERY" ]]; then
     echo "✅ Kanidm idm_admin recovery password captured."
+    write_env_secret "KANIDM_ADMIN_PASSWORD" "$KANIDM_RECOVERY"
   else
     KANIDM_RECOVERY="Check container logs"
     echo "⚠️ Admin account recovery skipped or password not captured."
@@ -457,6 +458,46 @@ setup_storage() {
   fi
 }
 
+# --- 4b) MinIO Bucket Provisioning ---
+setup_minio() {
+  echo "--- 4b) MinIO Bucket Provisioning ---"
+  wait_for_service "MinIO" "run_on_node 'curl -m 5 -sf http://localhost:9000/minio/health/live'" || { echo "⚠️ MinIO not reachable, skipping bucket setup."; return 0; }
+
+  local MINIO_CONSOLE="http://localhost:9001"
+  local MINIO_USER="${MINIO_ROOT_USER:-minioadmin}"
+  local MINIO_PASS="${MINIO_ROOT_PASSWORD}"
+  local COOKIE_JAR="/tmp/.minio-cookies-$$"
+  local REQUIRED_BUCKETS=("loki-data")
+
+  # Login to MinIO Console API
+  local login_code
+  login_code=$(run_on_node "curl -s -m 10 -o /dev/null -w '%{http_code}' -c '${COOKIE_JAR}' -X POST '${MINIO_CONSOLE}/api/v1/login' -H 'Content-Type: application/json' -d '{\"accessKey\":\"${MINIO_USER}\",\"secretKey\":\"${MINIO_PASS}\"}'")
+  if [[ "$login_code" != "204" ]]; then
+    echo "⚠️ MinIO Console login failed (HTTP ${login_code}). Skipping bucket setup."
+    run_on_node "rm -f '${COOKIE_JAR}'" 2>/dev/null
+    return 0
+  fi
+
+  for bucket in "${REQUIRED_BUCKETS[@]}"; do
+    # Check if bucket exists
+    local exists
+    exists=$(run_on_node "curl -s -m 10 -b '${COOKIE_JAR}' '${MINIO_CONSOLE}/api/v1/buckets' 2>/dev/null" | grep -c "\"name\":\"${bucket}\"" || true)
+    if [[ "$exists" -gt 0 ]]; then
+      echo "🔹 MinIO bucket '${bucket}' already exists."
+    else
+      local create_code
+      create_code=$(run_on_node "curl -s -m 10 -o /dev/null -w '%{http_code}' -b '${COOKIE_JAR}' -X POST '${MINIO_CONSOLE}/api/v1/buckets' -H 'Content-Type: application/json' -d '{\"name\":\"${bucket}\"}'")
+      if [[ "$create_code" == "200" || "$create_code" == "201" ]]; then
+        echo "✅ Created MinIO bucket: ${bucket}"
+      else
+        echo "⚠️ Failed to create MinIO bucket '${bucket}' (HTTP ${create_code})."
+      fi
+    fi
+  done
+
+  run_on_node "rm -f '${COOKIE_JAR}'" 2>/dev/null
+}
+
 # --- 5) SOC (Wazuh & DefectDojo) ---
 setup_soc() {
   echo "--- 5) SOC (Wazuh & DefectDojo) ---"
@@ -521,6 +562,10 @@ main() {
   if [[ "$section" == "all" || "$section" == "storage" || "$section" == "identity" ]]; then
     echo ">>> [main] calling setup_storage"
     setup_storage
+  fi
+  if [[ "$section" == "all" || "$section" == "storage" ]]; then
+    echo ">>> [main] calling setup_minio"
+    setup_minio
   fi
   if [[ "$section" == "all" || "$section" == "identity" ]]; then
     echo ">>> [main] calling setup_identity"
