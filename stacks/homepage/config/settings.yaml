@@ -1,0 +1,41 @@
+---
+title: Geo-Brain
+favicon: /images/logo.svg
+theme: dark
+color: stone
+background:
+  image: ""
+  blur: sm
+  saturate: 50
+  brightness: 50
+  opacity: 50
+headerStyle: clean
+cardBlur: md
+statusStyle: dot
+hideVersion: true
+layout:
+  SOC:
+    style: row
+    columns: 3
+    header: true
+    icon: mdi-shield-lock
+  Observability:
+    style: row
+    columns: 3
+    header: true
+    icon: mdi-chart-line
+  Identity & Security:
+    style: row
+    columns: 3
+    header: true
+    icon: mdi-key-chain
+  Management:
+    style: row
+    columns: 3
+    header: true
+    icon: mdi-cog
+  User Apps:
+    style: row
+    columns: 3
+    header: true
+    icon: mdi-apps

@@ -1,0 +1,18 @@
+---
+- greeting:
+    text_size: xl
+    text: Geo-Brain
+- datetime:
+    text_size: l
+    format:
+      dateStyle: long
+      timeStyle: short
+      hour12: true
+- openmeteo:
+    label: Local
+    timezone: America/New_York
+    units: imperial
+    cache: 15
+- search:
+    provider: duckduckgo
+    target: _blank

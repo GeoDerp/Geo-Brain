@@ -29,10 +29,13 @@ This document provides an educational overview of all tools and technologies use
   - [Grype](#grype)
   - [Dockle](#dockle)
   - [Checkov](#checkov)
-  - [Terrascan](#terrascan)
+  - [Semgrep](#semgrep)
   - [Gitleaks](#gitleaks)
+- [Zero-Trust Networking](#zero-trust-networking)
+  - [Caddy mTLS Sidecars](#caddy-mtls-sidecars)
+  - [BunkerWeb (WAF)](#bunkerweb-waf)
 - [Strategic Infrastructure](#strategic-infrastructure)
-  - [Kanidm / Authelia](#kanidm--authelia)
+  - [Kanidm / OAuth2 Proxy](#kanidm--oauth2-proxy)
   - [Quay](#quay)
   - [Step-CA](#step-ca)
   - [MinIO](#minio)
@@ -70,7 +73,7 @@ graph TD
 
             subgraph AUTH ["Identity & Access"]
                 IAM["Kanidm — Identity / LDAP"]
-                AU["Authelia — SSO + MFA"]
+                AU["OAuth2 Proxy — OIDC Forward-Auth"]
             end
 
             subgraph ZT_MTLS ["Zero-Trust mTLS Network (Internal)"]
@@ -116,8 +119,8 @@ graph TD
     TR -- "HTTPS *.example.local" --> SD
     SD -- "127.0.0.1" --> APPS
 
-    TR -- "ForwardAuth (MFA check)" --> AU
-    AU -- "LDAP Verify" --> IAM
+    TR -- "ForwardAuth (OIDC auth / SSO)" --> AU
+    AU -- "OIDC Verify" --> IAM
     AU -. "auth OK" .-> TR
     TR -- "proxy" --> HP & DG & GF & WZ & DD
 
@@ -144,7 +147,7 @@ graph TD
     PR -- "scrapes /metrics" --> Podman
 
     %% ── Scan Results ──
-    TV & CV & GL & SG -- "findings" --> DD
+    CV & GL & SG -- "findings" --> DD
     HB -- "Clair findings" --> DD
 
     %% ── SOC Correlation ──
@@ -204,18 +207,6 @@ graph TD
 - Containerized workload focus
 - SELinux support for mandatory access control
 - Minimal maintenance overhead
-
-
-**Why it's used:**
-- **Immutable Filesystem:** The read-only root filesystem prevents unauthorized modifications, enhancing security posture.
-- **Transactional Updates:** Uses `transactional-update` to apply atomic updates with automatic rollback capability if something fails.
-- **Minimal Attack Surface:** Ships with only essential packages, reducing potential vulnerabilities.
-- **STIG Alignment:** Its hardened nature aligns well with DISA Security Technical Implementation Guides (STIGs).
-
-**Key Features:**
-- Automatic rollback on failed updates
-- Containerized workload focus
-- SELinux support for mandatory access control
 
 ---
 
@@ -296,12 +287,12 @@ labels:
 **Why it's used:**
 - **Dynamic Configuration:** Automatically discovers services via Podman labels.
 - **TLS Termination:** Manages internal TLS certificates issued by Step-CA.
-- **SSO Integration:** Forwards authentication requests to Authelia for centralized SSO.
+- **SSO Integration:** Forwards authentication requests to OAuth2 Proxy for centralized SSO.
 - **Rootless Compatible:** Runs efficiently in a rootless Podman environment.
 
 **Protection Workflow:**
 ```
-User → Traefik (TLS) → Authelia (MFA) → Backend Service
+User → Traefik (TLS) → OAuth2 Proxy (OIDC) → Kanidm Login → Backend Service
 ```
 
 ---
@@ -332,7 +323,7 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 
 ### Vector
 
-**What it is:** Vector is a high-performance, observability data pipeline that collect, transform, and route all your logs and metrics.
+**What it is:** Vector is a high-performance, observability data pipeline that collects, transforms, and routes all your logs and metrics.
 
 **Why it's used:**
 - **Log Unification:** Collects logs from `journald`, Podman containers, and system files.
@@ -462,13 +453,14 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 
 ---
 
-### Terrascan
+### Semgrep
 
-**What it is:** Terrascan is a static code analyzer for IaC security that supports multiple policy engines.
+**What it is:** Semgrep is an open-source static analysis engine for finding bugs, detecting vulnerabilities, and enforcing code standards.
 
 **Why it's used:**
-- **Multi-Cloud:** Supports AWS, Azure, GCP, and Kubernetes configurations.
-- **OPA Integration:** Uses Open Policy Agent (OPA) for policy enforcement.
+- **Multi-Language SAST:** Supports Python, Go, JavaScript, YAML, Dockerfiles, and more.
+- **Custom Rules:** Supports writing custom rules in a pattern-based DSL for project-specific security policies.
+- **CI-Ready:** Integrated into the `sast-scan.sh` pipeline alongside Checkov, Gitleaks, and Grype.
 
 ---
 
@@ -482,6 +474,39 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 
 ---
 
+## Zero-Trust Networking
+
+### Caddy mTLS Sidecars
+
+**What it is:** Caddy is a modern web server used as a lightweight mTLS termination sidecar. Each backend application shares a network namespace with a Caddy container that handles mutual TLS via Step-CA.
+
+**Why it's used:**
+- **Zero-Trust mTLS:** Applications bind strictly to `127.0.0.1` and never receive direct network traffic. The Caddy sidecar terminates mTLS and proxies to the application over the loopback interface.
+- **Step-CA Integration:** Automatically provisions short-lived mTLS certificates from the internal PKI.
+- **Network Micro-Segmentation:** Backend networks are set to `internal: true` to air-gap them. The only ingress path is through the authenticated sidecar.
+- **CrowdSec Bouncer:** Sidecars can enforce CrowdSec ban decisions, extending IPS deep into the internal network.
+
+**Architecture:**
+```
+Client → Traefik (TLS) → Caddy Sidecar (mTLS) → 127.0.0.1:app_port → Application
+```
+
+---
+
+### BunkerWeb (WAF)
+
+**What it is:** BunkerWeb is a full-stack Web Application Firewall based on NGINX with ModSecurity and OWASP Core Rule Set (CRS).
+
+**Why it's used:**
+- **L7 Protection:** Provides rate limiting, DDoS protection, bot mitigation, and OWASP CRS rule enforcement at the HTTP layer.
+- **CrowdSec Integration:** Consumes CrowdSec ban lists natively for coordinated IP blocking across the edge and internal sidecars.
+- **Perimeter Defense:** Sits in front of Traefik as the outermost layer of the network, filtering malicious traffic before it reaches the reverse proxy.
+- **STIG Alignment:** Enforces strict HTTP security headers, TLS policies, and request validation.
+
+> **Status:** Optional/WIP. Included in the boot order but not required for core operation.
+
+---
+
 ## Strategic Infrastructure
 
 ### Kanidm
@@ -490,16 +515,17 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 
 **Why it's used:**
 - **Centralized IAM:** Kanidm provides Single Sign-On (SSO) via OpenID Connect (OIDC) for all supported web interfaces (Quay, Wazuh, DefectDojo, MinIO, etc.).
-- **Role-Based Access Control (RBAC):** We define groups (like `system_admins`) in Kanidm. When an OIDC token is minted for an application like Quay or DefectDojo, Kanidm passes these group memberships as "scopes" or "roles" within the JWT claims. The downstream application maps these claims to its internal admin tags. This means you grant administrative access centrally in Kanidm, rather than per-stack.
-- **Service Accounts:** It securely handles service-to-service authentication (e.g., Authelia validating user passwords against Kanidm's LDAP interface using a dedicated `authelia_svc` account).
+- **Role-Based Access Control (RBAC):** We define groups (`brain_admins`, `brain_users`) in Kanidm. When an OIDC token is minted for an application like Quay or DefectDojo, Kanidm passes these group memberships as "scopes" or "roles" within the JWT claims. The downstream application maps these claims to its internal admin tags. This means you grant administrative access centrally in Kanidm, rather than per-stack.
+- **OIDC Clients:** Applications that support OIDC natively (Quay, Wazuh, DefectDojo, MinIO, etc.) authenticate directly against Kanidm. For applications that don't support OIDC, OAuth2 Proxy acts as a forward-auth middleware, redirecting unauthenticated users to Kanidm's login page.
 
-### Authelia
+### OAuth2 Proxy
 
-**What it is:** Authelia is an authentication and authorization server that acts as a middleware companion to Traefik.
+**What it is:** OAuth2 Proxy is a reverse proxy and forward-auth provider that authenticates users via OpenID Connect (OIDC).
 
 **Why it's used:**
-- **MFA enforcement:** While Kanidm handles the primary identity, Authelia can enforce Two-Factor Authentication (2FA) for applications that do not natively support OIDC.
-- **Forward-Auth:** Traefik intercepts incoming requests and asks Authelia if the user is authorized. Authelia checks against Kanidm via LDAP. If authorized, Traefik lets the request through.
+- **OIDC-Based Forward-Auth:** Traefik intercepts incoming requests and asks OAuth2 Proxy if the user is authenticated. OAuth2 Proxy redirects unauthenticated users to Kanidm's OIDC login page. Once authenticated, Traefik lets the request through.
+- **No LDAP Required:** OAuth2 Proxy uses the OIDC protocol natively, eliminating the need for LDAP service accounts or POSIX passwords.
+- **Seamless SSO:** Users authenticate once via Kanidm's web UI and gain access to all protected services via cookie-based sessions.
 
 ---
 
@@ -519,7 +545,7 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 **What it is:** Step-CA is a private certificate authority for issuing internal TLS certificates.
 
 **Why it's used:**
-- **Internal PKI:** Issues certificates for `*.example.local` domain.
+- **Internal PKI:** Issues certificates for `*.${DOMAIN}` (e.g., `*.example.local`).
 - **Automated Traefik ACME:** Integrated directly with Traefik via the ACME protocol for zero-touch, automated certificate issuance across all dynamic user stacks.
 
 ---
@@ -539,24 +565,30 @@ User → Traefik (TLS) → Authelia (MFA) → Backend Service
 
 | Category | Tools | Purpose |
 |----------|-------|---------|
-| **Host OS** | openSUSE MicroOS | Immutable, hardened container host |
+| **Host OS** | openSUSE MicroOS / Fedora CoreOS | Immutable, hardened container host |
 | **Container Engine** | Podman | Rootless container runtime |
-| **Orchestration** | Traefik, Homepage | Proxy, Dashboard, and Management |
-| **Stack Mgmt** | Dockge | Docker Compose stack management |
-| **AI Analysis** | RamaLama | Intelligent log triage |
+| **Edge & Proxy** | Traefik, BunkerWeb (WAF) | Reverse proxy, TLS termination, L7 filtering |
+| **Dashboard & Mgmt** | Homepage, Dockge | Service dashboard, stack management |
+| **AI Analysis** | RamaLama | Air-gapped LLM log triage |
 | **SIEM/XDR** | Wazuh | Security event management |
 | **Log Pipeline** | Vector | Log collection and forwarding |
-| **Runtime Security** | Falco | Real-time threat detection |
+| **Metrics** | Prometheus | Time-series metrics collection |
+| **Visualization** | Grafana | Unified dashboards for logs, metrics, and alerts |
+| **Runtime Security** | Falco | eBPF-based real-time threat detection |
+| **IPS** | CrowdSec | Air-gapped intrusion prevention |
 | **Vuln Management** | DefectDojo | Finding aggregation and tracking |
-| **Image Scanning** | Clair, Grype | CVE detection |
-| **Image Linting** | Dockle | Best practice validation |
-| **IaC Scanning** | Checkov, Terrascan | Configuration security |
-| **Secret Detection** | Gitleaks | Credential leak prevention |
-| **Identity** | Kanidm, Authelia | Authentication and authorization |
-| **Registry** | Quay | Image caching and scanning |
-| **PKI** | Step-CA | Internal certificate authority |
-| **IPS** | CrowdSec | Intrusion prevention |
+| **Image Scanning** | Clair, Grype | CVE detection in container images |
+| **Image Linting** | Dockle | CIS benchmark and best practice validation |
+| **IaC Scanning** | Checkov | Infrastructure-as-Code security analysis |
+| **SAST** | Semgrep | Static application security testing |
+| **Secret Detection** | Gitleaks | Credential leak prevention in Git history |
+| **Identity** | Kanidm | Centralized OIDC/LDAP identity provider |
+| **Auth Proxy** | OAuth2 Proxy | OIDC forward-auth SSO gateway |
+| **Zero-Trust Net** | Caddy Sidecars | mTLS termination for internal services |
+| **Registry** | Quay + Clair | Pull-through cache, image scanning |
+| **PKI** | Step-CA | Internal certificate authority (ACME) |
 | **Storage** | MinIO | S3-compatible object storage |
+| **User Apps** | Moodle, n8n, SilverBullet | LMS, workflow automation, notes |
 
 ---
 

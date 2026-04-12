@@ -3,6 +3,8 @@ services:
     image: docker.io/defectdojo/defectdojo-django:2.55.4
     container_name: defectdojo-django
     restart: always
+    entrypoint: ["/entrypoint-initializer.sh"]
+    command: ["/entrypoint-uwsgi.sh"]
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -17,7 +19,13 @@ services:
       - DD_SOCIAL_AUTH_OIDC_OIDC_ENDPOINT=https://kanidm.${DOMAIN}/oauth2/openid/defectdojo
       - DD_SOCIAL_AUTH_OIDC_KEY=defectdojo
       - DD_SOCIAL_AUTH_OIDC_SECRET=${DOJO_OIDC_SECRET}
+      - DD_ALLOWED_HOSTS=defectdojo.${DOMAIN}
       - DD_INITIALIZE=true
+      - DD_ADMIN_USER=admin
+      - DD_ADMIN_PASSWORD=${DEFECTDOJO_ADMIN_PASSWORD}
+      - DD_ADMIN_MAIL=admin@${DOMAIN}
+      - DD_ADMIN_FIRST_NAME=Admin
+      - DD_ADMIN_LAST_NAME=User
     networks:
       - vulnerability-net
       - proxy-net
@@ -27,7 +35,7 @@ services:
           memory: 2G
           cpus: '1.0'
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8081/healthcheck')\""]
+      test: ["CMD-SHELL", "python3 -c 'import socket; s=socket.create_connection((\"127.0.0.1\",8081),5); s.close()' || exit 1"]
       interval: 5m
       timeout: 10s
       retries: 3
@@ -38,8 +46,7 @@ services:
       - "traefik.http.routers.defectdojo.rule=Host(`defectdojo.${DOMAIN}`)"
       - "traefik.http.routers.defectdojo.entrypoints=websecure"
       - "traefik.http.routers.defectdojo.tls=true"
-      - "traefik.http.routers.defectdojo.middlewares=authelia@file,security-headers@file"
-      - "authelia.access_control.policy=two_factor"
+      - "traefik.http.routers.defectdojo.middlewares=oauth2-proxy-admin@file,security-headers@file"
       - "traefik.http.services.defectdojo.loadbalancer.server.port=8081"
       - "security.stig.compliance=true"
       - "security.stig.role=vulnerability-mgmt"

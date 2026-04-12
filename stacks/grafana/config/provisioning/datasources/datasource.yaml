@@ -3,15 +3,18 @@ apiVersion: 1
 datasources:
   - name: Prometheus
     type: prometheus
+    uid: prometheus
     url: http://prometheus:9090
     access: proxy
     isDefault: true
   - name: Loki
     type: loki
+    uid: loki
     url: http://loki:3100
     access: proxy
   - name: Wazuh (OpenSearch)
     type: grafana-opensearch-datasource
+    uid: wazuh-opensearch
     url: https://wazuh-indexer:9200
     access: proxy
     jsonData:

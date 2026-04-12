@@ -13,6 +13,18 @@ services:
       - 3000:3000
     environment:
       - HOMEPAGE_VAR_DISABLE_UPDATE_CHECK=true
+      - HOMEPAGE_VAR_WAZUH_URL=https://wazuh.${DOMAIN}
+      - HOMEPAGE_VAR_DEFECTDOJO_URL=https://defectdojo.${DOMAIN}
+      - HOMEPAGE_VAR_GRAFANA_URL=https://grafana.${DOMAIN}
+      - HOMEPAGE_VAR_KANIDM_URL=https://kanidm.${DOMAIN}
+      - HOMEPAGE_VAR_QUAY_URL=https://quay.${DOMAIN}
+      - HOMEPAGE_VAR_TRAEFIK_URL=https://traefik.${DOMAIN}
+      - HOMEPAGE_VAR_TRAEFIK_API=https://traefik.${DOMAIN}
+      - HOMEPAGE_VAR_DOCKGE_URL=https://dockge.${DOMAIN}
+      - HOMEPAGE_VAR_MINIO_URL=https://minio.${DOMAIN}
+      - HOMEPAGE_VAR_MOODLE_URL=https://moodle.${DOMAIN}
+      - HOMEPAGE_VAR_N8N_URL=https://n8n.${DOMAIN}
+      - HOMEPAGE_VAR_NOTES_URL=https://notes.${DOMAIN}
     volumes:
       - ./config:/app/config:z,U
       - ${PODMAN_SOCK}:/var/run/docker.sock:ro
@@ -32,11 +44,10 @@ services:
       start_period: 5m
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.homepage.rule=Host(`home.${DOMAIN}`)"
+      - "traefik.http.routers.homepage.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.homepage.entrypoints=websecure"
       - "traefik.http.routers.homepage.tls=true"
-      - "traefik.http.routers.homepage.middlewares=authelia@file,security-headers@file"
-      - "authelia.access_control.policy=one_factor"
+      - "traefik.http.routers.homepage.middlewares=oauth2-proxy@file,security-headers@file"
       - "traefik.http.services.homepage.loadbalancer.server.port=3000"
       - "security.stig.compliance=true"
       - "security.stig.role=dashboard"
@@ -44,7 +55,7 @@ services:
       - "homepage.name=Dashboard"
       - "homepage.icon=homepage.png"
       - "homepage.description=Service Dashboard"
-      - "homepage.href=https://home.${DOMAIN}"
+      - "homepage.href=https://${DOMAIN}"
 
 networks:
   mgmt-net:

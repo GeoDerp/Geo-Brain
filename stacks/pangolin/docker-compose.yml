@@ -1,5 +1,5 @@
 # # Pangolin - Identity-Aware Reverse Proxy & WireGuard VPN
-# # OPTIONAL STACK: Replaces Traefik + Authelia for zero-trust tunnel-based access.
+# # OPTIONAL STACK: Replaces Traefik + OAuth2 Proxy for zero-trust tunnel-based access.
 # # Pangolin bundles its own Traefik instance; do NOT run alongside the traefik stack.
 # # Requires ports 80, 443, 51820 (site tunnels), and 21820 (client VPN).
 # # License: AGPL-3.0 (Community Edition)

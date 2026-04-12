@@ -106,7 +106,7 @@ get_base_stacks() {
         "bunkerweb"
         "pangolin"
         "kanidm"
-        "authelia"
+        "oauth2-proxy"
         "minio"
         "loki"
         "vector"
@@ -263,7 +263,7 @@ ensure_remote_dirs() {
 
 # --- Render Config Templates ---
 # Expands ${VARIABLE} references in config files on the remote node.
-# Required because some apps (Kanidm, Authelia, Traefik dynamic config, Loki)
+# Required because some apps (Kanidm, Traefik dynamic config, Loki)
 # read config files directly and cannot expand environment variables natively.
 
 render_config_templates() {
@@ -281,7 +281,7 @@ set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
 command -v envsubst &>/dev/null || exit 0
 
 # Whitelist: only expand variables defined in .env (prevents clobbering app-specific patterns)
-VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY} ${N8N_OIDC_SECRET}'
+VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${OAUTH2_PROXY_CLIENT_SECRET} ${OAUTH2_PROXY_COOKIE_SECRET} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${QUAY_SECRET_KEY} ${QUAY_DB_SECRET_KEY} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${DEFECTDOJO_ADMIN_PASSWORD} ${WAZUH_API_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY} ${OAUTH2_PROXY_OIDC_SECRET}'
 find . -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
     if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
         envsubst "$VARLIST" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
@@ -293,7 +293,7 @@ RENDER_SCRIPT
         local config_dir="$REPO_ROOT/$stack_dir/config"
         [[ -d "$config_dir" ]] || return 0
         command -v envsubst &>/dev/null || return 0
-        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${AUTHELIA_LDAP_PASSWORD} ${AUTHELIA_JWT_SECRET} ${AUTHELIA_ENCRYPTION_KEY} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY} ${N8N_OIDC_SECRET}'
+        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${OAUTH2_PROXY_CLIENT_SECRET} ${OAUTH2_PROXY_COOKIE_SECRET} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${QUAY_SECRET_KEY} ${QUAY_DB_SECRET_KEY} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${DEFECTDOJO_ADMIN_PASSWORD} ${WAZUH_API_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY}  ${OAUTH2_PROXY_OIDC_SECRET}'
         find "$config_dir" -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
             if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
                 envsubst "$varlist" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
@@ -320,6 +320,7 @@ remote_compose() {
         set -a; [ -f ~/${REMOTE_BASE}/.env ] && source ~/${REMOTE_BASE}/.env; set +a
         export CONTAINER_UID=\$(id -u)
         export PODMAN_SOCK=/run/user/\$(id -u)/podman/podman.sock
+        export STACKS_PATH=\"\$HOME/${REMOTE_BASE}/stacks\"
         if podman compose version &>/dev/null; then
             podman compose ${cmd} ${quoted_args}
         elif command -v podman-compose &>/dev/null; then
@@ -340,6 +341,7 @@ local_compose() {
     local extra_args=("$@")
 
     cd "$REPO_ROOT/$stack_dir"
+    export STACKS_PATH="$REPO_ROOT/stacks"
     if podman compose version &> /dev/null; then
         podman compose "$cmd" "${extra_args[@]}"
     elif command -v podman-compose &> /dev/null; then
@@ -547,8 +549,10 @@ generate_traefik_config() {
         return 0
     fi
 
-    # Extract the first service name that has Traefik labels
-    local service_name=$(grep -B 20 "traefik.enable=true" "$compose_file" | grep -E "^  [a-zA-Z0-9_-]+:" | tail -n 1 | sed 's/://' | xargs)
+    # Extract the service name that has Traefik labels (use awk to find
+    # the nearest top-level service definition above "traefik.enable=true")
+    local service_name
+    service_name=$(awk '/^  [a-zA-Z0-9_-]+:/{svc=$1} /traefik\.enable=true/{gsub(/:$/,"",svc); print svc; exit}' "$compose_file" | xargs)
     [[ -z "$service_name" ]] && service_name="${stack_name##*/}"
 
     local filename="gen_${stack_name/\//_}_${service_name}.yml"
@@ -576,8 +580,19 @@ generate_traefik_config() {
 
     # Target container name logic
     local target_host="${service_name}"
-    # Check if container_name is explicitly set for this service
-    local explicit_name=$(grep -A 5 "^  $service_name:" "$compose_file" | grep "container_name:" | sed -E 's/.*container_name:[[:space:]]*"?([^"]+)"?.*/\1/' | xargs)
+    # Extract container_name from within the service block (between this service
+    # definition and the next top-level service or EOF)
+    local explicit_name
+    explicit_name=$(awk -v svc="  ${service_name}:" '
+        $0 ~ "^"svc { found=1; next }
+        found && /^  [a-zA-Z0-9_-]+:/ { exit }
+        found && /container_name:/ {
+            sub(/.*container_name:[[:space:]]*/,"")
+            gsub(/"/,"")
+            gsub(/[[:space:]]/,"")
+            print; exit
+        }
+    ' "$compose_file")
     
     if [[ -n "$explicit_name" ]]; then
         target_host="$explicit_name"
@@ -590,7 +605,15 @@ generate_traefik_config() {
     # [[ "$service_name" == "quay" ]] && target_host="quay-core"
     # [[ "$service_name" == "wazuh" ]] && target_host="wazuh-dashboard"
 
-    echo ">>> Generating Traefik dynamic config: $rule -> $target_host:$port"
+    # Detect if an explicit Traefik service is declared (e.g. api@internal)
+    local custom_service
+    custom_service=$(grep 'traefik.http.routers.*\.service=' "$compose_file" 2>/dev/null | sed -E 's/.*service[=:]"?([^"]+)"?.*/\1/' | head -n 1 || true)
+
+    if [[ -n "$custom_service" ]]; then
+        echo ">>> Generating Traefik dynamic config: $rule -> $custom_service"
+    else
+        echo ">>> Generating Traefik dynamic config: $rule -> $target_host:$port"
+    fi
 
     cat <<EOF > "$output_file"
 # Generated by deploy.sh for $stack_name/$service_name
@@ -600,7 +623,7 @@ http:
       rule: "$rule"
       entryPoints:
         - websecure
-      service: ${stack_name/\//_}_${service_name}
+      service: ${custom_service:-${stack_name/\//_}_${service_name}}
       tls:
         certResolver: $resolver
 EOF
@@ -613,7 +636,9 @@ EOF
         done
     fi
 
-    cat <<EOF >> "$output_file"
+    # Only emit a service definition if no custom service override
+    if [[ -z "$custom_service" ]]; then
+        cat <<EOF >> "$output_file"
   services:
     ${stack_name/\//_}_${service_name}:
       loadBalancer:
@@ -621,69 +646,15 @@ EOF
           - url: "$scheme://$target_host:$port"
 EOF
 
-    if [[ -n "$serverstransport" ]]; then
-        echo "        serversTransport: $serverstransport" >> "$output_file"
+        if [[ -n "$serverstransport" ]]; then
+            echo "        serversTransport: $serverstransport" >> "$output_file"
+        fi
     fi
 
     # If stack is remote, sync the generated file
     if [[ "$DEPLOY_MODE" == "remote" ]]; then
         "${SSH_CMD[@]}" "mkdir -p ~/${REMOTE_BASE}/$rel_gen_dir"
         rsync -lpt "$output_file" "$REMOTE_USER@$REMOTE_HOST:~/${REMOTE_BASE}/$rel_gen_dir/$filename"
-    fi
-}
-
-# --- AUTHELIA ACCESS CONTROL GENERATOR ---
-# Scans all stacks for 'authelia.access_control.policy' labels and generates
-# the access_rules.yml config file consumed by Authelia's multi-config loading.
-
-generate_authelia_access_control() {
-    local output_file="$REPO_ROOT/stacks/authelia/config/access_rules.yml"
-    local rel_output="stacks/authelia/config/access_rules.yml"
-
-    echo ">>> Generating Authelia access_control rules from stack labels..."
-
-    # Start the YAML structure
-    cat <<'HEADER' > "$output_file"
-# Auto-generated by deploy.sh — DO NOT EDIT
-# Source: authelia.access_control.policy labels in stack docker-compose files
-access_control:
-  default_policy: deny
-  rules:
-HEADER
-
-    local found=0
-
-    # Scan all stack compose files (including user/* stacks)
-    while IFS= read -r compose_file; do
-        # Only process stacks with the authelia policy label
-        if ! grep -q "authelia.access_control.policy=" "$compose_file" 2>/dev/null; then
-            continue
-        fi
-
-        # Extract the policy value
-        local policy
-        policy=$(grep "authelia.access_control.policy=" "$compose_file" \
-            | sed -E 's/.*authelia\.access_control\.policy=([^"]+).*/\1/' | head -n1)
-
-        # Extract domain from the Traefik router Host() rule
-        local domain
-        domain=$(grep "traefik.http.routers.*.rule=Host" "$compose_file" \
-            | sed -E "s/.*Host\(\`([^\`]+)\`\).*/\1/" | head -n1)
-
-        [[ -z "$policy" || -z "$domain" ]] && continue
-
-        echo "    - domain: \"$domain\"" >> "$output_file"
-        echo "      policy: $policy" >> "$output_file"
-        found=$((found + 1))
-
-    done < <(find "$REPO_ROOT/stacks" -name 'docker-compose.yml' -not -path '*/authelia/*' -not -path '*/_template/*' | sort)
-
-    echo ">>> Generated $found access_control rules in access_rules.yml"
-
-    # Sync to remote
-    if [[ "$DEPLOY_MODE" == "remote" ]]; then
-        "${SSH_CMD[@]}" "mkdir -p ~/${REMOTE_BASE}/$(dirname "$rel_output")"
-        rsync -lpt "$output_file" "$REMOTE_USER@$REMOTE_HOST:~/${REMOTE_BASE}/$rel_output"
     fi
 }
 
@@ -706,13 +677,11 @@ deploy_single() {
         up)
             check_security "$REPO_ROOT/$stack_dir" "$stack_name" || return 1
             generate_traefik_config "$stack_name"
-            [[ "$stack_name" == "authelia" ]] && generate_authelia_access_control
             run_compose "$stack_dir" "up" "-d"
             ;;
         redeploy)
             check_security "$REPO_ROOT/$stack_dir" "$stack_name" || return 1
             generate_traefik_config "$stack_name"
-            [[ "$stack_name" == "authelia" ]] && generate_authelia_access_control
             echo ">>> Forcing recreation of containers for $stack_name..."
             run_compose "$stack_dir" "down"
             run_compose "$stack_dir" "up" "-d" "--force-recreate"
@@ -747,7 +716,6 @@ deploy_batch() {
     # Always cleanup old generated configs at the start of a run (if up/redeploy)
     if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
         cleanup_traefik_configs
-        generate_authelia_access_control
     fi
 
     # --- QUAY-FIRST BOOTSTRAPPING ---

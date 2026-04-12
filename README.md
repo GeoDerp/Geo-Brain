@@ -1,6 +1,11 @@
 <p align="center">
   <img src="./docs/logo.svg" alt="Geo-Brain SSOF Logo" width="128"/>
+</br>
+<img src="./docs/homepage.png" />
 </p>
+
+
+
 
 # Geo-Brain: Single Node Homelab
 
@@ -17,16 +22,18 @@ For a detailed breakdown of every tool and architectural choice, see **[TOOLS_EX
 The Geo-Brain homelab is organized into discrete **stacks**:
 
 - **Core Infrastructure:** `step-ca` (Internal PKI), `quay` (Container Registry), `traefik` (Reverse Proxy)
-- **Identity & Access:** `kanidm` (Identity Provider), `authelia` (SSO/MFA)
-- **Security Operations:** `wazuh` (SIEM), `falco` (Runtime Security), `crowdsec` (IPS)
+- **Identity & Access:** `kanidm` (Identity Provider), `oauth2-proxy` (SSO via OIDC)
+- **Security Operations:** `wazuh` (SIEM), `falco` (Runtime Security), `crowdsec` (IPS), `defectdojo` (Vulnerability Management)
 - **Observability:** `prometheus` & `grafana` (Metrics), `vector` & `loki` (Logs)
-- **Management:** `homepage` (Dashboard), `dockge` (Stack UI)
+- **Management:** `homepage` (Dashboard), `dockge` (Stack UI), `ramalama` (AI Log Triage)
+- **User Applications:** `moodle` (LMS), `n8n` (Workflow Automation), `notes` (SilverBullet)
+- **Optional/WIP:** `bunkerweb` (WAF), `pangolin` (Zero-Trust Tunnel)
 
 ---
 
 ## 🚀 Quick Start Guide
 
-Follow these steps to deploy Geo-Brain from scratch on a remote node (e.g., `brain.home.lan`).
+Follow these steps to deploy Geo-Brain from scratch on a remote node (e.g., `myhost.example.local`).
 
 ### Step 1: Environment Configuration
 
@@ -35,7 +42,7 @@ Copy the template and set your domain and secrets:
 ```bash
 cp .env-template .env
 ```
-Edit `.env` to configure your target `DOMAIN` (default: `brain.home.lan`), connection settings (`REMOTE_HOST`, `REMOTE_USER`), and critical passwords. **Do not commit your `.env` file.**
+Edit `.env` to configure your target `DOMAIN` (default: `example.local`), connection settings (`REMOTE_HOST`, `REMOTE_USER`), and critical passwords. **Do not commit your `.env` file.**
 
 ### Step 2: Initialize the Node
 
@@ -47,7 +54,7 @@ Run the node initialization script to install dependencies (Podman, Ansible), co
 
 ### Step 3: Generate Certificates
 
-Generate the root CA and required SSL certificates for `step-ca`, `quay`, and `kanidm`:
+Generate the root CA and required SSL certificates for Traefik, Kanidm, and initial bootstrap:
 
 ```bash
 ./scripts/secrets/gen-selfsigned-certs.sh
@@ -85,46 +92,58 @@ To avoid browser warnings, install the generated Root CA onto your local worksta
 
 ### Step 7: Initial Logins & User Setup
 
-Your central access point for all services is the **Homepage (Dashboard):** `https://home.<DOMAIN>`
+Your central access point for all services is the **Homepage Dashboard:** `https://<DOMAIN>`
 
 Before logging into downstream apps, you **must** bootstrap your identity provider:
 
 1. **Kanidm (Identity):** `https://kanidm.<DOMAIN>`
-   - `setup-brain.sh` automatically configures Kanidm (creating the `authelia_svc` service account, setting up OIDC clients, and injecting the generated secrets back into your `.env`).
+   - `setup-brain.sh` automatically configures Kanidm (registering OIDC clients and injecting the generated secrets back into your `.env`).
    - Use the `idm_admin` recovery password shown at the end of the setup script to log in.
-   - **Create Your User Account:**
-     - The Kanidm Web UI for the `idm_admin` account does not expose user creation natively. The intended method is via the Kanidm CLI.
-     - We have provided a wrapper script to automate creating your first daily-driver user account (e.g., `admin`). Run:
-       ```bash
-       ./scripts/create-kanidm-user.sh admin "Global Admin"
-       ```
-     - It will prompt you for the `idm_admin` recovery password and then automatically generate a secure, temporary initial password for your new account.
-     - You will use this new account and password to log into all SSO-protected services (Quay, Grafana, DefectDojo, etc.). You can change the password later by logging into the Kanidm Web UI (`https://kanidm.<DOMAIN>`).
+   - **Create Your First User Account:**
+     ```bash
+     # Create an admin with full access to all applications
+     ./scripts/create-kanidm-user.sh --role admin myadmin "Global Admin"
 
+     # Create a regular user with access to user stacks only
+     ./scripts/create-kanidm-user.sh --role user jdoe "John Doe"
+     ```
+     The script prompts for the `idm_admin` recovery password and generates a one-time credential reset URL (valid for 1 hour). Share the URL with the user to set their password.
+
+   **RBAC Model — Groups & Scopes:**
+
+   | Group | Role | Access |
+   |-------|------|--------|
+   | `brain_admins` | Admin | **All** applications — infrastructure, SOC, observability, and user stacks |
+   | `brain_users` | User | **User stacks only** — moodle, n8n, notes, and other `user/` applications |
+
+   OAuth2 Proxy enforces group-based access at the Traefik ForwardAuth layer:
+   - **Admin-only routes** (Traefik, Wazuh, Dockge, DefectDojo) use the `oauth2-proxy-admin` middleware — requires `brain_admins` membership.
+   - **All other routes** use the `oauth2-proxy` middleware — requires `brain_admins` OR `brain_users` membership.
+   - OIDC scopes requested: `openid`, `profile`, `email`, `groups`.
 
 2. **Quay (Registry):** `https://quay.<DOMAIN>`
-   - **SSO:** Already configured declaratively. Simply click 'OIDC' on the login screen once the Kanidm client is created.
+   - **SSO:** Already configured declaratively. Click 'OIDC' on the login screen.
    - **Local Admin:** Use for break-glass only. Set up during first visit if OIDC is not yet active.
 
 3. **Wazuh (SIEM):** `https://wazuh.<DOMAIN>`
-   - **SSO:** Already configured declaratively. Uses `Preferred_Username` claim from Kanidm.
-   - **Local Admin:** Default credentials are `admin` / `admin`. Change this immediately.
+   - **SSO:** Protected behind OAuth2 Proxy (admin-only). Kanidm SSO enforced automatically.
+   - **Local Admin:** Default credentials are `admin` / `admin`. Change immediately.
 
 4. **DefectDojo (Vulnerability Management):** `https://defectdojo.<DOMAIN>`
-   - **SSO:** Already configured declaratively. Click "Log in via Kanidm SSO."
-   - **Local Admin:** Extract randomly generated password from initializer logs:
-     `podman logs defectdojo-initializer 2>&1 | grep "Admin password:"`
+   - **SSO:** Click "Log in via Kanidm SSO."
+   - **Local Admin:** Extract from initializer logs:
+     `podman logs defectdojo-django 2>&1 | grep "Admin password:"`
 
 5. **MinIO (Object Storage):** `https://minio.<DOMAIN>`
-   - **SSO:** Already configured declaratively. Click "Login with OpenID."
+   - **SSO:** Click "Login with OpenID."
    - **Local Admin:** Uses `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` from your `.env`.
 
-7. **Grafana (Observability):** `https://grafana.<DOMAIN>`
-   - **SSO:** Automatic via Authelia ForwardAuth headers. No manual setup required.
+6. **Grafana (Observability):** `https://grafana.<DOMAIN>`
+   - **SSO:** Automatic via OAuth2 Proxy ForwardAuth headers. No manual setup required.
 
-8. **Dockge (Stack Management):** `https://dockge.<DOMAIN>`
-   - First-time access will prompt you to create the local admin account.
-   - Use Dockge to visually manage, start, stop, and read logs of all your deployed Compose stacks.
+7. **Dockge (Stack Management):** `https://dockge.<DOMAIN>`
+   - First-time access prompts you to create the local admin account.
+   - Use Dockge to visually manage, start, stop, and read logs of all Compose stacks.
 
 ---
 
@@ -150,6 +169,9 @@ The `deploy.sh` script dynamically generates Traefik configurations and manages 
 # Tear down a stack
 ./deploy.sh <stack_name> down
 
+# Force recreate (rebuild + restart)
+./deploy.sh <stack_name> redeploy
+
 # View logs for a stack
 ./deploy.sh <stack_name> logs
 
@@ -161,10 +183,10 @@ The `deploy.sh` script dynamically generates Traefik configurations and manages 
 
 ## 👤 Adding User Applications
 
-You can deploy your own uncommitted applications via the `user/` directory.
+You can deploy your own applications via the `stacks/user/` directory.
 
 1. Create a folder: `mkdir -p stacks/user/myapp`
-2. Add your `docker-compose.yml`.
+2. Add your `docker-compose.yml` following the [template](stacks/_template/docker-compose.yml).
 3. Deploy it: `./deploy.sh user/myapp up`
 
-All user stacks automatically receive Traefik reverse proxy configuration if they include the label `traefik.enable=true`.
+All user stacks automatically receive Traefik reverse proxy configuration and OAuth2 Proxy SSO protection if they include the label `traefik.enable=true`. User stacks are accessible to members of both `brain_admins` and `brain_users` groups.

@@ -13,6 +13,8 @@ services:
     tmpfs:
       - /tmp
       - /run
+      - /plugins-storage
+      - /plugins-local
     ports:
       - 80:80
       - 443:443
@@ -35,7 +37,6 @@ services:
       - wazuh-net
       - vulnerability-net
       - quay-net
-      - user-net
       - pki-net
       - storage-net
     deploy:
@@ -56,8 +57,7 @@ services:
       - "traefik.http.routers.traefik-dashboard.tls=true"
       - "traefik.http.routers.traefik-dashboard.tls.certresolver=stepca"
       - "traefik.http.routers.traefik-dashboard.service=api@internal"
-      - "traefik.http.routers.traefik-dashboard.middlewares=authelia@file,security-headers@file"
-      - "authelia.access_control.policy=two_factor"
+      - "traefik.http.routers.traefik-dashboard.middlewares=oauth2-proxy-admin@file,security-headers@file"
       - "security.stig.compliance=true"
       - "security.stig.role=proxy"
       - "homepage.group=Management"
@@ -82,8 +82,6 @@ networks:
   vulnerability-net:
     external: true
   quay-net:
-    external: true
-  user-net:
     external: true
   pki-net:
     external: true

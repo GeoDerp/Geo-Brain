@@ -9,12 +9,11 @@ services:
       - ALL
     environment:
       - OPENSEARCH_JAVA_OPTS=${WAZUH_INDEXER_JAVA_OPTS:--Xms512m -Xmx512m}
-      - DISABLE_INSTALL_DEMO_CONFIG=true
       - discovery.type=single-node
-      - plugins.security.disabled=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
     volumes:
       - ${DATA_DIR}/wazuh/indexer:/var/lib/opensearch/data:Z,U
-      - ./config/indexer/opensearch.yml:/usr/share/opensearch/config/opensearch.yml:ro,U
+      - ./config/indexer/opensearch.yml:/usr/share/wazuh-indexer/config/opensearch.yml:ro,U
     networks:
       wazuh-net:
         aliases:
@@ -22,7 +21,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 2G
           cpus: '0.5'
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/9200'"]
@@ -42,10 +41,23 @@ services:
     image: docker.io/wazuh/wazuh-manager:4.14.3
     container_name: wazuh-manager
     restart: always
+    # NOTE: no-new-privileges omitted — manager runs multiple exec'd processes
+    # (cp, chmod, chown) that need capability inheritance via uid 0 in userns.
+    # seccomp:unconfined needed — Filebeat cgo pthread_create gets EPERM due to
+    # Podman's default seccomp + cgroup pids limit interactions.
     security_opt:
-      - no-new-privileges:true
+      - seccomp:unconfined
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - KILL
+      - SETUID
+      - SETGID
+      - SYS_CHROOT
+    pids_limit: 8192
     ports:
       - 1514:1514
       - 1515:1515
@@ -61,9 +73,9 @@ services:
       resources:
         limits:
           memory: 1G
-          cpus: '0.5'
+          cpus: '2.0'
     healthcheck:
-      test: ["CMD", "/var/ossec/bin/wazuh-control", "status"]
+      test: ["CMD-SHELL", "/var/ossec/bin/wazuh-control status | grep -q 'wazuh-analysisd is running'"]
       interval: 5m
       timeout: 10s
       retries: 3
@@ -71,6 +83,7 @@ services:
     labels:
       - "kanidm.oidc.client_id=wazuh"
       - "security.stig.compliance=true"
+      - "security.stig.bypass_privileged=true"
       - "security.stig.role=manager"
       - "homepage.group=SOC"
       - "homepage.name=Wazuh Manager"
@@ -84,6 +97,7 @@ services:
       - ALL
     volumes:
       - ./config/dashboard/opensearch_dashboards.yml:/usr/share/wazuh-dashboard/config/opensearch_dashboards.yml:ro,U
+      - ./config/dashboard/wazuh.yml:/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml:ro,U
     container_name: wazuh-dashboard
     restart: always
     depends_on:
@@ -112,8 +126,7 @@ services:
       - "traefik.http.routers.wazuh.rule=Host(`wazuh.${DOMAIN}`)"
       - "traefik.http.routers.wazuh.entrypoints=websecure"
       - "traefik.http.routers.wazuh.tls=true"
-      - "traefik.http.routers.wazuh.middlewares=authelia@file,security-headers@file"
-      - "authelia.access_control.policy=two_factor"
+      - "traefik.http.routers.wazuh.middlewares=oauth2-proxy-admin@file,security-headers@file"
       - "traefik.http.services.wazuh.loadbalancer.server.port=5601"
       - "security.stig.compliance=true"
       - "security.stig.role=dashboard"
