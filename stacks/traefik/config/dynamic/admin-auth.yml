@@ -1,0 +1,21 @@
+# Admin OAuth2 Proxy callback route
+# Routes /admin-oauth2/* on auth.DOMAIN to the admin proxy instance.
+# Required because oauth2-proxy-admin uses --proxy-prefix=/admin-oauth2
+# to avoid CSRF cookie conflicts with the regular proxy on the same domain.
+http:
+  routers:
+    admin-auth:
+      rule: "Host(`auth.${DOMAIN}`) && PathPrefix(`/admin-oauth2/`)"
+      entryPoints:
+        - websecure
+      service: admin-auth
+      tls:
+        certResolver: stepca
+      middlewares:
+        - security-headers@file
+      priority: 200
+  services:
+    admin-auth:
+      loadBalancer:
+        servers:
+          - url: "http://oauth2-proxy-admin:4180"

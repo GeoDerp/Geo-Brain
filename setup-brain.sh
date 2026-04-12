@@ -369,6 +369,10 @@ for APP in \$EXPECTED_APPS; do
 
     kanidm system oauth2 create "\$APP" "\$APP OIDC" "\$ORIGIN_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
     kanidm system oauth2 add-redirect-url "\$APP" "\$REDIRECT_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    # Register admin proxy callback path (uses --proxy-prefix=/admin-oauth2)
+    if [ "\$APP" = "oauth2-proxy" ]; then
+        kanidm system oauth2 add-redirect-url "\$APP" "https://auth.${DOMAIN}/admin-oauth2/callback" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    fi
     kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
     
     # Remove legacy idm_all_persons scope map (replaced by group-based maps)
