@@ -39,5 +39,3 @@ layout:
     columns: 3
     header: true
     icon: mdi-apps
-providers:
-  docker: podman

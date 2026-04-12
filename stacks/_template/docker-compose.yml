@@ -37,11 +37,11 @@ services:
           memory: 256M
           cpus: '0.5'
     healthcheck:
-      # Ensure you define a valid healthcheck for your app
-      test: ["CMD", "curl", "-f", "http://localhost:80/"]
-      interval: 30s
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:80/ || exit 1"]
+      interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 5m
     labels:
       - "security.stig.compliance=true"
       
@@ -62,12 +62,14 @@ services:
       # Remove 'oauth2-proxy@file,' below if your app handles its own authentication or is public
       - "traefik.http.routers.my-app.middlewares=oauth2-proxy@file,security-headers@file"
 
-      # --- Homepage Integration (Optional) ---
-      - "homepage.group=Services"
-      - "homepage.name=My App"
-      - "homepage.icon=nginx.png"
-      - "homepage.description=My Custom Web Application"
-      - "homepage.href=https://my-app.${DOMAIN}"
+      # --- Homepage Integration ---
+      # Add a manual entry in stacks/homepage/config/services.yaml:
+      #   - My App:
+      #       icon: nginx.png
+      #       href: "https://my-app.example.local"
+      #       description: My Custom Web Application
+      #       server: podman
+      #       container: my-app
 
   # =========================================================================
   # OPTIONAL BACKEND DATABASE
@@ -105,9 +107,10 @@ services:
   #         cpus: '1.0'
   #   healthcheck:
   #     test: ["CMD-SHELL", "pg_isready -U appuser -d appdb"]
-  #     interval: 30s
+  #     interval: 5m
   #     timeout: 10s
   #     retries: 3
+  #     start_period: 5m
   #   labels:
   #     - "security.stig.compliance=true"
 
