@@ -1,6 +1,11 @@
 <p align="center">
   <img src="./docs/logo.svg" alt="Geo-Brain SSOF Logo" width="128"/>
+</br>
+<img src="./docs/homepage.png" />
 </p>
+
+
+
 
 # Geo-Brain: Single Node Homelab
 
