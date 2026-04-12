@@ -26,7 +26,6 @@ The Geo-Brain homelab is organized into discrete **stacks**:
 - **Security Operations:** `wazuh` (SIEM), `falco` (Runtime Security), `crowdsec` (IPS), `defectdojo` (Vulnerability Management)
 - **Observability:** `prometheus` & `grafana` (Metrics), `vector` & `loki` (Logs)
 - **Management:** `homepage` (Dashboard), `dockge` (Stack UI), `ramalama` (AI Log Triage)
-- **User Applications:** `moodle` (LMS), `n8n` (Workflow Automation), `notes` (SilverBullet)
 - **Optional/WIP:** `bunkerweb` (WAF), `pangolin` (Zero-Trust Tunnel)
 
 ---
