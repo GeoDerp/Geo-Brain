@@ -18,9 +18,11 @@ The Geo-Brain homelab is organized into discrete **stacks**:
 
 - **Core Infrastructure:** `step-ca` (Internal PKI), `quay` (Container Registry), `traefik` (Reverse Proxy)
 - **Identity & Access:** `kanidm` (Identity Provider), `oauth2-proxy` (SSO via OIDC)
-- **Security Operations:** `wazuh` (SIEM), `falco` (Runtime Security), `crowdsec` (IPS)
+- **Security Operations:** `wazuh` (SIEM), `falco` (Runtime Security), `crowdsec` (IPS), `defectdojo` (Vulnerability Management)
 - **Observability:** `prometheus` & `grafana` (Metrics), `vector` & `loki` (Logs)
-- **Management:** `homepage` (Dashboard), `dockge` (Stack UI)
+- **Management:** `homepage` (Dashboard), `dockge` (Stack UI), `ramalama` (AI Log Triage)
+- **User Applications:** `moodle` (LMS), `n8n` (Workflow Automation), `notes` (SilverBullet)
+- **Optional/WIP:** `bunkerweb` (WAF), `pangolin` (Zero-Trust Tunnel)
 
 ---
 
@@ -47,7 +49,7 @@ Run the node initialization script to install dependencies (Podman, Ansible), co
 
 ### Step 3: Generate Certificates
 
-Generate the root CA and required SSL certificates for `step-ca`, `quay`, and `kanidm`:
+Generate the root CA and required SSL certificates for Traefik, Kanidm, and initial bootstrap:
 
 ```bash
 ./scripts/secrets/gen-selfsigned-certs.sh
@@ -162,6 +164,9 @@ The `deploy.sh` script dynamically generates Traefik configurations and manages 
 # Tear down a stack
 ./deploy.sh <stack_name> down
 
+# Force recreate (rebuild + restart)
+./deploy.sh <stack_name> redeploy
+
 # View logs for a stack
 ./deploy.sh <stack_name> logs
 
@@ -173,10 +178,10 @@ The `deploy.sh` script dynamically generates Traefik configurations and manages 
 
 ## 👤 Adding User Applications
 
-You can deploy your own uncommitted applications via the `user/` directory.
+You can deploy your own applications via the `stacks/user/` directory.
 
 1. Create a folder: `mkdir -p stacks/user/myapp`
-2. Add your `docker-compose.yml`.
+2. Add your `docker-compose.yml` following the [template](stacks/_template/docker-compose.yml).
 3. Deploy it: `./deploy.sh user/myapp up`
 
-All user stacks automatically receive Traefik reverse proxy configuration if they include the label `traefik.enable=true`.
+All user stacks automatically receive Traefik reverse proxy configuration and OAuth2 Proxy SSO protection if they include the label `traefik.enable=true`. User stacks are accessible to members of both `brain_admins` and `brain_users` groups.
