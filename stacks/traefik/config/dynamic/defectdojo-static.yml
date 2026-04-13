@@ -1,0 +1,16 @@
+# Bypass auth for DefectDojo static assets.
+# Without this, the OAuth2 forward-auth middleware intercepts CSS/JS/image
+# requests and returns a 302 redirect, breaking the UI rendering.
+# Priority 200 ensures this matches before the default router (priority ~0).
+http:
+  routers:
+    defectdojo-static:
+      rule: "Host(`defectdojo.${DOMAIN}`) && PathPrefix(`/static/`)"
+      entryPoints:
+        - websecure
+      service: defectdojo_defectdojo-django@file
+      tls:
+        certResolver: stepca
+      middlewares:
+        - security-headers@file
+      priority: 200

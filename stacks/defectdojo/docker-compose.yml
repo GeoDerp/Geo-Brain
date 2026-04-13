@@ -4,7 +4,7 @@ services:
     container_name: defectdojo-django
     restart: always
     entrypoint: ["/entrypoint-initializer.sh"]
-    command: ["/entrypoint-uwsgi.sh"]
+    command: ["bash", "-c", "cat /etc/ssl/certs/ca-certificates.crt /etc/extra-ca/*.crt > /tmp/ca-bundle.crt && python manage.py collectstatic --noinput && exec /entrypoint-uwsgi.sh"]
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -16,16 +16,25 @@ services:
       - DD_SECRET_KEY=${DOJO_SECRET_KEY}
       - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
       - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
+      - DD_SOCIAL_AUTH_OIDC_AUTH_ENABLED=True
+      - DD_SOCIAL_AUTH_REDIRECT_IS_HTTPS=True
       - DD_SOCIAL_AUTH_OIDC_OIDC_ENDPOINT=https://kanidm.${DOMAIN}/oauth2/openid/defectdojo
       - DD_SOCIAL_AUTH_OIDC_KEY=defectdojo
-      - DD_SOCIAL_AUTH_OIDC_SECRET=${DOJO_OIDC_SECRET}
-      - DD_ALLOWED_HOSTS=defectdojo.${DOMAIN}
+      - DD_SOCIAL_AUTH_OIDC_SECRET=${DEFECTDOJO_OIDC_SECRET}
+      - DD_ALLOWED_HOSTS=defectdojo.${DOMAIN},defectdojo-django
+      - DD_UWSGI_BUFFER_SIZE=65535
+      - DD_UWSGI_EXTRA_ARGS=--static-map /static=/app/static
+      - REQUESTS_CA_BUNDLE=/tmp/ca-bundle.crt
       - DD_INITIALIZE=true
       - DD_ADMIN_USER=admin
       - DD_ADMIN_PASSWORD=${DEFECTDOJO_ADMIN_PASSWORD}
       - DD_ADMIN_MAIL=admin@${DOMAIN}
       - DD_ADMIN_FIRST_NAME=Admin
       - DD_ADMIN_LAST_NAME=User
+    volumes:
+      - ${DATA_DIR}/step-ca/step/certs/root_ca.crt:/etc/extra-ca/root_ca.crt:ro,z
+      - ${STACKS_PATH}/../certs/ca.crt:/etc/extra-ca/temp_ca.crt:ro,z
+      - defectdojo-static:/app/static
     networks:
       - vulnerability-net
       - proxy-net
@@ -130,6 +139,9 @@ services:
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=cache"
+
+volumes:
+  defectdojo-static:
 
 networks:
   vulnerability-net:

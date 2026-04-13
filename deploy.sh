@@ -121,7 +121,7 @@ get_base_stacks() {
         "homepage"
     )
 
-    local exclude_stacks=("prometheus")
+    local exclude_stacks=("prometheus" "ramalama")
     local found_stacks=()
     for dir in "$REPO_ROOT"/stacks/*/; do
         local name

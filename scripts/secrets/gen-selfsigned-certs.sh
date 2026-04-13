@@ -197,6 +197,9 @@ else
       -sha256 \
       -days "$CA_DAYS" \
       -subj "$CA_SUBJECT" \
+      -addext "basicConstraints=critical,CA:TRUE" \
+      -addext "keyUsage=critical,digitalSignature,keyCertSign,cRLSign" \
+      -addext "subjectKeyIdentifier=hash" \
       -out "$CERT_DIR/ca.crt"
 
     echo "    CA cert: $CERT_DIR/ca.crt"

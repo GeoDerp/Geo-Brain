@@ -15,8 +15,16 @@ services:
       - ${PODMAN_SOCK}:/var/run/docker.sock:ro
       - ${DATA_DIR}/dockge:/app/data:z,U
       - ${STACKS_PATH}:${STACKS_PATH}:z,U
+      - ${DATA_DIR}/dockge/plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose:ro,z
+      - ./config/docker-podman-shim.sh:/usr/local/bin/docker:ro,z
     environment:
       - DOCKGE_STACKS_DIR=${STACKS_PATH}
+      - DOMAIN=${DOMAIN}
+      - DATA_DIR=${DATA_DIR}
+      - PODMAN_SOCK=${PODMAN_SOCK}
+      - STACKS_PATH=${STACKS_PATH}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     networks:
       - mgmt-net
       - proxy-net

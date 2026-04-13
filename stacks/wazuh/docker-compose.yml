@@ -95,6 +95,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        /usr/share/wazuh-dashboard/bin/opensearch-dashboards-plugin remove securityDashboards --allow-root 2>/dev/null || true
+        exec /entrypoint.sh
     volumes:
       - ./config/dashboard/opensearch_dashboards.yml:/usr/share/wazuh-dashboard/config/opensearch_dashboards.yml:ro,U
       - ./config/dashboard/wazuh.yml:/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml:ro,U
