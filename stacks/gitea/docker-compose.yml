@@ -1,0 +1,95 @@
+services:
+  gitea:
+    image: docker.io/gitea/gitea:1.21.11
+    container_name: gitea
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+    networks:
+      - proxy-net
+    volumes:
+      - ${DATA_DIR}/gitea/data:/data:Z,U
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3000/api/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.gitea.rule=Host(`gitea.${DOMAIN}`)"
+      - "traefik.http.routers.gitea.entrypoints=websecure"
+      - "traefik.http.routers.gitea.tls=true"
+      - "traefik.http.routers.gitea.tls.certresolver=stepca"
+      - "traefik.http.services.gitea.loadbalancer.server.port=3000"
+      - "homepage.group=Services"
+      - "homepage.name=Gitea"
+      - "homepage.icon=gitea.png"
+      - "homepage.description=Git Mirror Server"
+      - "homepage.href=https://gitea.${DOMAIN}"
+
+  # Ephemeral sandboxed runner for standard CI/CD
+  gitea-runner:
+    image: docker.io/gitea/act_runner:nightly
+    container_name: gitea-runner
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      - GITEA_INSTANCE_URL=http://gitea:3000
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_TOKEN:-generate-me}
+      - GITEA_RUNNER_NAME=ephemeral-sandbox-runner
+      - GITEA_RUNNER_LABELS=ubuntu-latest:docker://node:18-bullseye,ubuntu-22.04:docker://node:18-bullseye
+    networks:
+      - proxy-net
+    volumes:
+      - ${DATA_DIR}/gitea-runner/data:/data:Z,U
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '2.0'
+    labels:
+      - "security.stig.compliance=true"
+
+  # Routine runner specifically for scheduled scanning of all mirrors
+  gitea-routine-runner:
+    image: docker.io/gitea/act_runner:nightly
+    container_name: gitea-routine-runner
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      - GITEA_INSTANCE_URL=http://gitea:3000
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_TOKEN:-generate-me}
+      - GITEA_RUNNER_NAME=routine-scan-runner
+      - GITEA_RUNNER_LABELS=scan:docker://docker.io/aquasec/trivy:latest
+    networks:
+      - proxy-net
+    volumes:
+      - ${DATA_DIR}/gitea-routine-runner/data:/data:Z,U
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '2.0'
+    labels:
+      - "security.stig.compliance=true"
+
+networks:
+  proxy-net:
+    external: true

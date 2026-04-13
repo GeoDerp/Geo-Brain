@@ -51,6 +51,13 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - **Pangolin (Tunnel Proxy):** Identity-aware reverse proxy and WireGuard VPN for zero-trust remote access. Replaces Traefik + OAuth2 Proxy when used.
 - **BunkerWeb (WAF):** L7 Web Application Firewall with ModSecurity + OWASP CRS, rate limiting, DDoS protection, and CrowdSec integration. Sits in front of Traefik.
 
+## CI/CD & DevSecOps Pipeline
+- **Bidirectional Git Mirroring (Optional):** Implement an automated, two-way Git mirror between the internal Git server and GitHub.com. Personal user work is pushed to the internal server, undergoes security scanning via DefectDojo, and upon approval and merge to `main`, state is safely synchronized back to GitHub.com.
+- **Routine Repository Scanning:** A scheduled, routine runner MUST be configured to continuously scan all mirrored repositories on the internal Git server to detect newly disclosed vulnerabilities or configuration drift.
+- **Ephemeral Sandboxed Runners:** CI/CD runners MUST be ephemeral and utilize kernel-level sandboxing (e.g., gVisor, Kata Containers) to securely build and run Docker containers (Docker-in-Docker) without contaminating host state or requiring unsafe privileged access.
+- **Automated Security Gates:** DefectDojo acts as an uncompromising quality gate. Commits must be scanned, and merges to `main` blocked if the vulnerability threshold is breached.
+- **AI-Driven Code Review & Log Condensation:** RamaLama MUST be integrated into the pipeline to perform automated, localized code reviews on pull requests and to condense massive DefectDojo security logs into actionable summaries.
+
 ## Tooling & Automation
 - **`init-node.sh`:** Thin wrapper that handles SSH agent setup, argument parsing, and pre-flight checks, then delegates to the Ansible playbook. Accepts `--host`, `--user`, `--key`, `--port`, `--yes` flags; omitted options are prompted interactively.
 - **`ansible/init-node.yml`:** Ansible playbook that provisions the remote homelab node (Podman, `podman.socket`, `auditd`, SELinux, firewalld, subuids, linger, sysctl), then registers a local `podman system connection` for remote access. Confirms major changes (package installs, firewall rules, SELinux, podman-remote registration) unless `--yes` / `-e auto_yes=true` is passed.
