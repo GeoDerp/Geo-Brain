@@ -7,13 +7,34 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
     environment:
       - USER_UID=1000
       - USER_GID=1000
+      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+      - GITEA__database__DB_TYPE=sqlite3
+      - GITEA__database__PATH=/data/gitea/gitea.db
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__server__DOMAIN=gitea.${DOMAIN}
+      - GITEA__server__ROOT_URL=https://gitea.${DOMAIN}/
+      - GITEA__server__SSH_DOMAIN=gitea.${DOMAIN}
+      - GITEA__service__DISABLE_REGISTRATION=true
+      - GITEA__service__ALLOW_ONLY_EXTERNAL_REGISTRATION=true
+      - GITEA__service__REQUIRE_SIGNIN_VIEW=true
+      - GITEA__oauth2__ENABLED=true
+      - GITEA__openid__ENABLE_OPENID_SIGNIN=false
     networks:
       - proxy-net
+      - vulnerability-net
     volumes:
       - ${DATA_DIR}/gitea/data:/data:Z,U
+      - ${STACKS_PATH}/../certs/ca.crt:/usr/local/share/ca-certificates/step-ca.crt:ro,z
+    entrypoint: ["/bin/sh", "-c", "cat /usr/local/share/ca-certificates/step-ca.crt >> /etc/ssl/certs/ca-certificates.crt && exec /bin/s6-svscan /etc/s6"]
     deploy:
       resources:
         limits:
@@ -25,12 +46,14 @@ services:
       timeout: 10s
       retries: 3
     labels:
+      - "kanidm.oidc.client_id=gitea"
       - "security.stig.compliance=true"
       - "traefik.enable=true"
       - "traefik.http.routers.gitea.rule=Host(`gitea.${DOMAIN}`)"
       - "traefik.http.routers.gitea.entrypoints=websecure"
       - "traefik.http.routers.gitea.tls=true"
       - "traefik.http.routers.gitea.tls.certresolver=stepca"
+      - "traefik.http.routers.gitea.middlewares=security-headers@file"
       - "traefik.http.services.gitea.loadbalancer.server.port=3000"
       - "homepage.group=Services"
       - "homepage.name=Gitea"
@@ -39,57 +62,91 @@ services:
       - "homepage.href=https://gitea.${DOMAIN}"
 
   # Ephemeral sandboxed runner for standard CI/CD
+  # NOTE: Podman socket mount is a container-escape vector; future work should
+  # migrate to gVisor/Kata sandboxing per GEMINI.md mandate.
   gitea-runner:
-    image: docker.io/gitea/act_runner:nightly
+    image: docker.io/gitea/act_runner:0.2.11
     container_name: gitea-runner
     restart: always
+    depends_on:
+      - gitea
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
     environment:
       - GITEA_INSTANCE_URL=http://gitea:3000
-      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_TOKEN:-generate-me}
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_TOKEN}
       - GITEA_RUNNER_NAME=ephemeral-sandbox-runner
       - GITEA_RUNNER_LABELS=ubuntu-latest:docker://node:18-bullseye,ubuntu-22.04:docker://node:18-bullseye
+      - DOCKER_HOST=unix:///var/run/docker.sock
     networks:
       - proxy-net
     volumes:
       - ${DATA_DIR}/gitea-runner/data:/data:Z,U
+      - ${PODMAN_SOCK}:/var/run/docker.sock
     deploy:
       resources:
         limits:
           memory: 1G
           cpus: '2.0'
+    healthcheck:
+      test: ["CMD", "act_runner", "--version"]
+      interval: 5m
+      timeout: 5s
+      retries: 3
     labels:
       - "security.stig.compliance=true"
 
   # Routine runner specifically for scheduled scanning of all mirrors
   gitea-routine-runner:
-    image: docker.io/gitea/act_runner:nightly
+    image: docker.io/gitea/act_runner:0.2.11
     container_name: gitea-routine-runner
     restart: always
+    depends_on:
+      - gitea
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
     environment:
       - GITEA_INSTANCE_URL=http://gitea:3000
-      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_TOKEN:-generate-me}
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_TOKEN}
       - GITEA_RUNNER_NAME=routine-scan-runner
-      - GITEA_RUNNER_LABELS=scan:docker://docker.io/aquasec/trivy:latest
+      - GITEA_RUNNER_LABELS=scan:docker://docker.io/aquasec/trivy:0.58.2
+      - DOCKER_HOST=unix:///var/run/docker.sock
     networks:
       - proxy-net
     volumes:
       - ${DATA_DIR}/gitea-routine-runner/data:/data:Z,U
+      - ${PODMAN_SOCK}:/var/run/docker.sock
     deploy:
       resources:
         limits:
           memory: 1G
           cpus: '2.0'
+    healthcheck:
+      test: ["CMD", "act_runner", "--version"]
+      interval: 5m
+      timeout: 5s
+      retries: 3
     labels:
       - "security.stig.compliance=true"
 
 networks:
   proxy-net:
+    external: true
+  vulnerability-net:
     external: true

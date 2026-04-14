@@ -25,6 +25,8 @@ This document provides an educational overview of all tools and technologies use
   - [CrowdSec](#crowdsec)
   - [RamaLama](#ramalama)
   - [DefectDojo](#defectdojo)
+- [CI/CD & DevSecOps Pipeline](#cicd--devsecops-pipeline)
+  - [Gitea](#gitea)
 - [Vulnerability Management & Compliance](#vulnerability-management--compliance)
   - [Grype](#grype)
   - [Dockle](#dockle)
@@ -89,6 +91,10 @@ graph TD
                 RL["RamaLama — Local AI Triage"]
             end
 
+            subgraph CICD ["CI/CD Pipeline (Optional)"]
+                GT["Gitea — Git Server & Runners"]
+            end
+
             subgraph LGV ["Observability — LGV Stack"]
                 VC["Vector — High-Perf Log Pipeline"]
                 LK["Loki — Log Store"]
@@ -149,11 +155,17 @@ graph TD
     %% ── Scan Results ──
     CV & GL & SG -- "findings" --> DD
     HB -- "Clair findings" --> DD
+    GT -- "scan results" --> DD
+    GT -- "mirrored repos" --> GT
 
     %% ── SOC Correlation ──
     DD -. "high-sev alerts" .-> WZ
     RL -. "analyze logs/alerts" .-> WZ
     RL -. "triage vulns" .-> DD
+
+    %% ── CI/CD Pipeline ──
+    GT -. "vuln reports" .-> DD
+    RL -. "code review" .-> GT
 
     %% ── Colour Classes ──
     classDef user fill:#64748b,stroke:#334155,color:#fff
@@ -163,6 +175,7 @@ graph TD
     classDef obs fill:#22c55e,stroke:#166534,color:#fff
     classDef scan fill:#f59e0b,stroke:#92400e,color:#fff
     classDef opt fill:#0f766e,stroke:#14532d,color:#fff
+    classDef cicd fill:#d946ef,stroke:#86198f,color:#fff
     classDef zt fill:#6d28d9,stroke:#4c1d95,color:#fff
     classDef infra fill:#06b6d4,stroke:#0e7490,color:#fff
     classDef host fill:#78716c,stroke:#44403c,color:#fff
@@ -174,13 +187,14 @@ graph TD
     class VC,LK,PR,GF obs
     class TV,CV,GL,SG scan
     class BW,PG opt
+    class GT cicd
     class SD,APPS zt
     class HB,CA,MO infra
     class JD,AD,TU host
 ```
 
 > **Reading the diagram:** Solid arrows (`→`) show active data flows. Dashed arrows (`⇢`) show on-demand or conditional flows (AI triage, alert forwarding). Node colours indicate category:
-> 🔵 Management &middot; 🟣 Identity &middot; 🔴 SOC &middot; 🟢 Observability &middot; 🟡 Scanning &middot; 🩵 Infrastructure &middot; ⚫ Host
+> 🔵 Management &middot; 🟣 Identity &middot; 🔴 SOC &middot; 🟢 Observability &middot; 🟡 Scanning &middot; 🩵 Infrastructure &middot; 🟪 CI/CD &middot; ⚫ Host
 
 ---
 
@@ -421,6 +435,34 @@ User → Traefik (TLS) → OAuth2 Proxy (OIDC) → Kanidm Login → Backend Serv
 
 ---
 
+## CI/CD & DevSecOps Pipeline
+
+### Gitea
+
+**What it is:** Gitea is a lightweight, self-hosted Git service with built-in CI/CD runner support.
+
+**Why it's used:**
+- **Bidirectional Git Mirroring:** Mirrors external repositories (e.g., GitHub) internally for air-gapped scanning and development.
+- **Native OIDC:** Authenticates users via Kanidm OpenID Connect directly (not through ForwardAuth), which is required because git CLI operations cannot handle HTTP 302 redirects from ForwardAuth middleware.
+- **Ephemeral Sandboxed Runners:** Two runners deploy alongside Gitea — an ephemeral sandbox runner for standard CI/CD jobs and a routine scanner using Trivy for scheduled vulnerability scanning of all mirrored repositories.
+- **DefectDojo Integration:** Scan results from CI/CD pipelines are uploaded to DefectDojo for centralized vulnerability tracking and quality gating.
+- **RamaLama Integration:** The air-gapped LLM reviews pull requests and condenses security findings into actionable summaries.
+
+**Deployment:**
+Gitea, DefectDojo, and RamaLama form an optional CI/CD pipeline group. They share `vulnerability-net` and are deployed as a unit:
+```bash
+./deploy.sh cicd up
+```
+
+**Key Components:**
+| Component | Image | Purpose |
+|-----------|-------|---------|
+| Gitea | `gitea/gitea:1.21.11` | Git server with web UI and OIDC |
+| Ephemeral Runner | `gitea/act_runner:0.2.11` | Standard CI/CD job execution |
+| Routine Runner | `gitea/act_runner:0.2.11` | Scheduled Trivy security scans |
+
+---
+
 ## Vulnerability Management & Compliance
 
 ### Grype
@@ -577,6 +619,7 @@ Client → Traefik (TLS) → Caddy Sidecar (mTLS) → 127.0.0.1:app_port → App
 | **Runtime Security** | Falco | eBPF-based real-time threat detection |
 | **IPS** | CrowdSec | Air-gapped intrusion prevention |
 | **Vuln Management** | DefectDojo | Finding aggregation and tracking |
+| **CI/CD** | Gitea + Runners | Self-hosted Git server with CI/CD pipeline |
 | **Image Scanning** | Clair, Grype | CVE detection in container images |
 | **Image Linting** | Dockle | CIS benchmark and best practice validation |
 | **IaC Scanning** | Checkov | Infrastructure-as-Code security analysis |

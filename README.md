@@ -23,9 +23,10 @@ The Geo-Brain homelab is organized into discrete **stacks**:
 
 - **Core Infrastructure:** `step-ca` (Internal PKI), `quay` (Container Registry), `traefik` (Reverse Proxy)
 - **Identity & Access:** `kanidm` (Identity Provider), `oauth2-proxy` (SSO via OIDC)
-- **Security Operations:** `wazuh` (SIEM), `falco` (Runtime Security), `crowdsec` (IPS), `defectdojo` (Vulnerability Management)
+- **Security Operations:** `wazuh` (SIEM), `falco` (Runtime Security), `crowdsec` (IPS)
 - **Observability:** `prometheus` & `grafana` (Metrics), `vector` & `loki` (Logs)
-- **Management:** `homepage` (Dashboard), `dockge` (Stack UI), `ramalama` (AI Log Triage)
+- **Management:** `homepage` (Dashboard), `dockge` (Stack UI)
+- **CI/CD Pipeline (optional):** `gitea` (Git Server + Runners), `defectdojo` (Vulnerability Management), `ramalama` (AI Log Triage) — deployed together via `./deploy.sh cicd up`
 - **Optional/WIP:** `bunkerweb` (WAF), `pangolin` (Zero-Trust Tunnel)
 
 ---
@@ -66,6 +67,16 @@ Deploy all stacks. The script automatically handles bootstrapping Quay and Step-
 ```bash
 ./deploy.sh all up
 ```
+
+### Step 4b: Deploy CI/CD Pipeline (Optional)
+
+The CI/CD pipeline (Gitea + DefectDojo + RamaLama) is excluded from the default `all` batch. Deploy it separately:
+
+```bash
+./deploy.sh cicd up
+```
+
+This brings up Gitea (self-hosted Git with CI/CD runners), DefectDojo (vulnerability management), and RamaLama (AI-driven security triage) as a unit on the shared `vulnerability-net` network.
 
 ### Step 5: Post-Deployment Setup
 
@@ -128,19 +139,24 @@ Before logging into downstream apps, you **must** bootstrap your identity provid
    - **SSO:** Protected behind OAuth2 Proxy (admin-only). Kanidm SSO enforced automatically.
    - **Local Admin:** Default credentials are `admin` / `admin`. Change immediately.
 
-4. **DefectDojo (Vulnerability Management):** `https://defectdojo.<DOMAIN>`
+4. **Gitea (Git Server & CI/CD):** `https://gitea.<DOMAIN>`
+   - **SSO:** Click "Sign in with Kanidm" on the login page. Gitea uses native OIDC (not ForwardAuth) to support git CLI operations.
+   - **Local Admin:** Created automatically by `setup-brain.sh`. Username: `admin`.
+   - **Runners:** Two runners deploy alongside Gitea — an ephemeral sandbox runner for standard CI/CD, and a routine scanner for scheduled Trivy scans of all mirrored repos.
+
+5. **DefectDojo (Vulnerability Management):** `https://defectdojo.<DOMAIN>`
    - **SSO:** Click "Log in via Kanidm SSO."
    - **Local Admin:** Extract from initializer logs:
      `podman logs defectdojo-django 2>&1 | grep "Admin password:"`
 
-5. **MinIO (Object Storage):** `https://minio.<DOMAIN>`
+6. **MinIO (Object Storage):** `https://minio.<DOMAIN>`
    - **SSO:** Click "Login with OpenID."
    - **Local Admin:** Uses `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` from your `.env`.
 
-6. **Grafana (Observability):** `https://grafana.<DOMAIN>`
+7. **Grafana (Observability):** `https://grafana.<DOMAIN>`
    - **SSO:** Automatic via OAuth2 Proxy ForwardAuth headers. No manual setup required.
 
-7. **Dockge (Stack Management):** `https://dockge.<DOMAIN>`
+8. **Dockge (Stack Management):** `https://dockge.<DOMAIN>`
    - First-time access prompts you to create the local admin account.
    - Use Dockge to visually manage, start, stop, and read logs of all Compose stacks.
 
@@ -164,6 +180,9 @@ The `deploy.sh` script dynamically generates Traefik configurations and manages 
 ```bash
 # Bring up a specific stack
 ./deploy.sh <stack_name> up
+
+# Deploy the CI/CD pipeline (gitea + defectdojo + ramalama)
+./deploy.sh cicd up
 
 # Tear down a stack
 ./deploy.sh <stack_name> down

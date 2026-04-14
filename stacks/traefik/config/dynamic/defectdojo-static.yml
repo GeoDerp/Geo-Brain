@@ -8,9 +8,14 @@ http:
       rule: "Host(`defectdojo.${DOMAIN}`) && PathPrefix(`/static/`)"
       entryPoints:
         - websecure
-      service: defectdojo_defectdojo-django@file
+      service: defectdojo-static
       tls:
         certResolver: stepca
       middlewares:
         - security-headers@file
       priority: 200
+  services:
+    defectdojo-static:
+      loadBalancer:
+        servers:
+          - url: "http://defectdojo-django:8081"

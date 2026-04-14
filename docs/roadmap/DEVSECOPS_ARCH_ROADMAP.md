@@ -22,6 +22,10 @@ This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from
     *   **Rationale:** Centralized OIDC-based forward-auth via Kanidm, eliminating the need for LDAP service accounts.
     *   **Implementation:** Dual-instance deployment (`oauth2-proxy` for `brain_users` + `brain_admins`, `oauth2-proxy-admin` for `brain_admins` only). Traefik ForwardAuth middlewares route all protected services through OAuth2 Proxy → Kanidm OIDC.
 
+5.  **Gitea CI/CD Pipeline (Completed)**
+    *   **Rationale:** Self-hosted Git with integrated CI/CD runners for air-gapped DevSecOps.
+    *   **Implementation:** Gitea deploys with native Kanidm OIDC authentication (not ForwardAuth — git CLI can't handle 302 redirects). Two pinned runners (`act_runner:0.2.11`): an ephemeral sandbox runner for CI/CD jobs and a routine runner for scheduled Trivy (`0.58.2`) scans of mirrored repos. Gitea, DefectDojo, and RamaLama form an optional CI/CD group on `vulnerability-net`, deployed via `./deploy.sh cicd up`. Excluded from `deploy.sh all` batch by default.
+
 ## Phase 2: Observability & Operational Maturity
 
 **Objective:** Implement strict internal networking, secure user stack onboarding, and AI-driven security analysis.
@@ -46,9 +50,9 @@ This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from
     *   **Rationale:** Centralized visibility shouldn't rely on local accounts.
     *   **Progress:** Grafana currently receives auth via OAuth2 Proxy ForwardAuth headers (automatic SSO). Remaining: evaluate native Kanidm OIDC integration for Grafana, and OIDC/Basic Auth backed by Kanidm LDAP for Loki and Prometheus.
 
-6.  **LLM & AI-Driven SOC Operations (RamaLama) [TODO]**
+6.  **LLM & AI-Driven SOC Operations (RamaLama) [Deployed — Integration WIP]**
     *   **Rationale:** Local LLMs provide private, air-gapped log analysis and security auditing.
-    *   **Implementation:** The `ramalama` stack exists with an active compose file on `secure-backbone` (internal/air-gapped), `wazuh-net`, and `vulnerability-net`. Remaining: configure it to scrape logs from Loki and integrate with Wazuh/DefectDojo for automated triage.
+    *   **Implementation:** The `ramalama` stack deploys as part of the CI/CD pipeline group (`./deploy.sh cicd up`) on `secure-backbone` (internal/air-gapped), `wazuh-net`, and `vulnerability-net`. Remaining: configure it to scrape logs from Loki and integrate with Wazuh/DefectDojo for automated triage, and hook into Gitea for AI-assisted code reviews on pull requests.
 
 ## Phase 3: Long-Term Architectural Shifts (Advanced Identity & Airgap)
 

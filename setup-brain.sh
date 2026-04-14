@@ -362,6 +362,9 @@ for APP in \$EXPECTED_APPS; do
         defectdojo)
             REDIRECT_URL="https://defectdojo.${DOMAIN}/complete/oidc/"
             ;;
+        gitea)
+            REDIRECT_URL="https://gitea.${DOMAIN}/user/oauth2/kanidm/callback"
+            ;;
         *)
             REDIRECT_URL="https://\$APP.${DOMAIN}/"
             ;;
@@ -519,6 +522,52 @@ setup_soc() {
   fi
 }
 
+# --- 5b) Gitea OIDC Auth Source ---
+setup_gitea() {
+  echo "--- 5b) Gitea OIDC Auth Source ---"
+  if ! run_on_node "podman container exists gitea" 2>/dev/null; then
+    echo "⚠️ Gitea container not found. Skipping."
+    return 0
+  fi
+
+  wait_for_service "Gitea API" "run_on_node 'curl -m 5 -sf http://localhost:3000/api/healthz'" || { echo "⚠️ Gitea not reachable, skipping."; return 0; }
+
+  # Create local admin user (idempotent — fails silently if exists)
+  # NOTE: Must exec as 'git' user — Gitea refuses to run as root.
+  echo "Ensuring Gitea admin account exists..."
+  run_on_node "podman exec --user git gitea gitea admin user create \
+    --admin --username admin \
+    --password '${ADMIN_PASSWORD}' \
+    --email 'admin@${DOMAIN}' \
+    --must-change-password=false" 2>/dev/null || true
+
+  # Add Kanidm OIDC auth source (idempotent — check if exists first)
+  local GITEA_SECRET="${GITEA_OIDC_SECRET:-}"
+  if [[ -z "$GITEA_SECRET" ]]; then
+    echo "⚠️ GITEA_OIDC_SECRET not set. Run setup_identity first."
+    return 0
+  fi
+
+  local existing_source
+  existing_source=$(run_on_node "podman exec --user git gitea gitea admin auth list" 2>/dev/null | grep -i "kanidm" || true)
+  if [[ -n "$existing_source" ]]; then
+    echo "🔹 Gitea OIDC auth source 'kanidm' already exists."
+  else
+    echo "Adding Kanidm OIDC auth source to Gitea..."
+    if run_on_node "podman exec --user git gitea gitea admin auth add-oauth \
+      --name kanidm \
+      --provider openidConnect \
+      --key gitea \
+      --secret '${GITEA_SECRET}' \
+      --auto-discover-url 'https://kanidm.${DOMAIN}/oauth2/openid/gitea/.well-known/openid-configuration' \
+      --scopes 'openid profile email groups'" 2>/dev/null; then
+      echo "✅ Gitea OIDC auth source configured for Kanidm."
+    else
+      echo "⚠️ Failed to add Gitea OIDC auth source. Configure manually at https://gitea.${DOMAIN}/-/admin/auths/new"
+    fi
+  fi
+}
+
 # --- 6) CrowdSec integration ---
 setup_crowdsec() {
   echo "--- 6) CrowdSec integration ---"
@@ -580,6 +629,8 @@ main() {
     wait_proxies
     echo ">>> [main] calling setup_soc"
     setup_soc
+    echo ">>> [main] calling setup_gitea"
+    setup_gitea
     echo ">>> [main] calling setup_crowdsec"
     setup_crowdsec
   fi
