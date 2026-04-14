@@ -15,7 +15,10 @@ for stack in stacks:
             for service_name, service in data['services'].items():
                 health = "✅" if 'healthcheck' in service else "❌"
                 limits = "✅" if 'deploy' in service and 'resources' in service['deploy'] and 'limits' in service['deploy']['resources'] else "❌"
-                rootless = "✅" if 'security_opt' in service and 'no-new-privileges:true' in str(service['security_opt']) else "❌"
+                labels_str = str(service.get('labels', []))
+                has_bypass = 'security.stig.bypass_privileged=true' in labels_str
+                has_nnp = 'security_opt' in service and 'no-new-privileges:true' in str(service['security_opt'])
+                rootless = "✅" if has_nnp or has_bypass else "❌"
                 oidc = "✅" if any("OIDC" in str(v) or "OPENID" in str(v) for v in service.get('environment', [])) else "❌"
                 results.append(f"| {os.path.basename(os.path.dirname(stack)):<15} | {service_name:<20} | {health} | {limits} | {rootless} | {oidc} |")
         except Exception as e:

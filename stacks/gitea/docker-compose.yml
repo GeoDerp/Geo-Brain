@@ -13,6 +13,7 @@ services:
       - SETGID
       - DAC_OVERRIDE
       - FOWNER
+      - NET_BIND_SERVICE
     environment:
       - USER_UID=1000
       - USER_GID=1000
@@ -23,6 +24,8 @@ services:
       - GITEA__server__DOMAIN=gitea.${DOMAIN}
       - GITEA__server__ROOT_URL=https://gitea.${DOMAIN}/
       - GITEA__server__SSH_DOMAIN=gitea.${DOMAIN}
+      - GITEA__server__SSH_PORT=2222
+      - GITEA__server__SSH_LISTEN_PORT=2222
       - GITEA__service__DISABLE_REGISTRATION=true
       - GITEA__service__ALLOW_ONLY_EXTERNAL_REGISTRATION=true
       - GITEA__service__REQUIRE_SIGNIN_VIEW=true
@@ -80,6 +83,7 @@ services:
       - SETGID
       - DAC_OVERRIDE
       - FOWNER
+      - NET_BIND_SERVICE
     environment:
       - GITEA_INSTANCE_URL=http://gitea:3000
       - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_TOKEN}
@@ -121,6 +125,7 @@ services:
       - SETGID
       - DAC_OVERRIDE
       - FOWNER
+      - NET_BIND_SERVICE
     environment:
       - GITEA_INSTANCE_URL=http://gitea:3000
       - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_TOKEN}

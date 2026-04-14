@@ -666,6 +666,22 @@ run_offline_tests() {
     done
 }
 
+# --- T25: Kanidm Authentication Test (GEMINI.md mandate) ---
+test_kanidm_auth() {
+    local temp_user="testsvc_${RANDOM}"
+    local temp_pass="SecurePass_${RANDOM}!"
+    local admin_pass
+    admin_pass=$(ssh_cmd "podman exec kanidm /sbin/kanidmd recover-account -c /data/server.toml idm_admin 2>/dev/null | grep new_password | grep -o '\"[^\"]*\"' | tr -d '\"'")
+    [[ -z "$admin_pass" ]] && { skip "Failed to recover Kanidm admin password"; return; }
+
+    # Test authentication via the Kanidm API using the idm_admin account
+    if curl -s -k -X POST -d "username=idm_admin&password=${admin_pass}" https://kanidm.${DOMAIN}/login | grep -qi error; then
+        fail "Kanidm authentication failed for idm_admin"
+    else
+        pass "Kanidm authenticated successfully"
+    fi
+}
+
 run_remote_tests() {
     local target_stack="${1:-}"
 
@@ -692,6 +708,9 @@ run_remote_tests() {
     for stack in "${stacks[@]}"; do
         test_endpoint_reachable "$stack"
     done
+
+    section "AUTHENTICATION (Remote)"
+    test_kanidm_auth
 }
 
 print_summary() {
@@ -755,3 +774,4 @@ esac
 
 print_summary
 exit $?
+

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @GEMINI.md: Single Source of Truth for this script's mandates.
 # deploy.sh: STIG-compliant deployment wrapper for podman-compose.
 # Supports local and remote (via podman remote + rsync + SSH) deployments.
 # Usage: ./deploy.sh [stack-name|all|base|user] [up|down|ps|logs|restart|check]

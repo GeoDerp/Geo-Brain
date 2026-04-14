@@ -1,4 +1,5 @@
 #!/bin/bash
+# @GEMINI.md: Single Source of Truth for this script's mandates.
 # setup-brain.sh
 # Idempotent rootless Podman setup script for the Geo Brain environment
 # This script configures Quay, Identity (Kanidm), PKI (Step-CA), SOC (DefectDojo/Wazuh), and Proxy.
@@ -363,7 +364,7 @@ for APP in \$EXPECTED_APPS; do
             REDIRECT_URL="https://defectdojo.${DOMAIN}/complete/oidc/"
             ;;
         gitea)
-            REDIRECT_URL="https://gitea.${DOMAIN}/user/oauth2/kanidm/callback"
+            REDIRECT_URL="https://gitea.${DOMAIN}/user/oauth2/Kanidm/callback"
             ;;
         *)
             REDIRECT_URL="https://\$APP.${DOMAIN}/"
@@ -530,7 +531,7 @@ setup_gitea() {
     return 0
   fi
 
-  wait_for_service "Gitea API" "run_on_node 'curl -m 5 -sf http://localhost:3000/api/healthz'" || { echo "⚠️ Gitea not reachable, skipping."; return 0; }
+  wait_for_service "Gitea API" "curl -m 5 -s -k -f https://gitea.${DOMAIN}/api/healthz" || { echo "⚠️ Gitea not reachable, skipping."; return 0; }
 
   # Create local admin user (idempotent — fails silently if exists)
   # NOTE: Must exec as 'git' user — Gitea refuses to run as root.
@@ -555,7 +556,7 @@ setup_gitea() {
   else
     echo "Adding Kanidm OIDC auth source to Gitea..."
     if run_on_node "podman exec --user git gitea gitea admin auth add-oauth \
-      --name kanidm \
+      --name Kanidm \
       --provider openidConnect \
       --key gitea \
       --secret '${GITEA_SECRET}' \
