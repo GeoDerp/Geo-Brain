@@ -1,0 +1,230 @@
+---
+# ansible/deploy-stacks.yml
+# Ansible playbook to securely and declaratively deploy Geo-Brain stacks.
+# Matches GEMINI.md mandate: "Declarative: All deployments and configurations must be strictly declarative."
+# Replaces the imperative logic of deploy.sh.
+
+- name: Deploy Geo-Brain Stacks
+  hosts: all
+  become: no
+  vars:
+    repo_root: "{{ playbook_dir | dirname }}"
+    remote_base: "Geo-Brain"
+    # Base stacks in deployment order
+    ordered_stacks:
+      - step-ca
+      - traefik
+      - bunkerweb
+      - pangolin
+      - kanidm
+      - oauth2-proxy
+      - minio
+      - loki
+      - vector
+      - prometheus
+      - wazuh
+      - falco
+      - crowdsec
+      - quay
+      - defectdojo
+      - gitea
+      - ramalama
+      - grafana
+      - dockge
+      - homepage
+  tasks:
+    - name: Discover user stacks
+      local_action:
+        module: find
+        paths: "{{ repo_root }}/stacks/user"
+        file_type: directory
+      register: user_stacks_result
+
+    - name: Set facts for user stacks
+      set_fact:
+        user_stacks: "{{ user_stacks_result.files | map(attribute='path') | map('basename') | map('regex_replace', '^(.*)$', 'user/\\1') | list }}"
+
+    - name: Combine all stacks
+      set_fact:
+        all_stacks: "{{ ordered_stacks + user_stacks }}"
+
+    - name: Filter by limit_stacks if provided
+      set_fact:
+        filtered_stacks: "{{ all_stacks | intersect(limit_stacks.split(',')) if limit_stacks is defined else all_stacks }}"
+
+    - name: Filter active stacks (must have docker-compose.yml with services)
+      local_action:
+        module: command
+        cmd: "grep -q '^[[:space:]]*services:' {{ repo_root }}/stacks/{{ item }}/docker-compose.yml"
+      register: active_stacks_check
+      ignore_errors: true
+      loop: "{{ filtered_stacks }}"
+
+    - name: Set final target stacks
+      set_fact:
+        target_stacks: "{{ active_stacks_check.results | selectattr('rc', 'equalto', 0) | map(attribute='item') | list }}"
+
+    - name: Generate Traefik dynamic configs locally using deploy.sh
+      local_action:
+        module: command
+        cmd: "{{ repo_root }}/deploy.sh {{ item }} traefik_gen"
+      loop: "{{ target_stacks }}"
+      changed_when: false
+
+    - name: Ensure target base directories exist on remote
+      file:
+        path: "~/{{ remote_base }}/stacks/{{ item }}"
+        state: directory
+      loop: "{{ target_stacks }}"
+
+    - name: Synchronize stack directories (excluding data and logs)
+      synchronize:
+        src: "{{ repo_root }}/stacks/{{ item }}/"
+        dest: "~/{{ remote_base }}/stacks/{{ item }}/"
+        owner: no
+        group: no
+        rsync_opts:
+          - "--exclude=data/"
+          - "--exclude=models/"
+          - "--exclude=*.log"
+      loop: "{{ target_stacks }}"
+
+    - name: Synchronize Traefik dynamic configs
+      synchronize:
+        src: "{{ repo_root }}/stacks/traefik/config/dynamic/"
+        dest: "~/{{ remote_base }}/stacks/traefik/config/dynamic/"
+        owner: no
+        group: no
+      ignore_errors: true
+
+    - name: Copy root .env file
+      copy:
+        src: "{{ repo_root }}/.env"
+        dest: "~/{{ remote_base }}/.env"
+        mode: '0600'
+
+    - name: Render config templates using envsubst
+      shell: |
+        ENVFILE="$HOME/{{ remote_base }}/.env"
+        CONFDIR="$HOME/{{ remote_base }}/stacks/{{ item }}/config"
+        cd "$CONFDIR" 2>/dev/null || exit 0
+        set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
+        command -v envsubst &>/dev/null || exit 0
+        VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${OAUTH2_PROXY_CLIENT_SECRET} ${OAUTH2_PROXY_COOKIE_SECRET} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${QUAY_SECRET_KEY} ${QUAY_DB_SECRET_KEY} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${DEFECTDOJO_ADMIN_PASSWORD} ${WAZUH_API_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY} ${OAUTH2_PROXY_OIDC_SECRET} ${GITEA_OIDC_SECRET} ${MOODLE_OIDC_SECRET}'
+        find . -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
+            if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
+                envsubst "$VARLIST" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
+            fi
+        done
+      args:
+        executable: /bin/bash
+      loop: "{{ target_stacks }}"
+      changed_when: false
+
+    - name: Ensure compose volume directories exist on remote
+      shell: |
+        set -a; [ -f "$HOME/{{ remote_base }}/.env" ] && source "$HOME/{{ remote_base }}/.env"; set +a
+        DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
+        DATA_DIR="${DATA_DIR/#\~/$HOME}"
+        COMPOSE_FILE="$HOME/{{ remote_base }}/stacks/{{ item }}/docker-compose.yml"
+        
+        [ ! -f "$COMPOSE_FILE" ] && exit 0
+        
+        grep -oP '^\s+-\s+\K\.\.?/[^:]+' "$COMPOSE_FILE" | while IFS= read -r p; do
+            if [[ "$p" == ../* ]]; then
+                # Extremely simplified resolution for ../certs or similar
+                mkdir -p "$HOME/{{ remote_base }}/stacks/$(dirname "$p")" 2>/dev/null || true
+            else
+                mkdir -p "$HOME/{{ remote_base }}/stacks/{{ item }}/${p#./}" 2>/dev/null || true
+            fi
+        done || true
+        
+        grep -oP '^\s+-\s+\K\$\{DATA_DIR[^}]*\}/[^:]+' "$COMPOSE_FILE" | while IFS= read -r p; do
+            EXPANDED="${p/\$\{DATA_DIR\}/$DATA_DIR}"
+            EXPANDED="${EXPANDED/\$\{DATA_DIR:-*\}/$DATA_DIR}"
+            mkdir -p "$EXPANDED" 2>/dev/null || true
+        done || true
+      args:
+        executable: /bin/bash
+      loop: "{{ target_stacks }}"
+      changed_when: false
+
+    - name: Synchronize certificates
+      synchronize:
+        src: "{{ repo_root }}/certs/"
+        dest: "~/{{ remote_base }}/certs/"
+        owner: no
+        group: no
+      ignore_errors: true
+
+    - name: Ensure pre-requisite podman networks exist
+      command: podman network create --label security.stig.compliance=true {{ item }}
+      register: network_create
+      failed_when: 
+        - network_create.rc != 0
+        - "'already exists' not in network_create.stderr"
+      changed_when: network_create.rc == 0
+      loop:
+        - proxy-net
+        - identity-net
+        - monitoring-net
+        - security-net
+        - wazuh-net
+        - storage-net
+        - quay-net
+        - vulnerability-net
+        - mgmt-net
+        - pki-net
+        - waf-net
+
+    - name: Deploy stacks using Podman Compose
+      shell: |
+        set -a; [ -f "$HOME/{{ remote_base }}/.env" ] && source "$HOME/{{ remote_base }}/.env"; set +a
+        podman-compose up -d --build --remove-orphans
+      args:
+        chdir: "~/{{ remote_base }}/stacks/{{ item }}"
+        executable: /bin/bash
+      environment:
+        CONTAINER_UID: "{{ ansible_facts.user_uid }}"
+        PODMAN_SOCK: "/run/user/{{ ansible_facts.user_uid }}/podman/podman.sock"
+        STACKS_PATH: "{{ ansible_env.HOME }}/{{ remote_base }}/stacks"
+      loop: "{{ target_stacks }}"
+      register: compose_output
+      changed_when: "'Created' in compose_output.stdout or 'Recreated' in compose_output.stdout"
+
+    - name: Check if Kanidm is running
+      command: podman container exists kanidm
+      register: kanidm_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Wait for Kanidm to be healthy
+      command: podman healthcheck run kanidm
+      register: kanidm_health
+      until: kanidm_health.rc == 0
+      retries: 30
+      delay: 5
+      when: kanidm_check.rc == 0
+      changed_when: false
+
+    - name: Automate Kanidm OIDC Clients and generate secrets
+      script: "{{ repo_root }}/scripts/setup/setup-oidc.sh"
+      register: oidc_automation
+      changed_when: "'UPDATED_ENV' in oidc_automation.stdout"
+      when: kanidm_check.rc == 0
+
+    - name: Redeploy stacks to pick up new OIDC secrets
+      shell: |
+        set -a; [ -f "$HOME/{{ remote_base }}/.env" ] && source "$HOME/{{ remote_base }}/.env"; set +a
+        podman-compose up -d --build --remove-orphans
+      args:
+        chdir: "~/{{ remote_base }}/stacks/{{ item }}"
+        executable: /bin/bash
+      environment:
+        CONTAINER_UID: "{{ ansible_facts.user_uid }}"
+        PODMAN_SOCK: "/run/user/{{ ansible_facts.user_uid }}/podman/podman.sock"
+        STACKS_PATH: "{{ ansible_env.HOME }}/{{ remote_base }}/stacks"
+      loop: "{{ target_stacks }}"
+      when: oidc_automation.changed
+      register: compose_redeploy
+      changed_when: "'Created' in compose_redeploy.stdout or 'Recreated' in compose_redeploy.stdout"

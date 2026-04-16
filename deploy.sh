@@ -175,138 +175,6 @@ get_all_stacks() {
     get_user_stacks
 }
 
-# --- Sync config to remote via rsync (host → homelab only) ---
-# Transfers compose files and config directories. Excludes runtime data.
-
-rsync_to_remote() {
-    local stack_dir="$1"
-    local rsync_ssh="ssh -i ${SSH_KEY} -p ${SSH_PORT:-22}"
-
-    echo "    Syncing config → ${REMOTE_HOST}:~/${REMOTE_BASE}/${stack_dir}/"
-
-    # Ensure remote directory exists
-    "${SSH_CMD[@]}" "mkdir -p ~/${REMOTE_BASE}/${stack_dir}"
-
-    # Sync stack config only (exclude runtime data)
-    rsync -rlpt \
-        -e "$rsync_ssh" \
-        --exclude='data/' \
-        --exclude='models/' \
-        --exclude='*.log' \
-        "$REPO_ROOT/${stack_dir}/" \
-        "${REMOTE_USER}@${REMOTE_HOST}:~/${REMOTE_BASE}/${stack_dir}/"
-
-    # Sync certs if they exist (needed by some stacks like Quay OIDC)
-    if [[ -d "$REPO_ROOT/certs" ]]; then
-        "${SSH_CMD[@]}" "mkdir -p ~/${REMOTE_BASE}/certs"
-        rsync -rlpt -e "$rsync_ssh" "$REPO_ROOT/certs/" "${REMOTE_USER}@${REMOTE_HOST}:~/${REMOTE_BASE}/certs/"
-    fi
-
-    # Sync root .env to remote project base
-    if [[ -f "$REPO_ROOT/.env" ]]; then
-        rsync -lpt \
-            -e "$rsync_ssh" \
-            "$REPO_ROOT/.env" \
-            "${REMOTE_USER}@${REMOTE_HOST}:~/${REMOTE_BASE}/.env"
-    fi
-}
-
-# --- Ensure Remote Volume Directories ---
-# Parses a compose file for bind-mount sources (./data, ./config, etc.)
-# and creates the corresponding directories on the remote node.
-
-ensure_remote_dirs() {
-    local compose_file="$1"
-    local stack_dir="$2"
-
-    [[ ! -f "$compose_file" ]] && return 0
-
-    local dirs=()
-
-    # --- Handle relative volume paths (./something or ../something) ---
-    local rel_paths
-    rel_paths=$(grep -oP '^\s+-\s+\K\.\.?/[^:]+' "$compose_file" 2>/dev/null | sort -u) || true
-    if [[ -n "$rel_paths" ]]; then
-        while IFS= read -r p; do
-            local local_src remote_rel
-            if [[ "$p" == ../* ]]; then
-                local_src="$REPO_ROOT/$stack_dir/$p"
-                remote_rel=$(cd "$REPO_ROOT/$stack_dir" && realpath --relative-to="$REPO_ROOT" "$p" 2>/dev/null) || continue
-                remote_rel="${REMOTE_BASE}/$remote_rel"
-            else
-                local_src="$REPO_ROOT/$stack_dir/${p#./}"
-                remote_rel="${REMOTE_BASE}/${stack_dir}/${p#./}"
-            fi
-            if [[ -f "$local_src" ]]; then
-                dirs+=("~/$(dirname "$remote_rel")")
-            else
-                dirs+=("~/$remote_rel")
-            fi
-        done <<< "$rel_paths"
-    fi
-
-    # --- Handle ${DATA_DIR}/... absolute volume paths ---
-    local data_paths
-    data_paths=$(grep -oP '^\s+-\s+\K\$\{DATA_DIR[^}]*\}/[^:]+' "$compose_file" 2>/dev/null | sort -u) || true
-    if [[ -n "$data_paths" ]]; then
-        local data_dir_val="${DATA_DIR:-/var/Geo-Brain}"
-        while IFS= read -r p; do
-            # Expand ${DATA_DIR} or ${DATA_DIR:-default} to its value
-            local expanded="${p/\$\{DATA_DIR\}/$data_dir_val}"
-            expanded="${expanded/\$\{DATA_DIR:-*\}/$data_dir_val}"
-            dirs+=("$expanded")
-        done <<< "$data_paths"
-    fi
-
-    if [[ ${#dirs[@]} -gt 0 ]]; then
-        local unique
-        unique=$(printf '%s\n' "${dirs[@]}" | sort -u | tr '\n' ' ')
-        echo "    Ensuring volume directories on remote..."
-        # shellcheck disable=SC2029
-        "${SSH_CMD[@]}" "for d in $unique; do mkdir -p \"\$d\" 2>/dev/null || true; done"
-    fi
-}
-
-# --- Render Config Templates ---
-# Expands ${VARIABLE} references in config files on the remote node.
-# Required because some apps (Kanidm, Traefik dynamic config, Loki)
-# read config files directly and cannot expand environment variables natively.
-
-render_config_templates() {
-    local stack_dir="$1"
-
-    if [[ "$DEPLOY_MODE" == "remote" ]]; then
-        "${SSH_CMD[@]}" bash -s -- "${REMOTE_BASE}" "${stack_dir}" << 'RENDER_SCRIPT'
-RBASE="$1"
-SDIR="$2"
-ENVFILE="$HOME/${RBASE}/.env"
-CONFDIR="$HOME/${RBASE}/${SDIR}/config"
-
-cd "$CONFDIR" 2>/dev/null || exit 0
-set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
-command -v envsubst &>/dev/null || exit 0
-
-# Whitelist: only expand variables defined in .env (prevents clobbering app-specific patterns)
-VARLIST='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${OAUTH2_PROXY_CLIENT_SECRET} ${OAUTH2_PROXY_COOKIE_SECRET} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${QUAY_SECRET_KEY} ${QUAY_DB_SECRET_KEY} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${DEFECTDOJO_ADMIN_PASSWORD} ${WAZUH_API_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY} ${OAUTH2_PROXY_OIDC_SECRET} ${GITEA_OIDC_SECRET}'
-find . -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
-    if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
-        envsubst "$VARLIST" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
-    fi
-done
-RENDER_SCRIPT
-    else
-        # Local: expand in a temp copy to avoid modifying repo templates
-        local config_dir="$REPO_ROOT/$stack_dir/config"
-        [[ -d "$config_dir" ]] || return 0
-        command -v envsubst &>/dev/null || return 0
-        local varlist='${DOMAIN} ${DATA_DIR} ${LDAP_BASE_DN} ${OAUTH2_PROXY_CLIENT_SECRET} ${OAUTH2_PROXY_COOKIE_SECRET} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} ${CROWDSEC_BOUNCER_API_KEY} ${QUAY_DB_USER} ${QUAY_DB_PASSWORD} ${QUAY_DB_NAME} ${QUAY_SECRET_KEY} ${QUAY_DB_SECRET_KEY} ${CLAIR_DB_USER} ${CLAIR_DB_PASSWORD} ${CLAIR_DB_NAME} ${DEFECTDOJO_DB_USER} ${DEFECTDOJO_DB_PASSWORD} ${DEFECTDOJO_ADMIN_PASSWORD} ${WAZUH_API_PASSWORD} ${QUAY_OIDC_SECRET} ${MINIO_OIDC_SECRET} ${WAZUH_OIDC_SECRET} ${DOJO_OIDC_SECRET} ${DOJO_SECRET_KEY} ${OAUTH2_PROXY_OIDC_SECRET} ${GITEA_OIDC_SECRET}'
-        find "$config_dir" -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
-            if grep -qE '\$\{[A-Z_]+\}' "$f" 2>/dev/null; then
-                envsubst "$varlist" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
-            fi
-        done
-    fi
-}
 
 # --- Execute compose on remote node via SSH ---
 
@@ -367,22 +235,7 @@ run_compose() {
     local cmd="$1"
 
     if [[ "$DEPLOY_MODE" == "remote" ]]; then
-        if [[ "$cmd" == "up" || "$cmd" == "restart" ]]; then
-            local compose_file="$REPO_ROOT/$stack_dir/docker-compose.yml"
-
-            echo "  [1/4] Creating remote volume directories..."
-            ensure_remote_dirs "$compose_file" "$stack_dir"
-
-            echo "  [2/4] Syncing config to remote (rsync)..."
-            rsync_to_remote "$stack_dir"
-
-            echo "  [3/4] Rendering config templates..."
-            render_config_templates "$stack_dir"
-
-            echo "  [4/4] Running podman compose $cmd on remote..."
-        else
-            echo "  Running podman compose $cmd on remote..."
-        fi
+        echo "  Running podman compose $cmd on remote..."
         remote_compose "$stack_dir" "$@"
     else
         local_compose "$stack_dir" "$@"
@@ -682,23 +535,38 @@ deploy_single() {
             ;;
         up)
             check_security "$REPO_ROOT/$stack_dir" "$stack_name" || return 1
-            generate_traefik_config "$stack_name"
-            run_compose "$stack_dir" "up" "-d"
+            if [[ "$DEPLOY_MODE" == "remote" ]]; then
+                echo ">>> Delegating remote deployment to Ansible Playbook for $stack_name..."
+                ansible-playbook -i "$REMOTE_HOST," -u "$REMOTE_USER" --private-key "$SSH_KEY" "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$stack_name"
+            else
+                echo ">>> Delegating local deployment to Ansible Playbook for $stack_name..."
+                ansible-playbook -i "localhost," -c local "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$stack_name"
+            fi
             ;;
         redeploy)
             check_security "$REPO_ROOT/$stack_dir" "$stack_name" || return 1
-            generate_traefik_config "$stack_name"
-            echo ">>> Forcing recreation of containers for $stack_name..."
-            run_compose "$stack_dir" "down"
-            run_compose "$stack_dir" "up" "-d" "--force-recreate"
+            if [[ "$DEPLOY_MODE" == "remote" ]]; then
+                echo ">>> Delegating remote redeployment to Ansible Playbook for $stack_name..."
+                ansible-playbook -i "$REMOTE_HOST," -u "$REMOTE_USER" --private-key "$SSH_KEY" "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$stack_name"
+            else
+                echo ">>> Delegating local redeployment to Ansible Playbook for $stack_name..."
+                ansible-playbook -i "localhost," -c local "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$stack_name"
+            fi
             ;;
         down)    run_compose "$stack_dir" "down" ;;
         ps)      run_compose "$stack_dir" "ps" ;;
         logs)    run_compose "$stack_dir" "logs" "-f" ;;
         restart) run_compose "$stack_dir" "restart" ;;
+        traefik_gen)
+            # Used by Ansible to generate dynamic configs locally
+            local prev_mode="$DEPLOY_MODE"
+            DEPLOY_MODE="local"
+            generate_traefik_config "$stack_name"
+            DEPLOY_MODE="$prev_mode"
+            ;;
         *)
             echo "[ERROR] Unknown command '$COMMAND'."
-            echo "Valid: up, down, ps, logs, restart, check, redeploy"
+            echo "Valid: up, down, ps, logs, restart, check, redeploy, traefik_gen"
             exit 1
             ;;
     esac
@@ -806,6 +674,23 @@ EOF
     fi
     # --- END QUAY-FIRST BOOTSTRAPPING ---
 
+    if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
+        local limit_stacks
+        limit_stacks=$(IFS=,; echo "${stacks[*]}")
+        if [[ "$DEPLOY_MODE" == "remote" ]]; then
+            echo ">>> Delegating remote batch deployment to Ansible Playbook..."
+            ansible-playbook -i "$REMOTE_HOST," -u "$REMOTE_USER" --private-key "$SSH_KEY" "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$limit_stacks"
+        else
+            echo ">>> Delegating local batch deployment to Ansible Playbook..."
+            ansible-playbook -i "localhost," -c local "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$limit_stacks"
+        fi
+        if [ $? -ne 0 ]; then
+            echo ">>> Batch $COMMAND failed during Ansible execution."
+            exit 1
+        fi
+        echo ">>> Batch $COMMAND completed successfully for all ${#stacks[@]} stack(s) via Ansible."
+        return
+    fi
 
     for stack in "${stacks[@]}"; do
         echo "=== [$stack] ==="

@@ -682,6 +682,35 @@ test_kanidm_auth() {
     fi
 }
 
+# --- T26: Falco Runtime Security Test ---
+test_falco_active() {
+    if ! ssh_cmd "podman container exists falco" 2>/dev/null; then
+        skip "Falco not deployed, skipping test"
+        return
+    fi
+    # Check if Falco is running and its engine is initialized
+    if ssh_cmd "podman logs falco 2>&1 | grep -qi 'Falco initialized with configuration file'" || ssh_cmd "podman logs falco 2>&1 | grep -qi 'Starting health webserver'"; then
+        pass "Falco runtime security engine initialized successfully"
+    else
+        fail "Falco engine failed to initialize or logs unavailable"
+    fi
+}
+
+# --- T27: BunkerWeb WAF Test ---
+test_bunkerweb_waf() {
+    if ! ssh_cmd "podman container exists bunkerweb" 2>/dev/null; then
+        skip "BunkerWeb not deployed, skipping WAF test"
+        return
+    fi
+    local waf_status
+    waf_status=$(ssh_cmd "curl -k -s -o /dev/null -w '%{http_code}' -H 'Host: waf.${DOMAIN}' 'https://localhost:8444/?id=1%27%20OR%20%271%27=%271'")
+    if [[ "$waf_status" == "403" ]] || [[ "$waf_status" == "302" ]]; then
+        pass "BunkerWeb WAF successfully intercepted malicious SQLi payload (HTTP $waf_status)"
+    else
+        fail "BunkerWeb WAF did not intercept malicious payload (Status: $waf_status)"
+    fi
+}
+
 run_remote_tests() {
     local target_stack="${1:-}"
 
@@ -708,6 +737,10 @@ run_remote_tests() {
     for stack in "${stacks[@]}"; do
         test_endpoint_reachable "$stack"
     done
+
+    section "SECURITY LAYERS (Remote)"
+    test_falco_active
+    test_bunkerweb_waf
 
     section "AUTHENTICATION (Remote)"
     test_kanidm_auth
@@ -774,4 +807,5 @@ esac
 
 print_summary
 exit $?
+
 
