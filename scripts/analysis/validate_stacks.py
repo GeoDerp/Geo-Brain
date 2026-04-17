@@ -2,6 +2,19 @@ import yaml
 import glob
 import sys
 import os
+import re
+
+def parse_duration(duration_str):
+    total_seconds = 0
+    matches = re.findall(r'(\d+)([hms])', str(duration_str))
+    for val, unit in matches:
+        if unit == 'h':
+            total_seconds += int(val) * 3600
+        elif unit == 'm':
+            total_seconds += int(val) * 60
+        elif unit == 's':
+            total_seconds += int(val)
+    return total_seconds
 
 def check_stack(filepath):
     errors = []
@@ -36,8 +49,13 @@ def check_stack(filepath):
         healthcheck = service.get("healthcheck")
         if not healthcheck:
             errors.append(f"Service '{service_name}' missing 'healthcheck'.")
-        elif isinstance(healthcheck, dict) and healthcheck.get("disable") is True:
-            pass  # Explicitly disabled is acceptable
+        elif isinstance(healthcheck, dict):
+            if healthcheck.get("disable") is True:
+                pass  # Explicitly disabled is acceptable
+            else:
+                interval = healthcheck.get("interval", "")
+                if interval and parse_duration(interval) > 60:
+                    errors.append(f"Service '{service_name}' has healthcheck interval > 60s: '{interval}'")
 
         # Check security_opt: no-new-privileges
         security_opt = service.get("security_opt", [])
@@ -94,12 +112,16 @@ def check_stack(filepath):
         # Non-external, non-internal networks that aren't proxy/waf are suspect
         if not is_external and not is_internal:
             if net_name not in ("proxy-net", "waf-net"):
-                warnings.append(f"Network '{net_name}' is not marked 'internal: true' and is not external. Backend networks should be internal.")
+                errors.append(f"Network '{net_name}' is not marked 'internal: true' and is not external. Backend networks should be internal.")
 
     return errors, warnings
 
 def main():
-    stack_files = sorted(glob.glob("stacks/*/docker-compose.yml") + glob.glob("stacks/user/*/docker-compose.yml"))
+    if len(sys.argv) > 1:
+        stack_files = sys.argv[1:]
+    else:
+        stack_files = sorted(glob.glob("stacks/*/docker-compose.yml") + glob.glob("stacks/user/*/docker-compose.yml"))
+
     all_errors = {}
     all_warnings = {}
     for filepath in stack_files:

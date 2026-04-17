@@ -304,71 +304,14 @@ check_security() {
     local stack_dir="$1"
     local compose_file="$stack_dir/docker-compose.yml"
     local stack_label="$2"
-    local errors=0
 
     echo ">>> Running STIG & Security validation for $stack_label..."
-
-    # 1. Image Pinning (Mandate Digest or specific version, reject :latest)
-    if grep -qE 'image:.*:latest($|[[:space:]])' "$compose_file"; then
-        echo "[ERROR] Image ':latest' tag found. Use digests or specific versions for air-gap reliability."
-        errors=$((errors + 1))
-    fi
-    # Also flag untagged images (implicit :latest)
-    if grep -qP '^\s+image:\s+[^:@\s]+\s*$' "$compose_file"; then
-        echo "[ERROR] Untagged image found (implicit :latest). Pin to a specific version or digest."
-        errors=$((errors + 1))
-    fi
-
-    # 2. Resource Limits (Reliability) — verify non-empty limits with actual values
-    if ! grep -q "limits:" "$compose_file"; then
-        echo "[ERROR] No resource limits defined (deploy.resources.limits). This is required for reliability."
-        errors=$((errors + 1))
-    elif ! grep -qE '(memory:|cpus:)' "$compose_file"; then
-        echo "[ERROR] Resource limits block found but contains no memory/cpus values."
-        errors=$((errors + 1))
-    fi
-
-    # 3. Network Isolation (Mandate custom networks)
-    if ! grep -q "networks:" "$compose_file"; then
-        echo "[ERROR] No custom networks defined. Using default bridge is forbidden by architecture mandates."
-        errors=$((errors + 1))
-    fi
-
-    # 4. Healthcheck (Mandatory per GEMINI.md)
-    if ! grep -q "healthcheck:" "$compose_file"; then
-        echo "[ERROR] No healthcheck defined. Every service must define a healthcheck."
-        errors=$((errors + 1))
-    fi
-
-    # 5. Container Hardening (security_opt + cap_drop)
-    if ! grep -q "no-new-privileges" "$compose_file"; then
-        if ! grep -q "security.stig.bypass_privileged=true" "$compose_file"; then
-            echo "[WARNING] No 'security_opt: no-new-privileges:true' found. Recommended for all services."
-        fi
-    fi
-
-    # 6. STIG Labels
-    if ! grep -q "security.stig" "$compose_file"; then
-        echo "[WARNING] No 'security.stig' labels found. While not an error yet, it is recommended for compliance tracking."
-    fi
-
-    # 7. Rootless hints (Check for privileged: true)
-    if grep -q "privileged: true" "$compose_file"; then
-        if grep -q "security.stig.bypass_privileged=true" "$compose_file"; then
-            echo "[WARNING] 'privileged: true' detected, but bypass label is present. Proceeding with caution (Kernel/Security tool exception)."
-        else
-            echo "[ERROR] 'privileged: true' detected without bypass label. Rootless containers should use capabilities instead."
-            errors=$((errors + 1))
-        fi
+    if ! python3 "$REPO_ROOT/scripts/analysis/validate_stacks.py" "$compose_file"; then
+        return 1
     fi
 
     # 7. Ensure Networks Exist (Self-healing)
     ensure_networks "$compose_file" "$stack_label"
-    
-    if [ $errors -gt 0 ]; then
-        echo ">>> Validation FAILED with $errors error(s)."
-        return 1
-    fi
 
     echo ">>> Validation PASSED."
     return 0
@@ -589,7 +532,13 @@ deploy_batch() {
 
     # Always cleanup old generated configs at the start of a run (if up/redeploy)
     if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
-        cleanup_traefik_configs
+        if [[ "${#stacks[@]}" -gt 10 ]]; then
+            cleanup_traefik_configs
+        else
+            for stack in "${stacks[@]}"; do
+                cleanup_traefik_configs "$stack"
+            done
+        fi
     fi
 
     # --- QUAY-FIRST BOOTSTRAPPING ---

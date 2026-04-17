@@ -52,7 +52,7 @@ services:
           cpus: '0.2'
     healthcheck:
       test: ["CMD", "/bin/oauth2-proxy", "--version"]
-      interval: 5m
+      interval: 60s
       timeout: 5s
       retries: 3
       start_period: 10s
@@ -127,7 +127,7 @@ services:
           cpus: '0.2'
     healthcheck:
       test: ["CMD", "/bin/oauth2-proxy", "--version"]
-      interval: 5m
+      interval: 60s
       timeout: 5s
       retries: 3
       start_period: 10s
