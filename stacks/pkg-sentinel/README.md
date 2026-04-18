@@ -40,6 +40,16 @@ eBPF tracing monitors for information exfiltration. Safe packages are served
 > The container is labeled `security.stig.bypass_privileged=true` per
 > GEMINI.md policy. The sandbox containers themselves are fully rootless
 > and network-isolated.
+>
+> **Azazel Installation:** The Azazel eBPF binary must be available inside
+> the container at the path configured by `PKG_SENTINEL_AZAZEL_BIN`
+> (default: `/usr/local/bin/azazel`). Either install it during the
+> container image build (add to the Containerfile) or bind-mount it from
+> the host by adding a volume to `docker-compose.yml`:
+> ```yaml
+> volumes:
+>   - /usr/local/bin/azazel:/usr/local/bin/azazel:ro
+> ```
 
 ---
 
