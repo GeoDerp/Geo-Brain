@@ -35,7 +35,7 @@ services:
           cpus: '0.3'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5001"]
-      interval: 5m
+      interval: 60s
       timeout: 10s
       retries: 3
       start_period: 5m

@@ -38,7 +38,7 @@ services:
           cpus: '0.5'
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:80/ || exit 1"]
-      interval: 5m
+      interval: 60s
       timeout: 10s
       retries: 3
       start_period: 5m
@@ -107,10 +107,39 @@ services:
   #         cpus: '1.0'
   #   healthcheck:
   #     test: ["CMD-SHELL", "pg_isready -U appuser -d appdb"]
-  #     interval: 5m
+  #     interval: 60s
   #     timeout: 10s
   #     retries: 3
   #     start_period: 5m
+  #   labels:
+  #     - "security.stig.compliance=true"
+
+  # =========================================================================
+  # OPTIONAL mTLS SIDECAR PATTERN
+  # =========================================================================
+  # Applications bind strictly to 127.0.0.1 and share a network namespace 
+  # with a sidecar proxy that handles mTLS termination via Step-CA.
+  #
+  # app-backend:
+  #   image: my-backend-image:latest
+  #   container_name: my-app-backend
+  #   # Bind application strictly to localhost inside the pod
+  #   command: ["--bind", "127.0.0.1:8080"]
+  #   # No networks defined here; network is shared from the sidecar OR vice-versa
+  #   # Usually, the main app defines the network, and sidecar uses network_mode.
+  #   networks:
+  #     - app-mtls-net
+  #   ...
+  #
+  # app-mtls-sidecar:
+  #   image: docker.io/library/caddy:2-alpine
+  #   container_name: my-app-mtls-sidecar
+  #   network_mode: "service:app-backend" # Share network namespace with backend
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - ${DATA_DIR}/certs:/certs:ro # Mount step-ca root/client certs
+  #   depends_on:
+  #     - app-backend
   #   labels:
   #     - "security.stig.compliance=true"
 

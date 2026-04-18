@@ -1,0 +1,10 @@
+- name: Trust CA cert
+  hosts: all
+  become: yes
+  tasks:
+    - name: Copy CA
+      copy:
+        src: "{{ playbook_dir }}/certs/ca.crt"
+        dest: /etc/pki/ca-trust/source/anchors/Geo-Brain-ca.crt
+    - name: Update trust
+      command: update-ca-trust

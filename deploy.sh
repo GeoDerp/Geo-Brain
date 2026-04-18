@@ -92,10 +92,11 @@ if [ -z "$STACK_NAME" ]; then
     echo "Mode: ${DEPLOY_MODE}"
     echo ""
     echo "Special targets:"
-    echo "  all   - Deploy all stacks (base + user, excludes cicd)"
+    echo "  all   - Deploy all stacks (base + user, excludes cicd and dev)"
     echo "  base  - Deploy all base infrastructure stacks"
     echo "  user  - Deploy all user application stacks"
     echo "  cicd  - Deploy CI/CD pipeline (gitea + defectdojo + ramalama)"
+    echo "  dev   - Deploy developer tools (pkg-sentinel)"
     exit 1
 fi
 
@@ -127,7 +128,9 @@ get_base_stacks() {
 
     # CI/CD pipeline stacks (gitea + defectdojo + ramalama) are optional;
     # deploy them together via: ./deploy.sh cicd up
-    local exclude_stacks=("prometheus" "gitea" "defectdojo" "ramalama")
+    # Developer stacks (pkg-sentinel) are optional;
+    # deploy them together via: ./deploy.sh dev up
+    local exclude_stacks=("prometheus" "gitea" "defectdojo" "ramalama" "pkg-sentinel")
     local found_stacks=()
     for dir in "$REPO_ROOT"/stacks/*/; do
         local name
@@ -290,10 +293,16 @@ ensure_networks() {
     echo "    Creating missing external networks for $stack_label:"
     for net in $missing; do
         echo "      + $net"
+        
+        local internal_flag=""
+        if [[ "$net" == "secure-backbone" || "$net" == "quay-net" || "$net" == "moodle-db-net" ]]; then
+            internal_flag="--internal "
+        fi
+        
         if [[ "$DEPLOY_MODE" == "remote" ]]; then
-            "${SSH_CMD[@]}" "podman network create --label security.stig.compliance=true '$net'" || true
+            "${SSH_CMD[@]}" "podman network create ${internal_flag}--label security.stig.compliance=true '$net'" || true
         else
-            podman network create --label "security.stig.compliance=true" "$net" || true
+            podman network create ${internal_flag}--label "security.stig.compliance=true" "$net" || true
         fi
     done
 }
@@ -304,71 +313,14 @@ check_security() {
     local stack_dir="$1"
     local compose_file="$stack_dir/docker-compose.yml"
     local stack_label="$2"
-    local errors=0
 
     echo ">>> Running STIG & Security validation for $stack_label..."
-
-    # 1. Image Pinning (Mandate Digest or specific version, reject :latest)
-    if grep -qE 'image:.*:latest($|[[:space:]])' "$compose_file"; then
-        echo "[ERROR] Image ':latest' tag found. Use digests or specific versions for air-gap reliability."
-        errors=$((errors + 1))
-    fi
-    # Also flag untagged images (implicit :latest)
-    if grep -qP '^\s+image:\s+[^:@\s]+\s*$' "$compose_file"; then
-        echo "[ERROR] Untagged image found (implicit :latest). Pin to a specific version or digest."
-        errors=$((errors + 1))
-    fi
-
-    # 2. Resource Limits (Reliability) — verify non-empty limits with actual values
-    if ! grep -q "limits:" "$compose_file"; then
-        echo "[ERROR] No resource limits defined (deploy.resources.limits). This is required for reliability."
-        errors=$((errors + 1))
-    elif ! grep -qE '(memory:|cpus:)' "$compose_file"; then
-        echo "[ERROR] Resource limits block found but contains no memory/cpus values."
-        errors=$((errors + 1))
-    fi
-
-    # 3. Network Isolation (Mandate custom networks)
-    if ! grep -q "networks:" "$compose_file"; then
-        echo "[ERROR] No custom networks defined. Using default bridge is forbidden by architecture mandates."
-        errors=$((errors + 1))
-    fi
-
-    # 4. Healthcheck (Mandatory per GEMINI.md)
-    if ! grep -q "healthcheck:" "$compose_file"; then
-        echo "[ERROR] No healthcheck defined. Every service must define a healthcheck."
-        errors=$((errors + 1))
-    fi
-
-    # 5. Container Hardening (security_opt + cap_drop)
-    if ! grep -q "no-new-privileges" "$compose_file"; then
-        if ! grep -q "security.stig.bypass_privileged=true" "$compose_file"; then
-            echo "[WARNING] No 'security_opt: no-new-privileges:true' found. Recommended for all services."
-        fi
-    fi
-
-    # 6. STIG Labels
-    if ! grep -q "security.stig" "$compose_file"; then
-        echo "[WARNING] No 'security.stig' labels found. While not an error yet, it is recommended for compliance tracking."
-    fi
-
-    # 7. Rootless hints (Check for privileged: true)
-    if grep -q "privileged: true" "$compose_file"; then
-        if grep -q "security.stig.bypass_privileged=true" "$compose_file"; then
-            echo "[WARNING] 'privileged: true' detected, but bypass label is present. Proceeding with caution (Kernel/Security tool exception)."
-        else
-            echo "[ERROR] 'privileged: true' detected without bypass label. Rootless containers should use capabilities instead."
-            errors=$((errors + 1))
-        fi
+    if ! python3 "$REPO_ROOT/scripts/analysis/validate_stacks.py" "$compose_file"; then
+        return 1
     fi
 
     # 7. Ensure Networks Exist (Self-healing)
     ensure_networks "$compose_file" "$stack_label"
-    
-    if [ $errors -gt 0 ]; then
-        echo ">>> Validation FAILED with $errors error(s)."
-        return 1
-    fi
 
     echo ">>> Validation PASSED."
     return 0
@@ -589,7 +541,13 @@ deploy_batch() {
 
     # Always cleanup old generated configs at the start of a run (if up/redeploy)
     if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
-        cleanup_traefik_configs
+        if [[ "${#stacks[@]}" -gt 10 ]]; then
+            cleanup_traefik_configs
+        else
+            for stack in "${stacks[@]}"; do
+                cleanup_traefik_configs "$stack"
+            done
+        fi
     fi
 
     # --- QUAY-FIRST BOOTSTRAPPING ---
@@ -728,6 +686,11 @@ case $STACK_NAME in
         # CI/CD pipeline: Gitea (code hosting) + DefectDojo (vuln mgmt) + RamaLama (AI analysis)
         # These three stacks share vulnerability-net and are deployed as a unit.
         deploy_batch "defectdojo" "gitea" "ramalama"
+        ;;
+    dev)
+        # Developer tools: pkg-sentinel (supply-chain security proxy)
+        # Requires eBPF capabilities on the host (CAP_BPF, CAP_SYS_ADMIN, CAP_PERFMON).
+        deploy_batch "pkg-sentinel"
         ;;
     *)
         # Always cleanup old generated configs at the start of a run (if up/redeploy)

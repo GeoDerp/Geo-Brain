@@ -318,7 +318,7 @@ setup_identity() {
     KANIDM_RECOVERY="Check container logs"
     echo "⚠️ Admin account recovery skipped or password not captured."
   fi
-
+}
 
 # --- 4) Storage & SOC Secrets ---
 setup_storage() {

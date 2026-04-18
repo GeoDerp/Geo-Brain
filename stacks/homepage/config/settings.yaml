@@ -39,3 +39,10 @@ layout:
     columns: 3
     header: true
     icon: mdi-apps
+
+auth:
+  providers:
+    oidc:
+      clientId: homepage
+      clientSecret: "{{HOMEPAGE_OIDC_SECRET}}"
+      discoveryUrl: "https://kanidm.{{DOMAIN}}/oauth2/openid/homepage/.well-known/openid-configuration"
