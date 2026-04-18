@@ -22,7 +22,7 @@ services:
     volumes:
       - ${DATA_DIR}/step-ca/step:/home/step:z,U
     environment:
-      - DOCKER_STEPCA_INIT_NAME=${STEPCA_CA_NAME:-${DOMAIN} CA}
+      - DOCKER_STEPCA_INIT_NAME=${DOMAIN} CA
       - DOCKER_STEPCA_INIT_DNS_NAMES=ca.${DOMAIN},localhost
       - DOCKER_STEPCA_INIT_SSH=true
     networks:

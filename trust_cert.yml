@@ -4,7 +4,7 @@
   tasks:
     - name: Copy CA
       copy:
-        src: "{{ playbook_dir }}/certs/ca.crt"
+        src: "{{ playbook_dir }}/stacks/traefik/config/certs/ca-bundle.crt"
         dest: /etc/pki/ca-trust/source/anchors/Geo-Brain-ca.crt
     - name: Update trust
       command: update-ca-trust

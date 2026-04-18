@@ -137,40 +137,35 @@ fi
 
 echo ">>> Creating Kanidm user '${USERNAME}' via kanidm/tools container..."
 
-CA_CERT=$(cat "$REPO_ROOT/certs/ca.crt")
-CA_CERT_B64=$(echo "$CA_CERT" | base64 -w0)
-
 # All operations use the kanidm CLI tools container via the Kanidm API.
 # (podman exec into the kanidm server container hangs due to the minimal image.)
 SETUP_OUTPUT=$(run_remote "podman run -i --rm --network host \
   --env KANIDM_PASSWORD='${PASSWORD}' \
-  --env CA_CERT_B64='${CA_CERT_B64}' \
   --env DISPLAY_NAME_VAL="$(printf '%s' "${DISPLAY_NAME}" | base64 -w0)" \
   docker.io/kanidm/tools:1.9.2 sh -c '
-    echo \"\$CA_CERT_B64\" | base64 -d > /tmp/ca.crt
     DNAME=\$(echo \"\$DISPLAY_NAME_VAL\" | base64 -d)
     echo \">>> Logging in as idm_admin...\"
-    if ! kanidm login -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1; then
+    if ! kanidm login -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs 2>&1; then
         echo \"KANIDM_LOGIN_FAILED\"
         exit 1
     fi
 
     echo \">>> Creating person ${USERNAME}...\"
-    kanidm person create ${USERNAME} \"\$DNAME\" -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1 || true
+    kanidm person create ${USERNAME} \"\$DNAME\" -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs 2>&1 || true
     echo \">>> Setting email for ${USERNAME}...\"
-    kanidm person update ${USERNAME} --mail ${EMAIL} -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1 || true
+    kanidm person update ${USERNAME} --mail ${EMAIL} -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs 2>&1 || true
     echo \">>> Adding ${USERNAME} to group ${KANIDM_GROUP}...\"
-    kanidm group add-members ${KANIDM_GROUP} ${USERNAME} -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1 || true
+    kanidm group add-members ${KANIDM_GROUP} ${USERNAME} -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs 2>&1 || true
 
     echo \">>> Verifying account exists...\"
-    if ! kanidm person get ${USERNAME} -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt >/dev/null 2>&1; then
+    if ! kanidm person get ${USERNAME} -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs >/dev/null 2>&1; then
         echo \"KANIDM_PERSON_MISSING\"
         exit 1
     fi
     echo \"KANIDM_PERSON_OK\"
 
     echo \">>> Generating credential reset token...\"
-    RESET_TOKEN=\$(kanidm person credential create-reset-token ${USERNAME} 3600 -H ${KANIDM_URL} -D idm_admin -C /tmp/ca.crt 2>&1)
+    RESET_TOKEN=\$(kanidm person credential create-reset-token ${USERNAME} 3600 -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs 2>&1)
     TOKEN_VALUE=\$(echo \"\$RESET_TOKEN\" | grep -oP \"\\?token=\\K[^ ]+\" | head -1)
     if [ -n \"\$TOKEN_VALUE\" ]; then
         echo \"KANIDM_RESET_TOKEN=\$TOKEN_VALUE\"
@@ -183,7 +178,9 @@ SETUP_OUTPUT=$(run_remote "podman run -i --rm --network host \
 echo "$SETUP_OUTPUT" | grep -v "^KANIDM_"
 
 if echo "$SETUP_OUTPUT" | grep -q "KANIDM_LOGIN_FAILED"; then
-    echo "❌ Failed to authenticate as idm_admin. Check your password."
+    echo "❌ Failed to authenticate as idm_admin. Check your password in .env."
+    echo "   If you lost the password, you can recover it by running this on the node:"
+    echo "   podman exec kanidm /sbin/kanidmd recover-account -c /data/server.toml idm_admin"
     exit 1
 fi
 

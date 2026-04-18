@@ -89,17 +89,17 @@ Run the setup script to initialize identities, integrate Step-CA with Traefik vi
 
 ### Step 6: Trust the Root Certificate
 
-To avoid browser warnings, install the generated Root CA onto your local workstation:
+To avoid browser warnings, install the combined CA bundle (which includes the Step-CA root) onto your local workstation:
 
 - **Fedora/RHEL/openSUSE:** 
   ```bash
-  sudo cp certs/ca.crt /etc/pki/ca-trust/source/anchors/Geo-Brain-ca.crt && sudo update-ca-trust
+  sudo cp stacks/traefik/config/certs/ca-bundle.crt /etc/pki/ca-trust/source/anchors/Geo-Brain-ca.crt && sudo update-ca-trust
   ```
 - **macOS:**
   ```bash
-  sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain certs/ca.crt
+  sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain stacks/traefik/config/certs/ca-bundle.crt
   ```
-*(You can also use `./scripts/secrets/gen-selfsigned-certs.sh --trust-local` to automate this).*
+*(You can also run `./scripts/secrets/gen-selfsigned-certs.sh --trust-local` initially, but must manually trust `ca-bundle.crt` after step 5 to secure ACME certificates).*
 
 ### Step 7: Initial Logins & User Setup
 
