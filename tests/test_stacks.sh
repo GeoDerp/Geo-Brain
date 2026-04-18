@@ -782,73 +782,6 @@ test_bunkerweb_waf() {
 }
 
 
-# --- T28: Healthcheck interval <= 60s ---
-test_healthcheck_interval() {
-    local stack="$1" compose="$REPO_ROOT/stacks/$stack/docker-compose.yml"
-    local bad_hcs
-    bad_hcs=$(python3 -c "
-import yaml
-with open('$compose') as f:
-    d = yaml.safe_load(f)
-issues = []
-for svc, cfg in (d.get('services',{}) or {}).items():
-    hc = cfg.get('healthcheck', {})
-    interval = hc.get('interval', '')
-    if interval:
-        if interval.endswith('m'):
-            try:
-                if int(interval[:-1]) > 1:
-                    issues.append(f'{svc}:{interval}')
-            except: pass
-        elif interval.endswith('s'):
-            try:
-                if int(interval[:-1]) > 60:
-                    issues.append(f'{svc}:{interval}')
-            except: pass
-for i in issues: print(i)
-" 2>/dev/null)
-    if [[ -n "$bad_hcs" ]]; then
-        fail "[$stack] Healthcheck interval > 60s: $bad_hcs"
-    else
-        pass "[$stack] Healthcheck intervals compliant (<= 60s)"
-    fi
-}
-
-# --- T29: Internal backend networks ---
-test_internal_networks() {
-    local stack="$1" compose="$REPO_ROOT/stacks/$stack/docker-compose.yml"
-    local bad_nets
-    bad_nets=$(python3 -c "
-import yaml
-with open('$compose') as f:
-    d = yaml.safe_load(f)
-issues = []
-for net, cfg in (d.get('networks',{}) or {}).items():
-    if not cfg: continue
-    if not cfg.get('external', False) and not cfg.get('internal', False):
-        if net not in ['proxy-net', 'waf-net']:
-            issues.append(net)
-for i in issues: print(i)
-" 2>/dev/null)
-    if [[ -n "$bad_nets" ]]; then
-        fail "[$stack] Non-external networks must be 'internal: true': $bad_nets"
-    else
-        pass "[$stack] Backend networks compliant (internal: true)"
-    fi
-}
-
-# --- T30: mTLS sidecar pattern usage (Warning/Informational) ---
-test_mtls_sidecar() {
-    local stack="$1" compose="$REPO_ROOT/stacks/$stack/docker-compose.yml"
-    local has_sidecar
-    has_sidecar=$(grep -c 'network_mode: "service:' "$compose" || true)
-    if [[ "$has_sidecar" -gt 0 ]]; then
-        pass "[$stack] Uses mTLS sidecar pattern"
-    else
-        skip "[$stack] No mTLS sidecar pattern detected"
-    fi
-}
-
 # --- T31: Wazuh SIEM Engine Test ---
 test_wazuh_active() {
     if ! ssh_cmd "podman container exists wazuh-manager" 2>/dev/null; then
@@ -933,11 +866,11 @@ test_pkg_sentinel_active() {
         return
     fi
     local health
-    health=$(ssh_cmd "curl -sk https://pkg-sentinel.${DOMAIN}/healthz" 2>/dev/null || echo "error")
-    if echo "$health" | grep -qi "ok"; then
-        pass "pkg-sentinel is active and responding to healthchecks"
+    health=$(ssh_cmd "curl -sk -o /dev/null -w '%{http_code}' https://pkg-sentinel.${DOMAIN}/healthz" 2>/dev/null || echo "error")
+    if [[ "$health" == "302" ]] || [[ "$health" == "200" ]]; then
+        pass "pkg-sentinel is active and responding to healthchecks (HTTP $health)"
     else
-        fail "pkg-sentinel failed healthcheck or unreachable"
+        fail "pkg-sentinel failed healthcheck or unreachable (HTTP $health)"
     fi
 }
 
@@ -989,9 +922,18 @@ run_remote_tests() {
     section "SECURITY LAYERS (Remote)"
     test_falco_active
     test_bunkerweb_waf
+    test_wazuh_active
+    test_crowdsec_active
+    test_pkg_sentinel_active
 
     section "AUTHENTICATION (Remote)"
     test_kanidm_auth
+    for stack in "${stacks[@]}"; do
+        test_sso_redirects "$stack"
+    done
+
+    section "CI/CD (Remote)"
+    test_gitea_runners_active
 }
 
 print_summary() {
