@@ -92,8 +92,6 @@ var sensitivePathPrefixes = []string{
 var sensitiveExactPaths = map[string]bool{
 	"/etc/shadow":  true,
 	"/etc/passwd":  true,
-	"/etc/hosts":   true,
-	"/etc/resolv.conf": true,
 }
 
 // sensitiveFilenames are filenames that indicate credential harvesting

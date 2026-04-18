@@ -40,15 +40,17 @@ type Analyzer struct {
 	AzazelBin   string
 	RuleEngine  *rules.Engine
 	LLMEndpoint string // optional; empty string disables LLM analysis
+	LLMModel    string // model name for the LLM endpoint
 }
 
 // New creates a new Analyzer with the given Azazel binary path, rule engine,
-// and optional LLM endpoint.
-func New(azazelBin string, engine *rules.Engine, llmEndpoint string) *Analyzer {
+// optional LLM endpoint, and model name.
+func New(azazelBin string, engine *rules.Engine, llmEndpoint, llmModel string) *Analyzer {
 	return &Analyzer{
 		AzazelBin:   azazelBin,
 		RuleEngine:  engine,
 		LLMEndpoint: llmEndpoint,
+		LLMModel:    llmModel,
 	}
 }
 
@@ -173,7 +175,7 @@ func (a *Analyzer) queryLLM(ctx context.Context, events []rules.TelemetryEvent) 
 	)
 
 	reqBody := llmRequest{
-		Model: "phi3:mini",
+		Model: a.LLMModel,
 		Messages: []llmMessage{
 			{Role: "system", Content: "You are a cybersecurity analyst specializing in supply-chain attacks."},
 			{Role: "user", Content: prompt},

@@ -32,6 +32,9 @@ type Config struct {
 	// SandboxImage is the OCI image used for ephemeral detonation containers.
 	SandboxImage string
 
+	// LLMModel is the model name to request from the LLM endpoint.
+	LLMModel string
+
 	// LLMEndpoint is the optional HTTP/JSON webhook for the local AI inference
 	// endpoint used by the heuristics engine for deeper behavioral analysis.
 	LLMEndpoint string
@@ -59,6 +62,7 @@ func Load() (*Config, error) {
 		PodmanSocketPath:     envOrDefault("PKG_SENTINEL_PODMAN_SOCK", "/run/podman/podman.sock"),
 		SandboxImage:         envOrDefault("PKG_SENTINEL_SANDBOX_IMAGE", "docker.io/library/node:20-alpine"),
 		LLMEndpoint:          os.Getenv("PKG_SENTINEL_LLM_ENDPOINT"),
+		LLMModel:             envOrDefault("PKG_SENTINEL_LLM_MODEL", "phi3:mini"),
 		RAMDiskPath:          envOrDefault("PKG_SENTINEL_RAMDISK", "/dev/shm/pkg-sentinel"),
 		NPMRegistryUpstream:  envOrDefault("PKG_SENTINEL_NPM_UPSTREAM", "https://registry.npmjs.org"),
 		PyPIRegistryUpstream: envOrDefault("PKG_SENTINEL_PYPI_UPSTREAM", "https://pypi.org"),

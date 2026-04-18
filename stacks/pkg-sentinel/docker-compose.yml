@@ -26,7 +26,8 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      - SYS_ADMIN    # Required for eBPF/Azazel tracing of sandbox PIDs
+      - SYS_ADMIN    # Required for eBPF tracing across container PID/cgroup boundaries
+                     # (CAP_BPF alone is insufficient for cross-namespace tracing)
       - BPF           # Required for eBPF program attachment
       - PERFMON       # Required for perf event access
     read_only: true
@@ -49,6 +50,7 @@ services:
       - PKG_SENTINEL_AZAZEL_BIN=/usr/local/bin/azazel
       # Optional: Connect to RamaLama for AI-powered behavioral analysis
       - PKG_SENTINEL_LLM_ENDPOINT=${PKG_SENTINEL_LLM_ENDPOINT:-}
+      - PKG_SENTINEL_LLM_MODEL=${PKG_SENTINEL_LLM_MODEL:-phi3:mini}
       # Upstream registries
       - PKG_SENTINEL_NPM_UPSTREAM=${PKG_SENTINEL_NPM_UPSTREAM:-https://registry.npmjs.org}
       - PKG_SENTINEL_PYPI_UPSTREAM=${PKG_SENTINEL_PYPI_UPSTREAM:-https://pypi.org}

@@ -226,13 +226,21 @@ func (h *registryHandler) fetchPackage(r *http.Request) (string, string, error) 
 		return "", "", fmt.Errorf("create pkg dir: %w", err)
 	}
 
-	// Determine filename from URL path
+	// Determine filename from URL path — sanitize to prevent path traversal
 	filename := filepath.Base(upstreamPath)
-	if filename == "" || filename == "." {
+	if filename == "" || filename == "." || filename == ".." {
 		filename = "package.tar.gz"
 	}
+	// Strip any remaining path separators or traversal sequences
+	filename = strings.ReplaceAll(filename, "/", "_")
+	filename = strings.ReplaceAll(filename, "\\", "_")
+	filename = strings.ReplaceAll(filename, "..", "_")
 
 	pkgPath := filepath.Join(pkgDir, filename)
+	// Verify the resolved path is within the expected directory
+	if !strings.HasPrefix(filepath.Clean(pkgPath), filepath.Clean(pkgDir)) {
+		return "", "", fmt.Errorf("path traversal detected in filename: %s", filename)
+	}
 	f, err := os.Create(pkgPath)
 	if err != nil {
 		return "", "", fmt.Errorf("create pkg file: %w", err)
@@ -255,14 +263,14 @@ func (h *registryHandler) detonate(ctx context.Context, pkgPath, pkgDir string) 
 	allowedIPs := resolveRegistryIPs(h.upstream.Hostname())
 
 	ruleEngine := rules.NewEngine(allowedIPs, "/sandbox")
-	az := analyzer.New(h.cfg.AzazelBinary, ruleEngine, h.cfg.LLMEndpoint)
+	az := analyzer.New(h.cfg.AzazelBinary, ruleEngine, h.cfg.LLMEndpoint, h.cfg.LLMModel)
 
 	// Spin up the ephemeral sandbox container
 	sandbox, err := h.orch.SpinUp(ctx, pkgPath, h.registryType)
 	if err != nil {
 		return nil, fmt.Errorf("spin up sandbox: %w", err)
 	}
-	defer h.orch.Teardown(context.Background(), sandbox, "")
+	defer h.orch.Teardown(context.Background(), sandbox, pkgDir)
 
 	// Attach Azazel and trace
 	result, err := az.Trace(ctx, sandbox.PID, sandbox.CgroupPath)
@@ -275,7 +283,13 @@ func (h *registryHandler) detonate(ctx context.Context, pkgPath, pkgDir string) 
 
 // serveCachedPackage streams the cached package file back to the client.
 func (h *registryHandler) serveCachedPackage(w http.ResponseWriter, pkgPath string) {
-	f, err := os.Open(pkgPath)
+	// Validate the path is within the RAM disk to prevent path traversal
+	cleanPath := filepath.Clean(pkgPath)
+	if !strings.HasPrefix(cleanPath, filepath.Clean(h.cfg.RAMDiskPath)) {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	f, err := os.Open(cleanPath)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -283,7 +297,7 @@ func (h *registryHandler) serveCachedPackage(w http.ResponseWriter, pkgPath stri
 	defer func() {
 		_ = f.Close()
 		// Clean up after serving
-		_ = os.RemoveAll(filepath.Dir(pkgPath))
+		_ = os.RemoveAll(filepath.Dir(cleanPath))
 	}()
 
 	stat, err := f.Stat()

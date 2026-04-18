@@ -98,15 +98,18 @@ type CPULimit struct {
 func (o *Orchestrator) SpinUp(ctx context.Context, pkgPath, pkgType string) (*Sandbox, error) {
 	containerName := fmt.Sprintf("pkg-sentinel-sandbox-%d", time.Now().UnixNano())
 
+	// Use the explicit package filename to avoid glob injection
+	pkgFilename := filepath.Base(pkgPath)
+
 	// Determine the installation command based on package type
 	var cmd []string
 	switch strings.ToLower(pkgType) {
 	case "npm", "tgz":
-		cmd = []string{"sh", "-c", "cd /sandbox && npm install --ignore-scripts *.tgz 2>&1; ls -la node_modules/ 2>/dev/null || true"}
+		cmd = []string{"sh", "-c", fmt.Sprintf("cd /sandbox && npm install --ignore-scripts %q 2>&1; ls -la node_modules/ 2>/dev/null || true", pkgFilename)}
 	case "pypi", "whl":
-		cmd = []string{"sh", "-c", "cd /sandbox && pip install --no-deps *.whl 2>&1 || true"}
+		cmd = []string{"sh", "-c", fmt.Sprintf("cd /sandbox && pip install --no-deps %q 2>&1 || true", pkgFilename)}
 	case "maven", "jar":
-		cmd = []string{"sh", "-c", "cd /sandbox && jar -tf *.jar 2>&1 || true"}
+		cmd = []string{"sh", "-c", fmt.Sprintf("cd /sandbox && jar -tf %q 2>&1 || true", pkgFilename)}
 	default:
 		cmd = []string{"sh", "-c", "ls -la /sandbox/"}
 	}
