@@ -1,15 +1,24 @@
 #!/bin/bash
 DOMAIN="brain.home.lan"
-HOSTS=("ca" "kanidm" "auth" "minio" "quay" "grafana" "wazuh" "defectdojo" "dockge" "traefik" "gitea" "prometheus" "moodle" "n8n" "notes" "brain.home.lan")
+HOSTS=("ca" "kanidm" "auth" "minio" "quay" "grafana" "wazuh" "defectdojo" "dockge" "traefik" "gitea" "prometheus" "moodle" "n8n" "notes" "brain.home.lan" "pkg-sentinel")
+
+CA_CERT="stacks/traefik/config/certs/ca-bundle.crt"
+if [[ ! -f "$CA_CERT" ]]; then
+    echo "CA bundle not found at $CA_CERT"
+    exit 1
+fi
 
 for host in "${HOSTS[@]}"; do
     if [[ "$host" == "brain.home.lan" ]]; then
-        url="http://$host"
+        url="https://$host"
     else
-        url="http://$host.$DOMAIN"
+        url="https://$host.$DOMAIN"
     fi
     echo -n "Testing $url ... "
-    # We use -I to get headers. We don't resolve to remote node automatically without --resolve or ssh.
-    # It's better to execute this ON the remote node so DNS resolves, or use curl --resolve
-    # Let's just ssh and run it.
+    
+    if curl --cacert "$CA_CERT" -s -I "$url" >/dev/null 2>&1; then
+        echo "OK"
+    else
+        echo "FAILED"
+    fi
 done

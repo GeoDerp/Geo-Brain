@@ -49,7 +49,7 @@ services:
       - PKG_SENTINEL_RAMDISK=/dev/shm/pkg-sentinel
       - PKG_SENTINEL_AZAZEL_BIN=/usr/local/bin/azazel
       # Optional: Connect to RamaLama for AI-powered behavioral analysis
-      - PKG_SENTINEL_LLM_ENDPOINT=${PKG_SENTINEL_LLM_ENDPOINT:-}
+      - PKG_SENTINEL_LLM_ENDPOINT=${PKG_SENTINEL_LLM_ENDPOINT:-http://ramalama:8080}
       - PKG_SENTINEL_LLM_MODEL=${PKG_SENTINEL_LLM_MODEL:-phi3:mini}
       # Upstream registries
       - PKG_SENTINEL_NPM_UPSTREAM=${PKG_SENTINEL_NPM_UPSTREAM:-https://registry.npmjs.org}

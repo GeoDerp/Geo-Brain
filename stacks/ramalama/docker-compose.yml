@@ -44,7 +44,7 @@ services:
 
 networks:
   secure-backbone:
-    internal: true # No egress for air-gap reliability
+    external: true
   wazuh-net:
     external: true
   vulnerability-net:

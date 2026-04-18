@@ -32,6 +32,7 @@
       - grafana
       - dockge
       - homepage
+      - pkg-sentinel
   tasks:
     - name: Discover user stacks
       local_action:
@@ -158,12 +159,14 @@
       ignore_errors: true
 
     - name: Ensure pre-requisite podman networks exist
-      command: podman network create --label security.stig.compliance=true {{ item }}
+      shell: |
+        if [ "{{ item }}" = "secure-backbone" ] || [ "{{ item }}" = "quay-net" ] || [ "{{ item }}" = "moodle-db-net" ]; then
+          podman network exists {{ item }} || podman network create --internal --label security.stig.compliance=true {{ item }}
+        else
+          podman network exists {{ item }} || podman network create --label security.stig.compliance=true {{ item }}
+        fi
       register: network_create
-      failed_when: 
-        - network_create.rc != 0
-        - "'already exists' not in network_create.stderr"
-      changed_when: network_create.rc == 0
+      changed_when: "'security.stig.compliance=true' in network_create.stdout"
       loop:
         - proxy-net
         - identity-net
@@ -176,6 +179,7 @@
         - mgmt-net
         - pki-net
         - waf-net
+        - secure-backbone
 
     - name: Deploy stacks using Podman Compose
       shell: |
