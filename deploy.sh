@@ -293,10 +293,16 @@ ensure_networks() {
     echo "    Creating missing external networks for $stack_label:"
     for net in $missing; do
         echo "      + $net"
+        
+        local internal_flag=""
+        if [[ "$net" == "secure-backbone" || "$net" == "quay-net" || "$net" == "moodle-db-net" ]]; then
+            internal_flag="--internal "
+        fi
+        
         if [[ "$DEPLOY_MODE" == "remote" ]]; then
-            "${SSH_CMD[@]}" "podman network create --label security.stig.compliance=true '$net'" || true
+            "${SSH_CMD[@]}" "podman network create ${internal_flag}--label security.stig.compliance=true '$net'" || true
         else
-            podman network create --label "security.stig.compliance=true" "$net" || true
+            podman network create ${internal_flag}--label "security.stig.compliance=true" "$net" || true
         fi
     done
 }

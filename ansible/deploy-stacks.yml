@@ -32,7 +32,10 @@
       - grafana
       - dockge
       - homepage
+    # Optional developer / extra stacks
+    optional_stacks:
       - pkg-sentinel
+
   tasks:
     - name: Discover user stacks
       local_action:
@@ -51,7 +54,7 @@
 
     - name: Filter by limit_stacks if provided
       set_fact:
-        filtered_stacks: "{{ all_stacks | intersect(limit_stacks.split(',')) if limit_stacks is defined else all_stacks }}"
+        filtered_stacks: "{{ (ordered_stacks + optional_stacks + user_stacks) | intersect(limit_stacks.split(',')) if limit_stacks is defined else all_stacks }}"
 
     - name: Filter active stacks (must have docker-compose.yml with services)
       local_action:
@@ -145,6 +148,11 @@
             EXPANDED="${EXPANDED/\$\{DATA_DIR:-*\}/$DATA_DIR}"
             mkdir -p "$EXPANDED" 2>/dev/null || true
         done || true
+        
+        grep -oP '^\s+-\s+\K/dev/shm/[^:]+' "$COMPOSE_FILE" | while IFS= read -r p; do
+            mkdir -p "$p" 2>/dev/null || true
+            chmod 1777 "$p" 2>/dev/null || true
+        done || true
       args:
         executable: /bin/bash
       loop: "{{ target_stacks }}"
@@ -166,7 +174,7 @@
           podman network exists {{ item }} || podman network create --label security.stig.compliance=true {{ item }}
         fi
       register: network_create
-      changed_when: "'security.stig.compliance=true' in network_create.stdout"
+      changed_when: "network_create.stdout | trim != ''"
       loop:
         - proxy-net
         - identity-net
@@ -197,7 +205,7 @@
       changed_when: "'Created' in compose_output.stdout or 'Recreated' in compose_output.stdout"
 
     - name: Check if Kanidm is running
-      command: podman container exists kanidm
+      shell: podman container inspect kanidm --format '{{"{{"}}.State.Running{{"}}"}}' 2>/dev/null | grep -q true
       register: kanidm_check
       ignore_errors: true
       changed_when: false
