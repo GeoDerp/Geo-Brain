@@ -1,0 +1,50 @@
+# =============================================================================
+# pkg-sentinel: Supply-Chain Security Proxy — Multi-Stage Build
+# =============================================================================
+# Stage 1: Build the Go binary with static linking for a minimal final image.
+# Stage 2: Copy the binary into a distroless/static base for STIG compliance.
+#
+# Build:  podman build -t pkg-sentinel:latest -f Containerfile .
+# =============================================================================
+
+# --- Stage 1: Builder ---
+FROM docker.io/library/golang:1.22.5-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates
+
+WORKDIR /build
+
+# Copy module files first for layer caching
+COPY src/go.mod src/go.sum* ./
+RUN go mod download 2>/dev/null || true
+
+# Copy source and build
+COPY src/ ./
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-s -w -extldflags '-static'" \
+    -trimpath \
+    -o /pkg-sentinel \
+    .
+
+# --- Stage 2: Runtime ---
+FROM docker.io/library/alpine:3.20.3
+
+# Install ca-certificates for upstream HTTPS and create non-root user
+RUN apk add --no-cache ca-certificates \
+    && addgroup -g 65532 -S sentinel \
+    && adduser -u 65532 -S sentinel -G sentinel -h /home/sentinel -s /sbin/nologin
+
+COPY --from=builder /pkg-sentinel /usr/local/bin/pkg-sentinel
+
+# Create required directories
+RUN mkdir -p /dev/shm/pkg-sentinel /var/log/pkg-sentinel /etc/pkg-sentinel \
+    && chown -R sentinel:sentinel /dev/shm/pkg-sentinel /var/log/pkg-sentinel /etc/pkg-sentinel
+
+USER sentinel:sentinel
+
+EXPOSE 8443
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=30s \
+    CMD ["/usr/local/bin/pkg-sentinel", "-healthcheck"] || exit 1
+
+ENTRYPOINT ["/usr/local/bin/pkg-sentinel"]

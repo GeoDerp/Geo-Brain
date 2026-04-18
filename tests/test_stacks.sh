@@ -350,7 +350,7 @@ test_traefik_dynamic_configs() {
 test_traefik_gen_coverage() {
     local gen_dir="$REPO_ROOT/stacks/traefik/config/dynamic"
     # Stacks excluded from default batch may not have generated configs
-    local exclude_stacks=("prometheus" "gitea" "defectdojo" "ramalama" "pangolin" "bunkerweb")
+    local exclude_stacks=("prometheus" "gitea" "defectdojo" "ramalama" "pangolin" "bunkerweb" "pkg-sentinel")
     local stacks_needing_route=()
 
     while IFS= read -r stack; do
