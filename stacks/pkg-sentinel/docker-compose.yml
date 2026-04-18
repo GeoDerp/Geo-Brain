@@ -1,0 +1,104 @@
+# =============================================================================
+# GEO-BRAIN DEVELOPER STACK: pkg-sentinel
+# =============================================================================
+# Supply-Chain Security Proxy — intercepts package downloads from npm, PyPI,
+# and Maven registries, detonates them in ephemeral rootless Podman sandboxes,
+# and evaluates Azazel eBPF telemetry against strict exfiltration rules.
+#
+# This is an OPTIONAL developer stack. Deploy with:
+#   ./deploy.sh dev up        (deploys as part of the dev group)
+#   ./deploy.sh pkg-sentinel up   (standalone)
+#
+# IMPORTANT: The host running this proxy requires eBPF capabilities
+# (CAP_BPF, CAP_SYS_ADMIN, CAP_PERFMON) for Azazel tracing. The proxy
+# itself runs as a STIG-compliant container with explicit cap_add.
+
+services:
+  pkg-sentinel:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: localhost/pkg-sentinel:1.0.0
+    container_name: pkg-sentinel
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN    # Required for eBPF tracing across container PID/cgroup boundaries
+                     # (CAP_BPF alone is insufficient for cross-namespace tracing)
+      - BPF           # Required for eBPF program attachment
+      - PERFMON       # Required for perf event access
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      # Podman socket for sandbox container lifecycle (read-only)
+      - ${PODMAN_SOCK}:/run/podman/podman.sock:ro
+      # RAM disk for temporary package cache during detonation
+      - /dev/shm/pkg-sentinel:/dev/shm/pkg-sentinel:Z
+      # Persistent log storage
+      - ${DATA_DIR}/pkg-sentinel/logs:/var/log/pkg-sentinel:Z,U
+    environment:
+      - PKG_SENTINEL_LISTEN=:8443
+      - PKG_SENTINEL_TIMEOUT=${PKG_SENTINEL_TIMEOUT:-15s}
+      - PKG_SENTINEL_DEFAULT_ACTION=${PKG_SENTINEL_DEFAULT_ACTION:-block}
+      - PKG_SENTINEL_PODMAN_SOCK=/run/podman/podman.sock
+      - PKG_SENTINEL_SANDBOX_IMAGE=${PKG_SENTINEL_SANDBOX_IMAGE:-docker.io/library/node:20-alpine}
+      - PKG_SENTINEL_RAMDISK=/dev/shm/pkg-sentinel
+      - PKG_SENTINEL_AZAZEL_BIN=/usr/local/bin/azazel
+      # Optional: Connect to RamaLama for AI-powered behavioral analysis
+      - PKG_SENTINEL_LLM_ENDPOINT=${PKG_SENTINEL_LLM_ENDPOINT:-}
+      - PKG_SENTINEL_LLM_MODEL=${PKG_SENTINEL_LLM_MODEL:-phi3:mini}
+      # Upstream registries
+      - PKG_SENTINEL_NPM_UPSTREAM=${PKG_SENTINEL_NPM_UPSTREAM:-https://registry.npmjs.org}
+      - PKG_SENTINEL_PYPI_UPSTREAM=${PKG_SENTINEL_PYPI_UPSTREAM:-https://pypi.org}
+      - PKG_SENTINEL_MAVEN_UPSTREAM=${PKG_SENTINEL_MAVEN_UPSTREAM:-https://repo1.maven.org/maven2}
+    networks:
+      - proxy-net
+      - pkg-sentinel-sandbox-net
+      - secure-backbone
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8443/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 2m
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=supply-chain-security"
+      - "security.stig.bypass_privileged=true"
+
+      # --- Traefik Routing ---
+      - "traefik.enable=true"
+      - "traefik.http.routers.pkg-sentinel.rule=Host(`pkg-sentinel.${DOMAIN}`)"
+      - "traefik.http.routers.pkg-sentinel.entrypoints=websecure"
+      - "traefik.http.routers.pkg-sentinel.tls=true"
+      - "traefik.http.routers.pkg-sentinel.tls.certresolver=stepca"
+      - "traefik.http.routers.pkg-sentinel.middlewares=oauth2-proxy@file,security-headers@file"
+      - "traefik.http.services.pkg-sentinel.loadbalancer.server.port=8443"
+
+      # --- Homepage Integration ---
+      - "homepage.group=Developer Tools"
+      - "homepage.name=Package Sentinel"
+      - "homepage.icon=shield-check.png"
+      - "homepage.description=Supply-Chain Security Proxy"
+      - "homepage.href=https://pkg-sentinel.${DOMAIN}"
+
+networks:
+  proxy-net:
+    external: true
+  pkg-sentinel-sandbox-net:
+    # Internal network for ephemeral sandbox containers — air-gapped,
+    # no default gateway, no egress. Sandboxes use netns=none anyway,
+    # but this provides an additional network isolation layer.
+    internal: true
+  secure-backbone:
+    # Shared with RamaLama for LLM inference (internal, no egress)
+    external: true

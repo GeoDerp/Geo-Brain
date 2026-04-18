@@ -92,10 +92,11 @@ if [ -z "$STACK_NAME" ]; then
     echo "Mode: ${DEPLOY_MODE}"
     echo ""
     echo "Special targets:"
-    echo "  all   - Deploy all stacks (base + user, excludes cicd)"
+    echo "  all   - Deploy all stacks (base + user, excludes cicd and dev)"
     echo "  base  - Deploy all base infrastructure stacks"
     echo "  user  - Deploy all user application stacks"
     echo "  cicd  - Deploy CI/CD pipeline (gitea + defectdojo + ramalama)"
+    echo "  dev   - Deploy developer tools (pkg-sentinel)"
     exit 1
 fi
 
@@ -127,7 +128,9 @@ get_base_stacks() {
 
     # CI/CD pipeline stacks (gitea + defectdojo + ramalama) are optional;
     # deploy them together via: ./deploy.sh cicd up
-    local exclude_stacks=("prometheus" "gitea" "defectdojo" "ramalama")
+    # Developer stacks (pkg-sentinel) are optional;
+    # deploy them together via: ./deploy.sh dev up
+    local exclude_stacks=("prometheus" "gitea" "defectdojo" "ramalama" "pkg-sentinel")
     local found_stacks=()
     for dir in "$REPO_ROOT"/stacks/*/; do
         local name
@@ -677,6 +680,11 @@ case $STACK_NAME in
         # CI/CD pipeline: Gitea (code hosting) + DefectDojo (vuln mgmt) + RamaLama (AI analysis)
         # These three stacks share vulnerability-net and are deployed as a unit.
         deploy_batch "defectdojo" "gitea" "ramalama"
+        ;;
+    dev)
+        # Developer tools: pkg-sentinel (supply-chain security proxy)
+        # Requires eBPF capabilities on the host (CAP_BPF, CAP_SYS_ADMIN, CAP_PERFMON).
+        deploy_batch "pkg-sentinel"
         ;;
     *)
         # Always cleanup old generated configs at the start of a run (if up/redeploy)
