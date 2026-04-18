@@ -26,7 +26,7 @@ transforms:
       if src == "system" && exists(.container_name) { src = to_string!(.container_name) }
       .labels.source = src
       msg = to_string(.MESSAGE) ?? to_string(.message) ?? ""
-      if match(msg, r'(?i)(authentication|failed|denied|unauthorized|error|CVE|alert)') {
+      if match(msg, r'(?i)(authentication|failed|denied|unauthorized|error|CVE|alert|exfil|block|malicious|pkg-sentinel)') {
         .labels.security = "true"
       }
 

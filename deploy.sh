@@ -92,11 +92,10 @@ if [ -z "$STACK_NAME" ]; then
     echo "Mode: ${DEPLOY_MODE}"
     echo ""
     echo "Special targets:"
-    echo "  all   - Deploy all stacks (base + user, excludes cicd and dev)"
+    echo "  all   - Deploy all stacks (base + user, excludes cicd)"
     echo "  base  - Deploy all base infrastructure stacks"
     echo "  user  - Deploy all user application stacks"
     echo "  cicd  - Deploy CI/CD pipeline (gitea + defectdojo + ramalama)"
-    echo "  dev   - Deploy developer tools (pkg-sentinel)"
     exit 1
 fi
 
@@ -128,9 +127,7 @@ get_base_stacks() {
 
     # CI/CD pipeline stacks (gitea + defectdojo + ramalama) are optional;
     # deploy them together via: ./deploy.sh cicd up
-    # Developer stacks (pkg-sentinel) are optional;
-    # deploy them together via: ./deploy.sh dev up
-    local exclude_stacks=("prometheus" "gitea" "defectdojo" "ramalama" "pkg-sentinel")
+    local exclude_stacks=("prometheus" "gitea" "defectdojo" "ramalama")
     local found_stacks=()
     for dir in "$REPO_ROOT"/stacks/*/; do
         local name
@@ -293,16 +290,10 @@ ensure_networks() {
     echo "    Creating missing external networks for $stack_label:"
     for net in $missing; do
         echo "      + $net"
-        
-        local internal_flag=""
-        if [[ "$net" == "secure-backbone" || "$net" == "quay-net" || "$net" == "moodle-db-net" ]]; then
-            internal_flag="--internal "
-        fi
-        
         if [[ "$DEPLOY_MODE" == "remote" ]]; then
-            "${SSH_CMD[@]}" "podman network create ${internal_flag}--label security.stig.compliance=true '$net'" || true
+            "${SSH_CMD[@]}" "podman network create --label security.stig.compliance=true '$net'" || true
         else
-            podman network create ${internal_flag}--label "security.stig.compliance=true" "$net" || true
+            podman network create --label "security.stig.compliance=true" "$net" || true
         fi
     done
 }
@@ -541,13 +532,7 @@ deploy_batch() {
 
     # Always cleanup old generated configs at the start of a run (if up/redeploy)
     if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
-        if [[ "${#stacks[@]}" -gt 10 ]]; then
-            cleanup_traefik_configs
-        else
-            for stack in "${stacks[@]}"; do
-                cleanup_traefik_configs "$stack"
-            done
-        fi
+        cleanup_traefik_configs
     fi
 
     # --- QUAY-FIRST BOOTSTRAPPING ---
@@ -688,9 +673,8 @@ case $STACK_NAME in
         deploy_batch "defectdojo" "gitea" "ramalama"
         ;;
     dev)
-        # Developer tools: pkg-sentinel (supply-chain security proxy)
-        # Requires eBPF capabilities on the host (CAP_BPF, CAP_SYS_ADMIN, CAP_PERFMON).
-        deploy_batch "pkg-sentinel"
+        # Developer tools: pkg-sentinel (Supply-Chain Security Proxy) + RamaLama (AI analysis)
+        deploy_batch "pkg-sentinel" "ramalama"
         ;;
     *)
         # Always cleanup old generated configs at the start of a run (if up/redeploy)

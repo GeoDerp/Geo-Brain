@@ -26,8 +26,8 @@ The Geo-Brain homelab is organized into discrete **stacks**:
 - **Security Operations:** `wazuh` (SIEM), `falco` (Runtime Security), `crowdsec` (IPS)
 - **Observability:** `prometheus` & `grafana` (Metrics), `vector` & `loki` (Logs)
 - **Management:** `homepage` (Dashboard), `dockge` (Stack UI)
-- **CI/CD Pipeline (optional):** `gitea` (Git Server + Runners), `defectdojo` (Vulnerability Management), `ramalama` (AI Log Triage) — deployed together via `./deploy.sh cicd up`
-- **Developer Tools (optional):** `pkg-sentinel` (Supply-Chain Security Proxy) — deployed via `./deploy.sh dev up`
+- **CI/CD Pipeline (optional):** `gitea` ([Git Server + Runners](./stacks/gitea/README.md)), `defectdojo` (Vulnerability Management), `ramalama` (AI Log Triage) — deployed together via `./deploy.sh cicd up`
+- **Developer Tools (optional):** `pkg-sentinel` ([Supply-Chain Security Proxy](./stacks/pkg-sentinel/README.md)) — deployed via `./deploy.sh dev up`
 - **Optional/WIP:** `bunkerweb` (WAF), `pangolin` (Zero-Trust Tunnel)
 
 ---
@@ -78,14 +78,6 @@ The CI/CD pipeline (Gitea + DefectDojo + RamaLama) is excluded from the default 
 ```
 
 This brings up Gitea (self-hosted Git with CI/CD runners), DefectDojo (vulnerability management), and RamaLama (AI-driven security triage) as a unit on the shared `vulnerability-net` network.
-
-### Step 4c: Deploy Developer Tools (Optional)
-
-The Developer Tools stack contains `pkg-sentinel` (Supply-Chain Security Proxy), an optional eBPF-powered proxy that intercepts package downloads and detonates them in ephemeral sandboxes. Deploy it separately:
-
-```bash
-./deploy.sh dev up
-```
 
 ### Step 5: Post-Deployment Setup
 

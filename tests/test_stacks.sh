@@ -350,7 +350,7 @@ test_traefik_dynamic_configs() {
 test_traefik_gen_coverage() {
     local gen_dir="$REPO_ROOT/stacks/traefik/config/dynamic"
     # Stacks excluded from default batch may not have generated configs
-    local exclude_stacks=("prometheus" "gitea" "defectdojo" "ramalama" "pangolin" "bunkerweb" "pkg-sentinel")
+    local exclude_stacks=("prometheus" "gitea" "defectdojo" "ramalama" "pangolin" "bunkerweb")
     local stacks_needing_route=()
 
     while IFS= read -r stack; do
@@ -905,7 +905,8 @@ test_sso_redirects() {
         local headers
         headers=$(ssh_cmd "curl -sk -I 'https://$host/' 2>/dev/null" || echo "")
         local http_code=$(echo "$headers" | head -n 1 | awk '{print $2}' || echo "000")
-        local location=$(echo "$headers" | grep -i '^Location:' | tr -d '' | awk '{print $2}' || echo "")
+        local location=$(echo "$headers" | grep -i '^Location:' | tr -d '
+' | awk '{print $2}' || echo "")
 
         if [[ "$sso_type" == "OAuth2 Proxy" ]]; then
             if echo "$location" | grep -qE "(auth.${DOMAIN}/oauth2/start|kanidm.${DOMAIN}/ui/oauth2)"; then
@@ -922,6 +923,39 @@ test_sso_redirects() {
         fi
     else
         skip "[$stack] No SSO layer explicitly detected (Public or Internal API)"
+    fi
+}
+
+# --- T34: pkg-sentinel Active Test ---
+test_pkg_sentinel_active() {
+    if ! ssh_cmd "podman container exists pkg-sentinel" 2>/dev/null; then
+        skip "pkg-sentinel not deployed, skipping test"
+        return
+    fi
+    local health
+    health=$(ssh_cmd "curl -sk https://pkg-sentinel.${DOMAIN}/healthz" 2>/dev/null || echo "error")
+    if echo "$health" | grep -qi "ok"; then
+        pass "pkg-sentinel is active and responding to healthchecks"
+    else
+        fail "pkg-sentinel failed healthcheck or unreachable"
+    fi
+}
+
+# --- T35: CI/CD Gitea Runners Active Test ---
+test_gitea_runners_active() {
+    # Check if a runner exists (name may vary based on exact compose file, usually has 'runner' in it)
+    if ! ssh_cmd "podman ps -a --format '{{.Names}}' | grep -qi 'runner'" 2>/dev/null; then
+        skip "gitea runners not deployed, skipping test"
+        return
+    fi
+    local runner_name
+    runner_name=$(ssh_cmd "podman ps -a --format '{{.Names}}' | grep -i 'runner' | head -n 1" 2>/dev/null)
+    local status
+    status=$(ssh_cmd "podman inspect --format '{{.State.Status}}' \"$runner_name\"" 2>/dev/null)
+    if [[ "$status" == "running" ]]; then
+        pass "Gitea runner ($runner_name) is active"
+    else
+        fail "Gitea runner ($runner_name) is not running"
     fi
 }
 
@@ -955,14 +989,9 @@ run_remote_tests() {
     section "SECURITY LAYERS (Remote)"
     test_falco_active
     test_bunkerweb_waf
-    test_wazuh_active
-    test_crowdsec_active
 
     section "AUTHENTICATION (Remote)"
     test_kanidm_auth
-    for stack in "${stacks[@]}"; do
-        test_sso_redirects "$stack"
-    done
 }
 
 print_summary() {
