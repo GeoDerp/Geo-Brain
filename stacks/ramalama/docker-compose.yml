@@ -35,6 +35,13 @@ services:
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=log-analysis"
+      - "traefik.enable=true"
+      - "traefik.http.routers.ramalama.rule=Host(`ai.${DOMAIN}`)"
+      - "traefik.http.routers.ramalama.entrypoints=websecure"
+      - "traefik.http.routers.ramalama.tls=true"
+      - "traefik.http.routers.ramalama.tls.certresolver=stepca"
+      - "traefik.http.routers.ramalama.middlewares=oauth2-proxy-admin@file,security-headers@file"
+      - "traefik.http.services.ramalama.loadbalancer.server.port=8080"
       - "homepage.group=SOC"
       - "homepage.name=RamaLama (Air-gapped LLM)"
       - "homepage.icon=ramalama.png"

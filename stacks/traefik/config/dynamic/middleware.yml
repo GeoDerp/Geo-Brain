@@ -7,7 +7,7 @@ http:
     # OAuth2 Proxy ForwardAuth — redirects unauthenticated users to Kanidm login
     oauth2-proxy:
       forwardAuth:
-        address: "http://oauth2-proxy:4180/oauth2/auth"
+        address: "http://oauth2-proxy:4180"
         trustForwardHeader: true
         authResponseHeaders:
           - X-Auth-Request-User
@@ -17,7 +17,7 @@ http:
     # OAuth2 Proxy Admin ForwardAuth — only brain_admins group can access
     oauth2-proxy-admin:
       forwardAuth:
-        address: "http://oauth2-proxy-admin:4180/oauth2/auth"
+        address: "http://oauth2-proxy-admin:4180"
         trustForwardHeader: true
         authResponseHeaders:
           - X-Auth-Request-User

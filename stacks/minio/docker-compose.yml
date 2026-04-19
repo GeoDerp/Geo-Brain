@@ -15,6 +15,14 @@ services:
     environment:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_IDENTITY_OPENID_CONFIG_URL=https://kanidm.${DOMAIN}/oauth2/openid/minio/.well-known/openid-configuration
+      - MINIO_IDENTITY_OPENID_CLIENT_ID=minio
+      - MINIO_IDENTITY_OPENID_CLIENT_SECRET=${MINIO_OIDC_SECRET}
+      - MINIO_IDENTITY_OPENID_SCOPES=openid,profile,email,groups
+      - MINIO_IDENTITY_OPENID_REDIRECT_URI=https://minio.${DOMAIN}/oauth_callback
+      - MINIO_IDENTITY_OPENID_DISPLAY_NAME=Kanidm
+      - MINIO_SERVER_URL=https://minio.${DOMAIN}
+      - MINIO_BROWSER_REDIRECT_URL=https://minio.${DOMAIN}
       - MINIO_UPDATE=off
       - MINIO_PROMETHEUS_AUTH_TYPE=public
       - MINIO_IDENTITY_OPENID_CLIENT_ID=minio
@@ -47,7 +55,7 @@ services:
       - "traefik.http.routers.minio-console.rule=Host(`minio.${DOMAIN}`)"
       - "traefik.http.routers.minio-console.entrypoints=websecure"
       - "traefik.http.routers.minio-console.tls=true"
-      - "traefik.http.routers.minio-console.middlewares=security-headers@file"
+      - "traefik.http.routers.minio-console.middlewares=oauth2-proxy@file,security-headers@file"
       - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
       - "security.stig.compliance=true"
       - "security.stig.role=storage"

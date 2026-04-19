@@ -148,7 +148,7 @@ services:
       - "traefik.http.routers.quay.rule=Host(`quay.${DOMAIN}`)"
       - "traefik.http.routers.quay.entrypoints=websecure"
       - "traefik.http.routers.quay.tls=true"
-      - "traefik.http.routers.quay.middlewares=security-headers@file"
+      - "traefik.http.routers.quay.middlewares=oauth2-proxy@file,security-headers@file"
       - "traefik.http.services.quay.loadbalancer.server.port=8080"
       - "homepage.group=Infrastructure"
       - "homepage.name=Quay"

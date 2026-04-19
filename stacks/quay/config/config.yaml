@@ -43,18 +43,18 @@ FEATURE_PROXY_CACHE: true
 FEATURE_TELEMETRY_LOGGING: false
 FEATURE_APP_SPECIFIC_TOKENS: true
 
-# Kanidm OIDC SSO - Disabled due to strict client_credentials requirement on startup
-# FEATURE_DIRECT_LOGIN: true
-# OIDC_LOGIN_CONFIG:
-#   CLIENT_ID: quay
-#   CLIENT_SECRET: ${QUAY_OIDC_SECRET}
-#   OIDC_SERVER: https://kanidm.${DOMAIN}/oauth2/openid/quay/
-#   AUTHORIZATION_ENDPOINT: https://kanidm.${DOMAIN}/ui/oauth2
-#   TOKEN_ENDPOINT: https://kanidm.${DOMAIN}/oauth2/token
-#   USERINFO_ENDPOINT: https://kanidm.${DOMAIN}/oauth2/openid/quay/userinfo
-#   LOGIN_SCOPES:
-#     - openid
-#     - profile
-#     - email
-#   PREFERRED_USERNAME_CLAIM_NAME: preferred_username
-#   SERVICE_NAME: Kanidm
+# Kanidm OIDC SSO
+FEATURE_DIRECT_LOGIN: true
+OIDC_LOGIN_CONFIG:
+  CLIENT_ID: quay
+  CLIENT_SECRET: ${QUAY_OIDC_SECRET}
+  OIDC_SERVER: https://kanidm.${DOMAIN}/oauth2/openid/quay/
+  AUTHORIZATION_ENDPOINT: https://kanidm.${DOMAIN}/ui/oauth2
+  TOKEN_ENDPOINT: https://kanidm.${DOMAIN}/oauth2/token
+  USERINFO_ENDPOINT: https://kanidm.${DOMAIN}/oauth2/openid/quay/userinfo
+  LOGIN_SCOPES:
+    - openid
+    - profile
+    - email
+  PREFERRED_USERNAME_CLAIM_NAME: preferred_username
+  SERVICE_NAME: Kanidm
