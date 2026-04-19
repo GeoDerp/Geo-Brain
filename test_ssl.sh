@@ -1,24 +1,47 @@
 #!/bin/bash
 DOMAIN="brain.home.lan"
-HOSTS=("ca" "kanidm" "auth" "minio" "quay" "grafana" "wazuh" "defectdojo" "dockge" "traefik" "gitea" "prometheus" "moodle" "n8n" "notes" "brain.home.lan" "pkg-sentinel")
+HOSTS=("ca" "kanidm" "auth" "minio" "quay" "grafana" "wazuh" "defectdojo" "dockge" "traefik" "gitea" "prometheus" "moodle" "n8n" "notes" "pkg-sentinel" "brain.home.lan")
 
-CA_CERT="stacks/traefik/config/certs/ca-bundle.crt"
+CA_CERT="stacks/traefik/config/certs/root_ca.crt"
 if [[ ! -f "$CA_CERT" ]]; then
-    echo "CA bundle not found at $CA_CERT"
+    echo "CA root not found at $CA_CERT"
     exit 1
 fi
 
+FAIL=0
 for host in "${HOSTS[@]}"; do
     if [[ "$host" == "brain.home.lan" ]]; then
-        url="https://$host"
+        url="$host"
     else
-        url="https://$host.$DOMAIN"
+        url="$host.$DOMAIN"
     fi
-    echo -n "Testing $url ... "
+    echo "--- Testing $url ---"
     
-    if curl --cacert "$CA_CERT" -s -I "$url" >/dev/null 2>&1; then
-        echo "OK"
+    # 1. Check Connectivity
+    if ! curl --cacert "$CA_CERT" -s -L --max-time 10 "$url" >/dev/null 2>&1; then
+        echo "  [FAIL] Connectivity failed"
+        ((FAIL++))
+        continue
     else
-        echo "FAILED"
+        echo "  [PASS] Connectivity OK"
+    fi
+
+    # 2. Check Issuer
+    issuer=$(echo | openssl s_client -connect "$url":443 -servername "$url" 2>/dev/null | openssl x509 -noout -issuer | sed 's/issuer=//')
+    if [[ "$issuer" != *"brain.home.lan CA"* ]]; then
+        echo "  [FAIL] Invalid Issuer: $issuer"
+        ((FAIL++))
+    else
+        echo "  [PASS] Issuer is correct"
+    fi
+
+    # 3. Check Expiration
+    if ! echo | openssl s_client -connect "$url":443 -servername "$url" 2>/dev/null | openssl x509 -noout -checkend 2592000; then
+        echo "  [FAIL] Certificate expires in less than 30 days"
+        ((FAIL++))
+    else
+        echo "  [PASS] Certificate expiration is valid (> 30 days)"
     fi
 done
+
+exit $FAIL

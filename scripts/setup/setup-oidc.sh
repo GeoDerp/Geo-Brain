@@ -12,7 +12,7 @@ if [[ -z "$KANIDM_ADMIN_PASSWORD" ]]; then
   exit 0
 fi
 
-CA_CERT_CONTENT=$(cat "$HOME/Geo-Brain/certs/ca.crt" 2>/dev/null || true)
+CA_CERT_CONTENT=$(cat "$HOME/Geo-Brain/stacks/traefik/config/certs/root_ca.crt" 2>/dev/null || cat "$HOME/Geo-Brain/certs/ca.crt" 2>/dev/null || true)
 if [[ -z "$CA_CERT_CONTENT" ]]; then
   echo "No CA cert found."
   exit 0
@@ -70,8 +70,9 @@ for APP_INFO in \$EXPECTED_APPS; do
     kanidm system oauth2 create "\$APP" "\$APP OIDC" "\$ORIGIN_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
     kanidm system oauth2 add-redirect-url "\$APP" "\$REDIRECT_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
     # Register admin proxy callback path (uses --proxy-prefix=/admin-oauth2)
-    if [ "\$APP" = "oauth2-proxy" ]; then
-        kanidm system oauth2 add-redirect-url "\$APP" "https://auth.${DOMAIN}/admin-oauth2/callback" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    if [ "$APP" = "oauth2-proxy" ]; then
+        kanidm system oauth2 add-redirect-url "$APP" "https://auth.${DOMAIN}/admin-oauth2/callback" -C /tmp/ca.crt >/dev/null 2>&1 || true
+        kanidm system oauth2 add-redirect-url "$APP" "https://${DOMAIN}/oauth2/callback" -C /tmp/ca.crt >/dev/null 2>&1 || true
     fi
     kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
     

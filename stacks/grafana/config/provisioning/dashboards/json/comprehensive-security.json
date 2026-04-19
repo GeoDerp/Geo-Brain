@@ -1,0 +1,124 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus"
+    },
+    {
+      "name": "DS_OPENSEARCH",
+      "label": "Wazuh Indexer",
+      "type": "datasource",
+      "pluginId": "opensearch"
+    }
+  ],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "version": "10.0.0" },
+    { "type": "datasource", "id": "prometheus", "version": "1.0.0" },
+    { "type": "datasource", "id": "opensearch", "version": "1.0.0" }
+  ],
+  "annotations": { "list": [ { "builtIn": 1, "datasource": { "type": "grafana", "uid": "-- Grafana --" }, "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "target": { "limit": 100, "matchAny": false, "tags": [], "type": "dashboard" }, "type": "dashboard" } ] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Wazuh Alerts by Level",
+      "type": "timeseries",
+      "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+      "targets": [
+        {
+          "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+          "query": "rule.level:>=8",
+          "refId": "High",
+          "metrics": [{ "type": "count", "id": "1" }],
+          "bucketAggs": [{ "type": "date_histogram", "field": "@timestamp", "settings": { "interval": "auto" }, "id": "2" }]
+        },
+        {
+          "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+          "query": "rule.level:>=5 AND rule.level:<8",
+          "refId": "Medium",
+          "metrics": [{ "type": "count", "id": "1" }],
+          "bucketAggs": [{ "type": "date_histogram", "field": "@timestamp", "settings": { "interval": "auto" }, "id": "2" }]
+        }
+      ]
+    },
+    {
+        "title": "Top 10 Wazuh Rules Triggered",
+        "type": "barchart",
+        "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+        "targets": [
+          {
+            "query": "*",
+            "metrics": [{ "type": "count", "id": "1" }],
+            "bucketAggs": [{ "type": "terms", "field": "rule.description.keyword", "settings": { "size": "10", "order": "desc" }, "id": "2" }]
+          }
+        ]
+    },
+    {
+      "title": "CrowdSec Decisions",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "expr": "sum(increase(crowdsec_lapi_decisions_total[5m])) by (reason, type)", "legendFormat": "{{type}} - {{reason}}" } ]
+    },
+    {
+      "title": "Falco Alerts by Priority",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "expr": "sum(increase(vector_component_sent_events_total{component_name='falco_alerts'}[5m])) by (priority)", "legendFormat": "{{priority}}" } ]
+    },
+    {
+      "title": "WAF (BunkerWeb) Blocked Requests",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "expr": "sum(increase(bunkerweb_http_requests_total{status_code='403'}[5m])) by (server)", "legendFormat": "Blocked on {{server}}" } ]
+    },
+    {
+      "title": "Traefik Gateway Errors (4xx/5xx)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "expr": "sum(rate(traefik_service_requests_total{code=~"[45].."}[5m])) by (service, code)", "legendFormat": "{{service}} - {{code}}" } ]
+    },
+    {
+        "title": "Latest High-Severity Wazuh Alerts",
+        "type": "table",
+        "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+        "targets": [
+            {
+                "query": "rule.level:>=10",
+                "bucketAggs": [],
+                "metrics": [{"id": "1", "type": "count"}]
+            }
+        ],
+        "fields": {
+            "Timestamp": "@timestamp",
+            "Rule": "rule.description",
+            "Agent": "agent.name",
+            "Source IP": "data.srcip"
+        }
+    },
+    {
+      "title": "Clair Vulnerabilities by Severity",
+      "type": "barchart",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(clair_vulnerabilities_total) by (severity)",
+          "legendFormat": "{{severity}}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": ["security", "soc", "overview", "comprehensive"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Comprehensive Security Dashboard",
+  "version": 2
+}

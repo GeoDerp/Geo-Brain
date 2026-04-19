@@ -31,6 +31,11 @@ services:
       - GITEA__service__REQUIRE_SIGNIN_VIEW=true
       - GITEA__oauth2__ENABLED=true
       - GITEA__openid__ENABLE_OPENID_SIGNIN=false
+      - GITEA__service.oauth2__PROVIDER=openidConnect
+      - GITEA__service.oauth2__NAME=Kanidm
+      - GITEA__service.oauth2__CLIENT_ID=gitea
+      - GITEA__service.oauth2__CLIENT_SECRET=${GITEA_OIDC_SECRET}
+      - GITEA__service.oauth2__AUTO_DISCOVER_URL=https://kanidm.${DOMAIN}/oauth2/openid/gitea/.well-known/openid-configuration
     networks:
       - proxy-net
       - vulnerability-net
@@ -56,7 +61,7 @@ services:
       - "traefik.http.routers.gitea.entrypoints=websecure"
       - "traefik.http.routers.gitea.tls=true"
       - "traefik.http.routers.gitea.tls.certresolver=stepca"
-      - "traefik.http.routers.gitea.middlewares=oauth2-proxy@file,security-headers@file"
+      - "traefik.http.routers.gitea.middlewares=security-headers@file"
       - "traefik.http.services.gitea.loadbalancer.server.port=3000"
       - "homepage.group=Services"
       - "homepage.name=Gitea"

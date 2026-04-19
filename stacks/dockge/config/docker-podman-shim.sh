@@ -46,8 +46,20 @@ const req = http.request(
                 const containers = JSON.parse(data);
                 const projects = {};
                 for (const c of containers) {
-                    const project = (c.Labels || {})["com.docker.compose.project"];
+                    let project = (c.Labels || {})["com.docker.compose.project"];
                     if (!project) continue;
+                    
+                    // Podman-compose might strip the "user/" prefix if it was deployed from that dir.
+                    // Dockge expects the Name to match the relative path from DOCKGE_STACKS_DIR.
+                    // We check if "user/" + project exists in projects or if the project name 
+                    // matches known user stacks.
+                    // BUT: the labels from podman-compose for moodle is just "moodle".
+                    // Let's use the working directory label if available.
+                    const projectDir = (c.Labels || {})["com.docker.compose.project.working_dir"];
+                    if (projectDir && projectDir.includes("/user/")) {
+                        project = "user/" + project;
+                    }
+
                     if (!projects[project]) {
                         const cfg =
                             (c.Labels || {})["com.docker.compose.project.config_files"] || "";
@@ -84,10 +96,16 @@ req.end();
 
         ps)
             # Dockge sets cwd to the stack path; project = basename of cwd
-            PROJECT="$(basename "$PWD")"
+            # BUT if it is a nested stack, Dockge might provide the relative path.
+            # We need to strip "user/" for the label filter if it was added.
+            FULL_PROJECT="$(basename "$PWD")"
+            # If we are in user/moodle, basename is moodle.
+            # Dockge logic for PS is usually call from the specific directory.
+            
             exec /usr/local/bin/node -e '
 const http = require("http");
 const project = process.argv[1];
+// Search for containers where label matches project name
 const filter = encodeURIComponent(JSON.stringify({ label: ["com.docker.compose.project=" + project] }));
 
 const req = http.request(

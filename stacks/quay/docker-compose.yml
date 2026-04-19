@@ -126,7 +126,7 @@ services:
       - "8080:8080"
     volumes:
       - ./config:/conf/stack:Z
-      - ../../certs/ca.crt:/conf/stack/extra_ca_certs/root_ca.crt:ro,Z
+      - ../../stacks/traefik/config/certs/root_ca.crt:/conf/stack/extra_ca_certs/root_ca.crt:ro,Z
       - ${DATA_DIR}/quay-storage:/datastorage:Z,U
     networks:
       - quay-net
@@ -148,7 +148,7 @@ services:
       - "traefik.http.routers.quay.rule=Host(`quay.${DOMAIN}`)"
       - "traefik.http.routers.quay.entrypoints=websecure"
       - "traefik.http.routers.quay.tls=true"
-      - "traefik.http.routers.quay.middlewares=oauth2-proxy@file,security-headers@file"
+      - "traefik.http.routers.quay.middlewares=security-headers@file"
       - "traefik.http.services.quay.loadbalancer.server.port=8080"
       - "homepage.group=Infrastructure"
       - "homepage.name=Quay"
@@ -182,6 +182,11 @@ services:
       timeout: 10s
       retries: 5
     command: ["-conf", "/config/clair-config.yaml"]
+    networks:
+      - quay-net
+      - monitoring-net
+    ports:
+      - "8089:8089"
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=scanner"
@@ -190,4 +195,6 @@ networks:
   quay-net:
     internal: true
   proxy-net:
+    external: true
+  monitoring-net:
     external: true

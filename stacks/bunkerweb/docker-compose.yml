@@ -45,7 +45,6 @@ services:
       REAL_IP_FROM: "10.89.0.0/16"
       REAL_IP_HEADER: "X-Forwarded-For"
       DNS_RESOLVERS: "10.89.0.1"
-      # -- Bad Behavior Detection --
       USE_BAD_BEHAVIOR: "yes"
       BAD_BEHAVIOR_STATUS_CODES: "400 401 403 404 405 429 444"
       BAD_BEHAVIOR_THRESHOLD: "10"
@@ -69,6 +68,8 @@ services:
       SERVICE_UI: "yes"
       # -- Logging --
       LOG_LEVEL: "info"
+      # -- Metrics --
+      USE_PROMETHEUS: "yes"
     volumes:
       - ${DATA_DIR}/bunkerweb:/data:Z,U
     networks:

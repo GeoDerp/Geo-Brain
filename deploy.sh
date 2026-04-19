@@ -173,6 +173,13 @@ get_user_stacks() {
 get_all_stacks() {
     get_base_stacks
     get_user_stacks
+    # Also include cicd stacks for full coverage
+    for dir in "$REPO_ROOT"/stacks/*/; do
+        local name=$(basename "$dir")
+        if [[ "$name" == "gitea" || "$name" == "defectdojo" || "$name" == "ramalama" || "$name" == "prometheus" ]]; then
+             echo "$name"
+        fi
+    done | sort -u
 }
 
 
@@ -434,6 +441,12 @@ EOF
         echo "      middlewares:" >> "$output_file"
         IFS=',' read -ra ADDR <<< "$middlewares"
         for i in "${ADDR[@]}"; do
+            # Automatically add error handlers BEFORE OAuth2 Proxy to catch its 401s
+            if [[ "$i" == "oauth2-proxy@file" ]]; then
+                 echo "        - auth-error@file" >> "$output_file"
+            elif [[ "$i" == "oauth2-proxy-admin@file" ]]; then
+                 echo "        - auth-admin-error@file" >> "$output_file"
+            fi
             echo "        - $i" >> "$output_file"
         done
     fi
@@ -535,87 +548,7 @@ deploy_batch() {
         cleanup_traefik_configs
     fi
 
-    # --- QUAY-FIRST BOOTSTRAPPING ---
-    if [[ " ${stacks[*]} " =~ " quay " ]] && [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
-        echo ">>> [BOOTSTRAP] Deploying Step-CA, Traefik, and Quay as the primary SSOT registry..."
-        deploy_single "step-ca"
-        deploy_single "traefik"
-        deploy_single "quay"
-
-        # Wait for Quay API to become healthy (max 3 minutes)
-        echo ">>> [BOOTSTRAP] Waiting for Quay API to report healthy..."
-        QUAY_URL="http://localhost:8080/health/instance"
-        for i in {1..36}; do
-            if [[ "$DEPLOY_MODE" == "remote" ]]; then
-                if "${SSH_CMD[@]}" "curl -sk \"$QUAY_URL\" | grep -qi \"true\"" 2>/dev/null; then
-                    echo ">>> [BOOTSTRAP] Quay is UP and HEALTHY."
-                    break
-                fi
-            else
-                if curl -sk "$QUAY_URL" | grep -qi "true" 2>/dev/null; then
-                    echo ">>> [BOOTSTRAP] Quay is UP and HEALTHY."
-                    break
-                fi
-            fi
-            sleep 5
-            if [ "$i" -eq 36 ]; then
-                echo "[ERROR] Quay failed to become healthy in time."
-                exit 1
-            fi
-        done
-
-        # Authenticate to the local instance (using podman over ssh if REMOTE)
-        echo ">>> [BOOTSTRAP] Authenticating local Podman to Quay..."
-        local login_success=0
-        if [[ "$DEPLOY_MODE" == "remote" ]]; then
-            if "${SSH_CMD[@]}" "podman login \"quay.${DOMAIN:-example.local}\" -u quayuser -p \"${QUAY_DB_PASSWORD}\" --tls-verify=false" >/dev/null 2>&1; then
-                login_success=1
-            else
-                echo ">>> [WARNING] Quay authentication failed. Skipping mirror configuration."
-            fi
-            
-            if [ "$login_success" -eq 1 ]; then
-                "${SSH_CMD[@]}" "mkdir -p ~/.config/containers && cat <<EOF > ~/.config/containers/registries.conf
-unqualified-search-registries = [\"quay.${DOMAIN:-example.local}\", \"docker.io\"]
-
-[[registry]]
-prefix = \"docker.io\"
-location = \"quay.${DOMAIN:-example.local}\"
-mirror-by-digest-only = false
-
-[[registry]]
-location = \"quay.${DOMAIN:-example.local}\"
-insecure = true
-EOF
-"
-                echo ">>> [BOOTSTRAP] registries.conf updated. Mirror active."
-            fi
-        else
-            if podman login "quay.${DOMAIN:-example.local}" -u quayuser -p "${QUAY_DB_PASSWORD}" --tls-verify=false >/dev/null 2>&1; then
-                login_success=1
-            else
-                echo ">>> [WARNING] Quay authentication failed. Skipping mirror configuration."
-            fi
-
-            if [ "$login_success" -eq 1 ]; then
-                mkdir -p ~/.config/containers
-                cat <<EOF > ~/.config/containers/registries.conf
-unqualified-search-registries = ["quay.${DOMAIN:-example.local}", "docker.io"]
-
-[[registry]]
-prefix = "docker.io"
-location = "quay.${DOMAIN:-example.local}"
-mirror-by-digest-only = false
-
-[[registry]]
-location = "quay.${DOMAIN:-example.local}"
-insecure = true
-EOF
-                echo ">>> [BOOTSTRAP] registries.conf updated. Mirror active."
-            fi
-        fi
-    fi
-    # --- END QUAY-FIRST BOOTSTRAPPING ---
+    # --- QUAY-FIRST BOOTSTRAPPING (Handled by Ansible) ---
 
     if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
         local limit_stacks

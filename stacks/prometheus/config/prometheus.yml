@@ -11,9 +11,9 @@ scrape_configs:
     static_configs:
       - targets: ['vector:9598']
 
-  - job_name: 'loki'
+  - job_name: 'clair'
     static_configs:
-      - targets: ['loki:3100']
+      - targets: ['clair:8089']
 
   - job_name: 'traefik'
     static_configs:
