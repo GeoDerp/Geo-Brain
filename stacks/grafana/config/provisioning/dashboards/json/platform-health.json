@@ -172,7 +172,7 @@
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "{pipeline=\"vector\"} |~ \"(?i)(authentication|failed|denied|unauthorized|error|CVE|alert|exfil|block|malicious|pkg-sentinel)\"",
+          "expr": "{pipeline=\"vector\", security=\"true\"}",
           "legendFormat": ""
         }
       ],

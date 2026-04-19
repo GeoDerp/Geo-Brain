@@ -58,7 +58,6 @@ services:
       - "homepage.name=Step CA"
       - "homepage.icon=step-ca.png"
       - "homepage.description=Internal Certificate Authority"
-      - "homepage.href=https://ca.${DOMAIN}"
 
 networks:
   pki-net:

@@ -77,6 +77,12 @@ services:
       timeout: 10s
       retries: 3
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bunkerweb.rule=Host(`waf.${DOMAIN}`)"
+      - "traefik.http.routers.bunkerweb.entrypoints=websecure"
+      - "traefik.http.routers.bunkerweb.tls=true"
+      - "traefik.http.routers.bunkerweb.middlewares=oauth2-proxy-admin@file,security-headers@file"
+      - "traefik.http.services.bunkerweb.loadbalancer.server.port=8080"
       - "security.stig.compliance=true"
       - "security.stig.bypass_privileged=true"
       - "security.stig.role=waf"

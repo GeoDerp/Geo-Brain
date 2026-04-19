@@ -64,7 +64,7 @@ services:
       - "homepage.name=Traefik"
       - "homepage.icon=traefik.png"
       - "homepage.description=Edge Proxy"
-      - "homepage.href=https://traefik.${DOMAIN}"
+      - "homepage.href=https://traefik.${DOMAIN}/dashboard/"
 
 networks:
   proxy-net:

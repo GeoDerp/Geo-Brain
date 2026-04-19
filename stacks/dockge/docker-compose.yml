@@ -15,7 +15,6 @@ services:
       - ${PODMAN_SOCK}:/var/run/docker.sock:ro
       - ${DATA_DIR}/dockge:/app/data:z,U
       - ${STACKS_PATH}:${STACKS_PATH}:z,U
-      - ${DATA_DIR}/dockge/plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose:ro,z
       - ./config/docker-podman-shim.sh:/usr/local/bin/docker:ro,z
     environment:
       - DOCKGE_STACKS_DIR=${STACKS_PATH}

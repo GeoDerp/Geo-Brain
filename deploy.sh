@@ -366,7 +366,7 @@ generate_traefik_config() {
     local rule="Host(\`${service_name}.${DOMAIN}\`)"
     if grep -q "traefik.http.routers.*.rule" "$compose_file"; then
         local raw_rule=$(grep "traefik.http.routers.*.rule" "$compose_file" | sed -E 's/.*Host\(`([^`]+)`\).*/\1/' | head -n 1)
-        rule="Host(\`$(echo "$raw_rule" | sed -E "s/\{\{[^}]*DOMAIN[^}]*\}\}/${DOMAIN}/g" | sed -E "s/\\\$[{(]*DOMAIN[)}]* /${DOMAIN}/g" | sed "s/\${DOMAIN}/${DOMAIN}/g")\`)"
+        rule="Host(\`$(echo "$raw_rule" | sed "s/\${DOMAIN}/${DOMAIN}/g" | sed "s/\$DOMAIN/${DOMAIN}/g" | sed "s/{{DOMAIN}}/${DOMAIN}/g")\`)"
     fi
     
     local port=$(grep "traefik.http.services.*.port" "$compose_file" | sed -E 's/.*port[=:]"?([0-9]+)"?.*/\1/' | head -n 1)

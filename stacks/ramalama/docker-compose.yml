@@ -39,7 +39,6 @@ services:
       - "homepage.name=RamaLama (Air-gapped LLM)"
       - "homepage.icon=ramalama.png"
       - "homepage.description=Local Security Analysis"
-      - "homepage.href=https://ramalama.${DOMAIN}"
     user: "${PUID:-1000}:${PGID:-1000}"
 
 networks:

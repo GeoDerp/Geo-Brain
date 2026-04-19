@@ -89,7 +89,6 @@ services:
       - "homepage.name=Package Sentinel"
       - "homepage.icon=shield-check.png"
       - "homepage.description=Supply-Chain Security Proxy"
-      - "homepage.href=https://pkg-sentinel.${DOMAIN}"
 
 networks:
   proxy-net:

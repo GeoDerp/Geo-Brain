@@ -57,19 +57,46 @@ transforms:
       del(.container_created_at)
       del(.image)
 
+  # Clean logs for Loki (strip redundant labels and format message)
+  loki_clean:
+    type: remap
+    inputs:
+      - classify_logs
+      - falco_normalize
+    source: |
+      # Extract security status before we potentially delete labels
+      .security = .labels.security ?? "false"
+      
+      # Strip bloated metadata
+      del(.label)
+      del(.container_id)
+      del(.container_created_at)
+      del(.image)
+      del(.source_type)
+      del(.stream)
+      
+      # If message is JSON, try to parse it for better visibility
+      if is_string(.message) && starts_with(to_string!(.message), "{") {
+          parsed, err = parse_json(.message)
+          if err == null {
+              .message = parsed.message ?? .message
+              # Keep other interesting fields from parsed JSON if needed
+          }
+      }
+
 sinks:
   # All logs → Loki
   loki:
     type: loki
     inputs:
-      - classify_logs
-      - falco_normalize
+      - loki_clean
     endpoint: http://loki:3100
     encoding:
       codec: json
     labels:
       host: "{{ labels.host }}"
       source: "{{ labels.source }}"
+      security: "{{ security }}"
       pipeline: vector
 
   # Security logs → Wazuh Manager (syslog on port 1514)

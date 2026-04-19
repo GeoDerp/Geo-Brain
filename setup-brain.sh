@@ -117,10 +117,10 @@ write_env_secret() {
     chmod 600 .env
   fi
 
-  if grep -q "^${var_name}=$" .env 2>/dev/null; then
-    # Key exists but is empty (e.g., copied from .env-template) — update in place
-    sed -i "s|^${var_name}=$|${var_name}=${secret_value}|" .env
-  elif ! grep -q "^${var_name}=" .env 2>/dev/null; then
+  if grep -q "^${var_name}=" .env 2>/dev/null; then
+    # Key exists — update in place
+    sed -i "s|^${var_name}=.*$|${var_name}=${secret_value}|" .env
+  else
     # Key doesn't exist at all — append
     printf '%s=%s\n' "$var_name" "$secret_value" >> .env
   fi

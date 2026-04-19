@@ -15,10 +15,9 @@ datasources:
   - name: Wazuh (OpenSearch)
     type: grafana-opensearch-datasource
     uid: wazuh-opensearch
-    url: https://wazuh-indexer:9200
+    url: http://wazuh-indexer:9200
     access: proxy
     jsonData:
       database: "wazuh-alerts-*"
       flavor: opensearch
       version: "2.x"
-      tlsSkipVerify: true

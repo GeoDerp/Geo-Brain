@@ -71,7 +71,6 @@ services:
       - "homepage.name=OAuth2 Proxy"
       - "homepage.icon=oauth.png"
       - "homepage.description=SSO Auth Portal"
-      - "homepage.href=https://auth.${DOMAIN}"
 
   oauth2-proxy-admin:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1

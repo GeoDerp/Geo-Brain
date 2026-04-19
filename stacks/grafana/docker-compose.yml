@@ -29,6 +29,7 @@ services:
       - GF_SERVER_ROOT_URL=https://grafana.${DOMAIN}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/json/platform-health.json
+      - GF_INSTALL_PLUGINS=grafana-opensearch-datasource
     networks:
       - monitoring-net
       - wazuh-net
