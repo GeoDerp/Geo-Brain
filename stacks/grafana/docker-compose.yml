@@ -50,6 +50,7 @@ services:
       retries: 3
       start_period: 5m
     labels:
+      - "kanidm.oidc.client_id=grafana"
       - "traefik.enable=true"
       - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
       - "traefik.http.routers.grafana.entrypoints=websecure"

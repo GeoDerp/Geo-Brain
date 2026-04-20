@@ -32,6 +32,7 @@ for compose in $RAW_APPS; do
                quay) redirect_path="/oauth2/kanidm/callback" ;;
                defectdojo) redirect_path="/complete/oidc/" ;;
                gitea) redirect_path="/user/oauth2/Kanidm/callback" ;;
+               grafana) redirect_path="/login/generic_oauth" ;;
                *) redirect_path="/" ;;
            esac
        fi
