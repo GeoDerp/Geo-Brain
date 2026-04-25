@@ -81,7 +81,7 @@ services:
       - "traefik.http.routers.pkg-sentinel.entrypoints=websecure"
       - "traefik.http.routers.pkg-sentinel.tls=true"
       - "traefik.http.routers.pkg-sentinel.tls.certresolver=stepca"
-      - "traefik.http.routers.pkg-sentinel.middlewares=oauth2-proxy@file,security-headers@file"
+      - "traefik.http.routers.pkg-sentinel.middlewares=oauth2-proxy@file,auth-error@file,security-headers@file"
       - "traefik.http.services.pkg-sentinel.loadbalancer.server.port=8443"
 
       # --- Homepage Integration ---

@@ -109,11 +109,9 @@ services:
       - wazuh-indexer
       - wazuh-manager
     environment:
-      - WAZUH_MANAGER_URL=http://wazuh-manager
-      - INDEXER_URL=http://wazuh-indexer:9200
-      - OIDC_ENDPOINT=https://kanidm.${DOMAIN}/oauth2/openid/wazuh
-      - OIDC_CLIENT_ID=wazuh
-      - OIDC_CLIENT_SECRET=${WAZUH_OIDC_SECRET}
+      - WAZUH_MANAGER_URL=https://wazuh-manager
+      - INDEXER_URL=https://wazuh-indexer:9200
+      - WAZUH_API_PASSWORD=${WAZUH_API_PASSWORD}
     networks:
       - wazuh-net
       - monitoring-net
@@ -134,8 +132,9 @@ services:
       - "traefik.http.routers.wazuh.rule=Host(`wazuh.${DOMAIN}`)"
       - "traefik.http.routers.wazuh.entrypoints=websecure"
       - "traefik.http.routers.wazuh.tls=true"
-      - "traefik.http.routers.wazuh.middlewares=security-headers@file"
+      - "traefik.http.routers.wazuh.middlewares=oauth2-proxy-admin@file,auth-admin-error@file,security-headers@file"
       - "traefik.http.services.wazuh.loadbalancer.server.port=5601"
+      - "traefik.docker.network=proxy-net"
       - "security.stig.compliance=true"
       - "security.stig.role=dashboard"
       - "homepage.group=SOC"

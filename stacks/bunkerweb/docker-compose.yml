@@ -29,6 +29,7 @@ services:
       REVERSE_PROXY_HOST: "http://traefik:80"
       # -- WAF (ModSecurity + OWASP CRS) --
       USE_MODSECURITY: "yes"
+      MODSECURITY_SEC_RULE_ENGINE: "DetectionOnly"
       USE_MODSECURITY_CRS: "yes"
       MODSECURITY_SEC_AUDIT_ENGINE: "RelevantOnly"
       # -- DDoS / Rate Limiting --
@@ -42,9 +43,10 @@ services:
       # -- Trusted Proxies --
       USE_PROXY: "yes"
       USE_REAL_IP: "yes"
-      REAL_IP_FROM: "10.89.0.0/16"
+      REAL_IP_FROM: "10.89.0.0/16,192.168.1.0/24,127.0.0.1"
       REAL_IP_HEADER: "X-Forwarded-For"
       DNS_RESOLVERS: "10.89.0.1"
+      WHITELIST_IPS: "127.0.0.1,10.89.0.0/16,192.168.1.0/24"
       USE_BAD_BEHAVIOR: "yes"
       BAD_BEHAVIOR_STATUS_CODES: "400 401 403 404 405 429 444"
       BAD_BEHAVIOR_THRESHOLD: "10"
@@ -91,8 +93,9 @@ services:
       - "traefik.http.routers.bunkerweb.entrypoints=websecure"
       - "traefik.http.routers.bunkerweb.tls=true"
       - "traefik.http.routers.bunkerweb.tls.certresolver=stepca"
-      - "traefik.http.routers.bunkerweb.middlewares=oauth2-proxy-admin@file,security-headers@file"
-      - "traefik.http.services.bunkerweb.loadbalancer.server.port=8080"
+      - "traefik.http.routers.bunkerweb.middlewares=oauth2-proxy-admin@file,auth-admin-error@file,security-headers@file"
+      - "traefik.http.services.bunkerweb.loadbalancer.server.port=7000"
+      - "traefik.docker.network=proxy-net"
       - "security.stig.compliance=true"
       - "security.stig.bypass_privileged=true"
       - "security.stig.role=waf"

@@ -182,6 +182,11 @@
         - waf-net
         - secure-backbone
 
+    - name: Pre-flight delay for Quay
+      pause:
+        seconds: 30
+      when: "'quay' in target_stacks"
+
     - name: Deploy stacks using Podman Compose
       shell: |
         set -a; [ -f "$HOME/{{ remote_base }}/.env" ] && source "$HOME/{{ remote_base }}/.env"; set +a
@@ -213,7 +218,7 @@
       changed_when: false
 
     - name: Automate Kanidm OIDC Clients and generate secrets
-      script: "{{ repo_root }}/scripts/setup/setup-oidc.sh"
+      shell: "~/{{ remote_base }}/scripts/setup/setup-oidc.sh"
       register: oidc_automation
       changed_when: "'UPDATED_ENV' in oidc_automation.stdout"
       when: kanidm_check.rc == 0

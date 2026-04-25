@@ -36,13 +36,24 @@ services:
       - GITEA__service.oauth2__CLIENT_ID=gitea
       - GITEA__service.oauth2__CLIENT_SECRET=${GITEA_OIDC_SECRET}
       - GITEA__service.oauth2__AUTO_DISCOVER_URL=https://kanidm.${DOMAIN}/oauth2/openid/gitea/.well-known/openid-configuration
+      - GITEA__service__ENABLE_REVERSE_PROXY_AUTHENTICATION=true
+      - GITEA__service__ENABLE_REVERSE_PROXY_AUTO_REGISTRATION=true
+      - GITEA__service__ENABLE_REVERSE_PROXY_EMAIL=true
+      - GITEA__service__REVERSE_PROXY_AUTH_USER=X-Auth-Request-User
+      - GITEA__service__REVERSE_PROXY_AUTH_EMAIL=X-Auth-Request-Email
+      - GITEA__security__REVERSE_PROXY_TRUSTED_PROXIES=10.89.0.0/16,127.0.0.1
+      - GITEA__auth__DISABLE_REGULAR_ORG_CREATION=true
+      - GITEA__service__DISABLE_REGISTRATION=true
+      - GITEA__service__ALLOW_ONLY_EXTERNAL_REGISTRATION=true
+      - GITEA__service__SHOW_REGISTRATION_BUTTON=false
+      - GITEA__security__LOGIN_REMEMBER_DAYS=7
     networks:
       - proxy-net
       - vulnerability-net
     volumes:
       - ${DATA_DIR}/gitea/data:/data:Z,U
       - ${STACKS_PATH}/../certs/ca.crt:/usr/local/share/ca-certificates/step-ca.crt:ro,z
-    entrypoint: ["/bin/sh", "-c", "cat /usr/local/share/ca-certificates/step-ca.crt >> /etc/ssl/certs/ca-certificates.crt && exec /bin/s6-svscan /etc/s6"]
+    entrypoint: ["/bin/sh", "-c", "cat /usr/local/share/ca-certificates/step-ca.crt >> /etc/ssl/certs/ca-certificates.crt && exec /usr/bin/entrypoint"]
     deploy:
       resources:
         limits:
@@ -55,7 +66,6 @@ services:
       retries: 3
     labels:
       - "kanidm.oidc.client_id=gitea"
-      - "security.stig.compliance=true"
       - "traefik.enable=true"
       - "traefik.http.routers.gitea.rule=Host(`gitea.${DOMAIN}`)"
       - "traefik.http.routers.gitea.entrypoints=websecure"
@@ -63,6 +73,7 @@ services:
       - "traefik.http.routers.gitea.tls.certresolver=stepca"
       - "traefik.http.routers.gitea.middlewares=security-headers@file"
       - "traefik.http.services.gitea.loadbalancer.server.port=3000"
+      - "traefik.docker.network=proxy-net"
       - "homepage.group=Services"
       - "homepage.name=Gitea"
       - "homepage.icon=gitea.png"
@@ -134,6 +145,32 @@ services:
     environment:
       - GITEA_INSTANCE_URL=http://gitea:3000
       - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_TOKEN}
+      - GITEA_RUNNER_NAME=routine-scan-runner
+      - GITEA_RUNNER_LABELS=scan:docker://docker.io/aquasec/trivy:0.58.2
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    networks:
+      - proxy-net
+    volumes:
+      - ${DATA_DIR}/gitea-routine-runner/data:/data:Z,U
+      - ${PODMAN_SOCK}:/var/run/docker.sock
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '2.0'
+    healthcheck:
+      test: ["CMD", "act_runner", "--version"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+    labels:
+      - "security.stig.compliance=true"
+
+networks:
+  proxy-net:
+    external: true
+  vulnerability-net:
+    external: trueNER_REGISTRATION_TOKEN=${GITEA_RUNNER_TOKEN}
       - GITEA_RUNNER_NAME=routine-scan-runner
       - GITEA_RUNNER_LABELS=scan:docker://docker.io/aquasec/trivy:0.58.2
       - DOCKER_HOST=unix:///var/run/docker.sock

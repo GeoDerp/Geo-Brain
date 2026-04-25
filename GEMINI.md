@@ -383,3 +383,61 @@ setup-brain.sh → runs AFTER deploy.sh:
   7. setup_soc         → DefectDojo admin capture
   8. setup_crowdsec    → Bouncer registration, Traefik redeploy
 ```
+
+### C4 Architecture Model
+
+```mermaid
+C4Container
+    title Container diagram for Geo-Brain Homelab
+
+    System_Ext(github, "GitHub", "External Git Repository")
+
+    Person(user, "User", "Homelab User")
+    Person(admin, "Admin", "Homelab Admin")
+
+    System_Boundary(homelab, "Geo-Brain Homelab") {
+        Container(traefik, "Traefik", "Go", "Edge Proxy")
+        Container(stepca, "Step-CA", "Go", "Internal CA")
+        
+        Container(kanidm, "Kanidm", "Rust", "Identity Provider (OIDC)")
+        Container(oauth2_proxy, "OAuth2 Proxy", "Go", "SSO Gateway")
+        
+        Container(quay, "Quay", "Python", "OCI Registry")
+        Container(clair, "Clair", "Go", "Image Scanner")
+        Container(minio, "MinIO", "Go", "S3 Object Storage")
+        
+        Container(grafana, "Grafana", "Go", "Dashboards")
+        Container(prometheus, "Prometheus", "Go", "Metrics")
+        Container(loki, "Loki", "Go", "Log Aggregation")
+        Container(vector, "Vector", "Rust", "Log Pipeline")
+        
+        Container(wazuh, "Wazuh", "C/C++", "SIEM Engine")
+        Container(falco, "Falco", "C/eBPF", "Runtime Security")
+        Container(crowdsec, "CrowdSec", "Go", "Intrusion Prevention")
+        Container(defectdojo, "DefectDojo", "Python", "Vulnerability Management")
+        
+        Container(dockge, "Dockge", "Node.js", "Stack Manager")
+        Container(homepage, "Homepage", "Node.js", "Dashboard")
+        
+        Container(moodle, "Moodle", "PHP", "LMS")
+        Container(n8n, "n8n", "Node.js", "Workflow Automation")
+        Container(notes, "SilverBullet", "Deno", "Notes")
+        Container(gitea, "Gitea", "Go", "Git Mirror")
+    }
+
+    Rel(user, traefik, "Visits", "HTTPS")
+    Rel(admin, traefik, "Manages", "HTTPS")
+    
+    Rel(traefik, stepca, "Requests certs", "ACME")
+    Rel(traefik, oauth2_proxy, "Forwards Auth", "HTTP")
+    Rel(oauth2_proxy, kanidm, "Authenticates", "OIDC")
+    
+    Rel(vector, loki, "Ships logs", "HTTP")
+    Rel(vector, wazuh, "Ships alerts", "Syslog")
+    Rel(falco, vector, "Sends alerts", "HTTP")
+    
+    Rel(traefik, gitea, "Routes to", "HTTP")
+    Rel(traefik, grafana, "Routes to", "HTTP")
+    Rel(traefik, quay, "Routes to", "HTTP")
+    Rel(gitea, github, "Mirrors from/to", "Git/HTTPS")
+```

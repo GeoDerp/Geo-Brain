@@ -10,6 +10,13 @@ FEATURE_USER_CREATION: true
 REGISTRY_TITLE: Geo-Brain Quay
 REGISTRY_TITLE_SHORT: Quay
 AUTHENTICATION_TYPE: Database
+FEATURE_OIDC_LOGIN: true
+OIDC_LOGIN_CONFIG:
+  CLIENT_ID: quay
+  CLIENT_SECRET: "${QUAY_OIDC_SECRET}"
+  ISSUER_URL: https://kanidm.${DOMAIN}/oauth2/openid/quay
+  SERVICE_NAME: Kanidm
+  LOGIN_SCOPES: ["openid", "profile", "email", "groups"]
 SECRET_KEY: ${QUAY_SECRET_KEY}
 DATABASE_SECRET_KEY: ${QUAY_DB_SECRET_KEY}
 
@@ -44,18 +51,6 @@ FEATURE_PROXY_CACHE: true
 FEATURE_TELEMETRY_LOGGING: false
 FEATURE_APP_SPECIFIC_TOKENS: true
 
-# Kanidm OIDC SSO
+# Kanidm OIDC SSO (Handled by oauth2-proxy)
 FEATURE_DIRECT_LOGIN: true
-OIDC_LOGIN_CONFIG:
-  CLIENT_ID: quay
-  CLIENT_SECRET: ${QUAY_OIDC_SECRET}
-  OIDC_SERVER: https://kanidm.${DOMAIN}/oauth2/openid/quay/
-  AUTHORIZATION_ENDPOINT: https://kanidm.${DOMAIN}/ui/oauth2
-  TOKEN_ENDPOINT: https://kanidm.${DOMAIN}/oauth2/token
-  USERINFO_ENDPOINT: https://kanidm.${DOMAIN}/oauth2/openid/quay/userinfo
-  LOGIN_SCOPES:
-    - openid
-    - profile
-    - email
-  PREFERRED_USERNAME_CLAIM_NAME: preferred_username
-  SERVICE_NAME: Kanidm
+e

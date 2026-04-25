@@ -27,13 +27,19 @@ services:
       - GF_AUTH_GENERIC_OAUTH_CLIENT_ID=grafana
       - GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET=${GRAFANA_OIDC_SECRET}
       - GF_AUTH_GENERIC_OAUTH_SCOPES=openid profile email groups
-      - GF_AUTH_GENERIC_OAUTH_AUTH_URL=https://kanidm.${DOMAIN}/oauth2/authorize
+      - GF_AUTH_GENERIC_OAUTH_AUTH_URL=https://kanidm.${DOMAIN}/ui/oauth2
       - GF_AUTH_GENERIC_OAUTH_TOKEN_URL=https://kanidm.${DOMAIN}/oauth2/token
       - GF_AUTH_GENERIC_OAUTH_API_URL=https://kanidm.${DOMAIN}/oauth2/openid/grafana/userinfo
       - GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP=true
+      - GF_AUTH_GENERIC_OAUTH_TLS_SKIP_VERIFY_INSECURE=true
+      - GF_AUTH_OAUTH_AUTO_LOGIN=false
       - GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH="contains(groups[*], 'brain_admins@brain.home.lan') && 'Admin' || 'Viewer'"
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/json/platform-health.json
       - GF_INSTALL_PLUGINS=grafana-opensearch-datasource
+      - GF_AUTH_PROXY_ENABLED=false
+      - GF_AUTH_PROXY_HEADER_NAME=X-Auth-Request-User
+      - GF_AUTH_PROXY_HEADER_PROPERTY=username
+      - GF_AUTH_PROXY_AUTO_SIGN_UP=false
     networks:
       - monitoring-net
       - wazuh-net
@@ -42,9 +48,9 @@ services:
       resources:
         limits:
           memory: 512M
-          cpus: '0.3'
+          cpus: '0.5'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/api/health"]
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health"]
       interval: 60s
       timeout: 10s
       retries: 3
@@ -55,8 +61,10 @@ services:
       - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
       - "traefik.http.routers.grafana.entrypoints=websecure"
       - "traefik.http.routers.grafana.tls=true"
+      - "traefik.http.routers.grafana.tls.certresolver=stepca"
       - "traefik.http.routers.grafana.middlewares=security-headers@file"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      - "traefik.docker.network=proxy-net"
       - "security.stig.compliance=true"
       - "security.stig.role=visualization"
       - "homepage.group=Observability"

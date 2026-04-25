@@ -13,6 +13,7 @@ services:
       - /run
     command: server /data --console-address ":9001"
     environment:
+      - MINIO_CERTS_DIR=/root/.minio/certs
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
       - MINIO_IDENTITY_OPENID_CONFIG_URL=https://kanidm.${DOMAIN}/oauth2/openid/minio/.well-known/openid-configuration
@@ -27,6 +28,7 @@ services:
       - MINIO_PROMETHEUS_AUTH_TYPE=public
     volumes:
       - ${DATA_DIR}/minio:/data:Z,U
+      - ${STACKS_PATH}/../certs/ca.crt:/root/.minio/certs/CAs/ca.crt:ro,z
     ports:
       - 9000:9000
       - 9001:9001
@@ -50,8 +52,10 @@ services:
       - "traefik.http.routers.minio-console.rule=Host(`minio.${DOMAIN}`)"
       - "traefik.http.routers.minio-console.entrypoints=websecure"
       - "traefik.http.routers.minio-console.tls=true"
+      - "traefik.http.routers.minio-console.tls.certresolver=stepca"
       - "traefik.http.routers.minio-console.middlewares=security-headers@file"
       - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+      - "traefik.docker.network=proxy-net"
       - "security.stig.compliance=true"
       - "security.stig.role=storage"
       - "homepage.group=Infrastructure"

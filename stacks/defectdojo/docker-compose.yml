@@ -17,11 +17,12 @@ services:
       - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
       - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
       - DD_SOCIAL_AUTH_OIDC_AUTH_ENABLED=True
+      - DD_ENABLE_OIDC=True
       - DD_SOCIAL_AUTH_REDIRECT_IS_HTTPS=True
       - DD_SOCIAL_AUTH_OIDC_OIDC_ENDPOINT=https://kanidm.${DOMAIN}/oauth2/openid/defectdojo
       - DD_SOCIAL_AUTH_OIDC_KEY=defectdojo
       - DD_SOCIAL_AUTH_OIDC_SECRET=${DEFECTDOJO_OIDC_SECRET}
-      - DD_ENABLE_SSO_LOGIN_FORM=False
+      - DD_ENABLE_SSO_LOGIN_FORM=True
       - DD_ALLOWED_HOSTS=defectdojo.${DOMAIN},defectdojo-django
       - DD_UWSGI_BUFFER_SIZE=65535
       - DD_UWSGI_EXTRA_ARGS=--static-map /static=/app/static

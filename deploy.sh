@@ -433,15 +433,17 @@ http:
       entryPoints:
         - websecure
       service: ${custom_service:-${stack_name/\//_}_${service_name}}
-      tls:
-        certResolver: $resolver
+      tls: {}
 EOF
+    
+    if [[ -n "$resolver" && "$resolver" != "none" ]]; then
+        sed -i 's/tls: {}/tls:\n        certResolver: '"$resolver"'/g' "$output_file"
+    fi
 
     if [[ -n "$middlewares" ]]; then
         echo "      middlewares:" >> "$output_file"
         IFS=',' read -ra ADDR <<< "$middlewares"
         for i in "${ADDR[@]}"; do
-            # Automatically add error handlers BEFORE OAuth2 Proxy to catch its 401s
             if [[ "$i" == "oauth2-proxy@file" ]]; then
                  echo "        - auth-error@file" >> "$output_file"
             elif [[ "$i" == "oauth2-proxy-admin@file" ]]; then

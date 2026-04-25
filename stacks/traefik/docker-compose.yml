@@ -57,7 +57,7 @@ services:
       - "traefik.http.routers.traefik-dashboard.tls=true"
       - "traefik.http.routers.traefik-dashboard.tls.certresolver=stepca"
       - "traefik.http.routers.traefik-dashboard.service=api@internal"
-      - "traefik.http.routers.traefik-dashboard.middlewares=oauth2-proxy-admin@file,security-headers@file"
+      - "traefik.http.routers.traefik-dashboard.middlewares=oauth2-proxy-admin@file,auth-admin-error@file,security-headers@file"
       - "security.stig.compliance=true"
       - "security.stig.role=proxy"
       - "homepage.group=Management"

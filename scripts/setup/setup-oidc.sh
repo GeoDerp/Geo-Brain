@@ -1,5 +1,6 @@
 # Extract values from existing .env
-ENVFILE="$HOME/Geo-Brain/.env"
+BASE_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+ENVFILE="$BASE_DIR/.env"
 set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
 
 if [[ -z "${KANIDM_ADMIN_PASSWORD:-}" ]]; then
@@ -12,14 +13,14 @@ if [[ -z "$KANIDM_ADMIN_PASSWORD" ]]; then
   exit 0
 fi
 
-CA_CERT_CONTENT=$(cat "$HOME/Geo-Brain/stacks/traefik/config/certs/root_ca.crt" 2>/dev/null || cat "$HOME/Geo-Brain/certs/ca.crt" 2>/dev/null || true)
+CA_CERT_CONTENT=$(cat "$BASE_DIR/stacks/traefik/config/certs/ca-bundle.crt" 2>/dev/null || cat "$BASE_DIR/stacks/traefik/config/certs/root_ca.crt" 2>/dev/null || cat "$BASE_DIR/certs/ca.crt" 2>/dev/null || true)
 if [[ -z "$CA_CERT_CONTENT" ]]; then
   echo "No CA cert found."
   exit 0
 fi
 
 EXPECTED_APPS=""
-RAW_APPS=$(find $HOME/Geo-Brain/stacks -not -path '*/_template/*' -type f -name "docker-compose.yml" 2>/dev/null)
+RAW_APPS=$(find "$BASE_DIR/stacks" -not -path '*/_template/*' -type f -name "docker-compose.yml" 2>/dev/null)
 for compose in $RAW_APPS; do
    app_id=$(grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' "$compose" | head -n 1 || true)
    if [[ -n "$app_id" ]]; then
@@ -33,6 +34,7 @@ for compose in $RAW_APPS; do
                defectdojo) redirect_path="/complete/oidc/" ;;
                gitea) redirect_path="/user/oauth2/Kanidm/callback" ;;
                grafana) redirect_path="/login/generic_oauth" ;;
+               moodle) redirect_path="/admin/oauth2callback.php" ;;
                *) redirect_path="/" ;;
            esac
        fi
@@ -69,19 +71,24 @@ for APP_INFO in \$EXPECTED_APPS; do
     REDIRECT_URL="\${ORIGIN_URL}\${REDIRECT_PATH}"
 
     kanidm system oauth2 create "\$APP" "\$APP OIDC" "\$ORIGIN_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    # Ensure the primary redirect URL is added (in case it wasn't created initially with it)
+    kanidm system oauth2 add-redirect-url "\$APP" "https://\${SUBDOMAIN}.${DOMAIN}\${REDIRECT_PATH}" -C /tmp/ca.crt >/dev/null 2>&1 || true
     kanidm system oauth2 add-redirect-url "\$APP" "\$REDIRECT_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
     # Register admin proxy callback path (uses --proxy-prefix=/admin-oauth2)
-    if [ "$APP" = "oauth2-proxy" ]; then
-        kanidm system oauth2 add-redirect-url "$APP" "https://auth.${DOMAIN}/admin-oauth2/callback" -C /tmp/ca.crt >/dev/null 2>&1 || true
-        kanidm system oauth2 add-redirect-url "$APP" "https://${DOMAIN}/oauth2/callback" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    if [ "\$APP" = "oauth2-proxy" ]; then
+        kanidm system oauth2 add-redirect-url "\$APP" "https://auth.${DOMAIN}/admin-oauth2/callback" -C /tmp/ca.crt >/dev/null 2>&1 || true
+        kanidm system oauth2 add-redirect-url "\$APP" "https://${DOMAIN}/oauth2/callback" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    fi
+
+    if [ "\$APP" = "quay" ]; then
+        kanidm system oauth2 warning-enable-legacy-crypto "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
+        kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
     fi
     kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
     
     kanidm system oauth2 delete-scope-map "\$APP" idm_all_persons -C /tmp/ca.crt >/dev/null 2>&1 || true
     kanidm system oauth2 update-scope-map "\$APP" brain_admins openid profile email groups -C /tmp/ca.crt >/dev/null 2>&1 || true
-    if [ "\$APP" = "oauth2-proxy" ]; then
-        kanidm system oauth2 update-scope-map "\$APP" brain_users openid profile email groups -C /tmp/ca.crt >/dev/null 2>&1 || true
-    fi
+    kanidm system oauth2 update-scope-map "\$APP" brain_users openid profile email groups -C /tmp/ca.crt >/dev/null 2>&1 || true
     kanidm system oauth2 set-landing-url "\$APP" "\$ORIGIN_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
     
     SECRET=\$(kanidm system oauth2 show-basic-secret "\$APP" -C /tmp/ca.crt 2>/dev/null | tail -n 1)

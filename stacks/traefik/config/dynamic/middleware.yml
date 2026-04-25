@@ -30,7 +30,7 @@ http:
         status:
           - "401"
         service: auth-error-svc
-        query: "/oauth2/start?rd={url}"
+        query: "/oauth2/start?rd={header.X-Forwarded-Uri}"
 
     # Redirect to admin login page on 401 Unauthorized
     auth-admin-error:
@@ -38,7 +38,7 @@ http:
         status:
           - "401"
         service: auth-admin-error-svc
-        query: "/admin-oauth2/start?rd={url}"
+        query: "/admin-oauth2/start?rd={header.X-Forwarded-Uri}"
 
     # CrowdSec bouncer middleware — blocks IPs flagged by CrowdSec LAPI
     crowdsec:

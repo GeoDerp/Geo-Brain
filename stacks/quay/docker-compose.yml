@@ -126,7 +126,7 @@ services:
       - "8080:8080"
     volumes:
       - ./config:/conf/stack:Z
-      - ../../stacks/traefik/config/certs/root_ca.crt:/conf/stack/extra_ca_certs/root_ca.crt:ro,Z
+      - ../../stacks/traefik/config/certs/ca-bundle.crt:/conf/stack/extra_ca_certs/ca-bundle.crt:ro,Z
       - ${DATA_DIR}/quay-storage:/datastorage:Z,U
     networks:
       - quay-net
@@ -141,6 +141,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 5m
     labels:
       - "kanidm.oidc.client_id=quay"
       - "security.stig.compliance=true"
@@ -150,6 +151,7 @@ services:
       - "traefik.http.routers.quay.tls=true"
       - "traefik.http.routers.quay.middlewares=security-headers@file"
       - "traefik.http.services.quay.loadbalancer.server.port=8080"
+      - "traefik.docker.network=proxy-net"
       - "homepage.group=Infrastructure"
       - "homepage.name=Quay"
       - "homepage.icon=quay.png"
