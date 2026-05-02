@@ -21,6 +21,7 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - **Data Separation:** Persistent data lives under `${DATA_DIR}` (default `/var/STIG-Homelab`) on a large partition. Config files stay relative (`./config`) for rsync portability. New stacks mount data as `${DATA_DIR}/<stack-name>/...`.
 - **Single Source of Truth:** All infrastructure state is defined in this repository. Manual changes on the host are forbidden.
 - **HTTPS Only:** All HTTP endpoints MUST be encrypted with TLS. Plain HTTP is only allowed for local bootstrap redirects to HTTPS.
+- **Agent Validation:** After completing any agentic task or making code changes, the AI agent MUST autonomously run the full suite of automated tests (`./tests/test_stacks.sh all`, `./tests/test_kube_compliance.sh`, `./tests/test_sso_routes.sh`, and `./tests/validate_sso_detailed.sh`) to validate that the project remains fully functional and STIG-compliant.
 
 ## Application Stack 
 
