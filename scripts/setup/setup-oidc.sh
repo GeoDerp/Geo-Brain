@@ -31,18 +31,16 @@ for compose in $RAW_APPS; do
            # We use awk to find the labels block following the client_id
            subdomain=$(grep -oP "traefik\.http\.routers\.[^.]+\.rule=Host\(\`\K[^.\`]+" "$compose" | head -n 1 || echo "$app_id")
            
-           # Hardcoded overrides for common apps
+           # Read redirect_path from compose label (kanidm.oidc.redirect_path=<path>)
+           # Special-case oauth2-proxy instances: their callbacks are on the root domain
            redirect_path=""
            case "$app_id" in
-               oauth2-proxy) redirect_path="/oauth2/callback" ;;
+               oauth2-proxy)       redirect_path="/oauth2/callback" ;;
                oauth2-proxy-admin) redirect_path="/admin-oauth2/callback" ;;
-               minio) redirect_path="/oauth_callback" ;;
-               quay) redirect_path="/oauth2/kanidm/callback" ;;
-               defectdojo) redirect_path="/complete/oidc/" ;;
-               gitea) redirect_path="/user/oauth2/Kanidm/callback" ;;
-               grafana) redirect_path="/login/generic_oauth" ;;
-               moodle) redirect_path="/admin/oauth2callback.php" ;;
-               *) redirect_path="/" ;;
+               *)
+                   redirect_path=$(grep -oP 'kanidm\.oidc\.redirect_path=\K[^"]+' "$compose" | head -n 1 || true)
+                   redirect_path="${redirect_path:-/}"
+                   ;;
            esac
            EXPECTED_APPS="$EXPECTED_APPS ${app_id}:${subdomain}:${redirect_path}"
        fi

@@ -124,6 +124,17 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
+    environment:
+      - QUAY_DB_USER=${QUAY_DB_USER}
+      - QUAY_DB_PASSWORD=${QUAY_DB_PASSWORD}
+      - QUAY_DB_NAME=${QUAY_DB_NAME}
+      - QUAY_OIDC_SECRET=${QUAY_OIDC_SECRET}
+      - QUAY_SECRET_KEY=${QUAY_SECRET_KEY}
+      - QUAY_DB_SECRET_KEY=${QUAY_DB_SECRET_KEY}
+      - DOMAIN=${DOMAIN}
+      # kanidm doesn't support the test token flow quay's config-tool uses
+      # (authorization_code with a fake code → 400). Boot anyway; OIDC SSO works at runtime.
+      - IGNORE_VALIDATION=true
     volumes:
       - ./config:/conf/stack:Z
       - ${DATA_DIR}/quay-storage:/datastorage:Z,U
@@ -143,6 +154,7 @@ services:
       start_period: 5m
     labels:
       - "kanidm.oidc.client_id=quay"
+      - "kanidm.oidc.redirect_path=/oauth2/kanidm/callback"
       - "security.stig.compliance=true"
       - "traefik.enable=true"
       - "traefik.http.routers.quay.rule=Host(`quay.${DOMAIN}`)"

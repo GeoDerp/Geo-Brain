@@ -48,6 +48,7 @@ services:
       start_period: 5m
     labels:
       - "kanidm.oidc.client_id=minio"
+      - "kanidm.oidc.redirect_path=/oauth_callback"
       - "traefik.enable=true"
       - "traefik.http.routers.minio-console.rule=Host(`minio.${DOMAIN}`)"
       - "traefik.http.routers.minio-console.entrypoints=websecure"

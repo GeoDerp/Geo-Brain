@@ -4,10 +4,11 @@
 
 http:
   middlewares:
-    # OAuth2 Proxy ForwardAuth — natively redirects unauthenticated users to Kanidm
+    # OAuth2 Proxy ForwardAuth — checks session cookie at root; returns 202 for
+    # authenticated users (--upstream=static://202), 302 to Kanidm for unauthenticated.
     oauth2-proxy:
       forwardAuth:
-        address: "http://oauth2-proxy:4180/oauth2/start"
+        address: "http://oauth2-proxy:4180/"
         trustForwardHeader: true
         authResponseHeaders:
           - X-Auth-Request-User
@@ -17,28 +18,12 @@ http:
     # OAuth2 Proxy Admin ForwardAuth — only brain_admins group can access
     oauth2-proxy-admin:
       forwardAuth:
-        address: "http://oauth2-proxy-admin:4180/admin-oauth2/start"
+        address: "http://oauth2-proxy-admin:4180/"
         trustForwardHeader: true
         authResponseHeaders:
           - X-Auth-Request-User
           - X-Auth-Request-Email
           - X-Auth-Request-Groups
-
-    # Redirect to login page on 401 Unauthorized
-    auth-error:
-      errors:
-        status:
-          - "401"
-        service: auth-error-svc
-        query: "/oauth2/start"
-
-    # Redirect to admin login page on 401 Unauthorized
-    auth-admin-error:
-      errors:
-        status:
-          - "401"
-        service: auth-admin-error-svc
-        query: "/admin-oauth2/start"
 
     # CrowdSec bouncer middleware — blocks IPs flagged by CrowdSec LAPI
     crowdsec:
@@ -60,17 +45,6 @@ http:
         stsSeconds: 0
         customFrameOptionsValue: "SAMEORIGIN"
         referrerPolicy: "strict-origin-when-cross-origin"
-
-  services:
-    # Dummy services for auth-error middleware
-    auth-error-svc:
-      loadBalancer:
-        servers:
-          - url: "http://oauth2-proxy:4180"
-    auth-admin-error-svc:
-      loadBalancer:
-        servers:
-          - url: "http://oauth2-proxy-admin:4180"
 
   serversTransports:
     insecure-skip-verify:

@@ -9,7 +9,9 @@
   become: no
   vars:
     repo_root: "{{ playbook_dir | dirname }}"
-    remote_base: "STIG-Homelab"
+    remote_base: "{{ lookup('env', 'REMOTE_PROJECT_DIR') | default('STIG-Homelab', true) }}"
+    # remote_base is read from $REMOTE_PROJECT_DIR env var (set in .env before running ansible-playbook).
+    # Default fallback: 'STIG-Homelab' for backwards compatibility with existing deployments.
     # Base stacks in deployment order
     ordered_stacks:
       - step-ca

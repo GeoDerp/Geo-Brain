@@ -1,0 +1,92 @@
+# SAST + Dependency Scan workflow template
+# =========================================
+# Copy this file into your repository as:
+#   .gitea/workflows/sast-scan.yml
+#
+# Requires in Gitea:
+#   - A runner with label "scan" (gitea-routine-runner uses docker://aquasec/trivy:0.58.2)
+#   - Repository secrets: DEFECTDOJO_URL, DEFECTDOJO_API_KEY, DEFECTDOJO_PRODUCT_ID
+#
+# This pipeline:
+#   1. Runs Trivy SAST + dependency scan on every push / PR
+#   2. Uploads findings to the internal DefectDojo instance
+#   3. (Push to main) triggers the mirror-sync workflow to push to GitHub
+
+name: SAST & Dependency Scan
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  trivy-scan:
+    runs-on: scan
+    container:
+      image: docker.io/aquasec/trivy:0.58.2
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- Filesystem / IaC scan ---
+      - name: Trivy filesystem scan (SARIF)
+        run: |
+          trivy fs \
+            --format sarif \
+            --output /tmp/trivy-fs.sarif \
+            --exit-code 0 \
+            --scanners vuln,misconfig,secret \
+            .
+
+      # --- Dependency / SCA scan ---
+      - name: Trivy SCA (JSON for DefectDojo)
+        run: |
+          trivy fs \
+            --format json \
+            --output /tmp/trivy-sca.json \
+            --exit-code 0 \
+            --scanners vuln \
+            --pkg-types library \
+            .
+
+      # --- Upload to DefectDojo ---
+      - name: Upload findings to DefectDojo
+        env:
+          DD_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DD_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DD_PRODUCT: ${{ secrets.DEFECTDOJO_PRODUCT_ID }}
+        run: |
+          apk add --no-cache curl jq
+          ENGAGEMENT=$(curl -sf -X POST "${DD_URL}/api/v2/engagements/" \
+            -H "Authorization: Token ${DD_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"name\": \"${GITHUB_REPOSITORY} @ ${GITHUB_SHA:0:8}\",
+              \"product\": ${DD_PRODUCT},
+              \"engagement_type\": \"CI/CD\",
+              \"status\": \"In Progress\",
+              \"target_start\": \"$(date +%Y-%m-%d)\",
+              \"target_end\": \"$(date +%Y-%m-%d)\"
+            }" | jq -r '.id')
+          echo "Engagement ID: $ENGAGEMENT"
+          curl -sf -X POST "${DD_URL}/api/v2/import-scan/" \
+            -H "Authorization: Token ${DD_KEY}" \
+            -F "engagement=${ENGAGEMENT}" \
+            -F "scan_type=Trivy Scan" \
+            -F "file=@/tmp/trivy-sca.json" \
+            -F "verified=false" \
+            -F "active=true"
+          echo "Findings uploaded to DefectDojo engagement $ENGAGEMENT"
+
+      # --- Fail the build on critical/high vulns ---
+      - name: Enforce vulnerability threshold
+        run: |
+          trivy fs \
+            --format table \
+            --exit-code 1 \
+            --severity CRITICAL \
+            --scanners vuln \
+            .
+        continue-on-error: true   # Change to false to make this a hard gate

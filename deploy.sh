@@ -35,6 +35,45 @@ DATA_DIR="${DATA_DIR/#\~/$HOME}"
 SSH_KEY="${SSH_KEY:-~/.ssh/id_ed25519}"
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
 
+# Auto-detect Podman default network subnet (for services that need to trust the proxy IP)
+if [[ -z "${PODMAN_SUBNET:-}" ]]; then
+    _detected=$(podman network inspect podman --format '{{range .Subnets}}{{.Subnet}}{{end}}' 2>/dev/null | head -n1 || true)
+    if [[ -n "$_detected" ]]; then
+        export PODMAN_SUBNET="$_detected"
+    fi
+fi
+
+# Validate that critical environment variables are set before deploying
+validate_env() {
+    local errors=0
+    local REQUIRED_VARS=(DOMAIN ADMIN_PASSWORD MINIO_ROOT_PASSWORD QUAY_DB_PASSWORD CLAIR_DB_PASSWORD DEFECTDOJO_DB_PASSWORD)
+    for var in "${REQUIRED_VARS[@]}"; do
+        if [[ -z "${!var:-}" ]]; then
+            echo "[ERROR] Required variable \$$var is not set. Add it to .env"
+            (( errors++ )) || true
+        fi
+    done
+    # Warn on known-weak defaults
+    local WEAK_DEFAULTS=(moodle123! changeme123! minioadmin password admin)
+    for var in MOODLE_DB_PASSWORD MOODLE_ADMIN_PASSWORD MINIO_ROOT_PASSWORD ADMIN_PASSWORD; do
+        val="${!var:-}"
+        for weak in "${WEAK_DEFAULTS[@]}"; do
+            if [[ "$val" == "$weak" ]]; then
+                echo "[WARNING] \$$var is set to a known-weak default value: '$val'"
+            fi
+        done
+    done
+    if (( errors > 0 )); then
+        echo ""
+        echo "Copy .env.example to .env and fill in the required values."
+        exit 1
+    fi
+}
+
+if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
+    validate_env
+fi
+
 if [[ "$COMMAND" == "up" ]]; then
     if [[ ! -f "$REPO_ROOT/certs/ca.crt" ]] || [[ ! -f "$REPO_ROOT/certs/wildcard.crt" ]]; then
         echo -e "\n[WARNING] Missing core certificates (ca.crt or wildcard.crt) in $REPO_ROOT/certs/."
@@ -446,11 +485,6 @@ EOF
         echo "      middlewares:" >> "$output_file"
         IFS=',' read -ra ADDR <<< "$middlewares"
         for i in "${ADDR[@]}"; do
-            if [[ "$i" == "oauth2-proxy@file" ]]; then
-                 echo "        - auth-error@file" >> "$output_file"
-            elif [[ "$i" == "oauth2-proxy-admin@file" ]]; then
-                 echo "        - auth-admin-error@file" >> "$output_file"
-            fi
             echo "        - $i" >> "$output_file"
         done
     fi

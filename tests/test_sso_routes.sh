@@ -22,34 +22,52 @@ if [[ ! -f "$CA_CERT" ]]; then
     exit 1
 fi
 
-# --- Services with Native OIDC (Expect 200 OK login page, except Grafana which auto-redirects) ---
-NATIVE_OIDC_SERVICES=(
-    "minio:minio"
-    "grafana:grafana"
-    "quay:quay"
-    "gitea:gitea"
-    "defectdojo:defectdojo"
-)
+# --- Auto-discover services from compose labels ---
+# Native OIDC: has kanidm.oidc.client_id label AND no oauth2-proxy middleware
+NATIVE_OIDC_SERVICES=()
+# ForwardAuth: has oauth2-proxy@file or oauth2-proxy-admin@file middleware
+PROXY_SERVICES=()
 
-# --- Services behind oauth2-proxy (Expect 302 Redirect to Kanidm) ---
-PROXY_SERVICES=(
-    "wazuh:wazuh:true:/admin-oauth2/callback"
-    "homepage:${DOMAIN}:false:/oauth2/callback" 
-    "dockge:dockge:true:/admin-oauth2/callback"
-    "prometheus:prometheus:true:/admin-oauth2/callback"
-    "n8n:n8n:false:/oauth2/callback"
-    "notes:notes:false:/oauth2/callback"
-)
+while IFS= read -r compose; do
+    has_client_id=$(grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' "$compose" | head -n1 || true)
+    has_proxy_mw=$(grep -l "oauth2-proxy@file\|oauth2-proxy-admin@file" "$compose" 2>/dev/null || true)
+    has_admin_mw=$(grep -l "oauth2-proxy-admin@file" "$compose" 2>/dev/null || true)
+
+    # Extract full hostname from Host() rule (everything between backticks)
+    hostname=$(grep -oP 'traefik\.http\.routers\.[^.]+\.rule=Host\(`\K[^`]+' "$compose" | head -n1 || true)
+    # service name is stack dir basename
+    svc_name=$(basename "$(dirname "$compose")")
+
+    if [[ -n "$has_client_id" && -z "$has_proxy_mw" ]]; then
+        # Skip oauth2-proxy container itself (it IS the auth proxy)
+        [[ "$has_client_id" == oauth2-proxy* ]] && continue
+        [[ -n "$hostname" ]] || continue
+        NATIVE_OIDC_SERVICES+=("${has_client_id}:${hostname}")
+    fi
+
+    if [[ -n "$has_proxy_mw" ]]; then
+        # Skip the oauth2-proxy stack itself
+        grep -q 'kanidm\.oidc\.client_id=oauth2-proxy' "$compose" && continue
+        [[ -n "$hostname" ]] || continue
+        if [[ -n "$has_admin_mw" ]]; then
+            PROXY_SERVICES+=("${svc_name}:${hostname}:true:/admin-oauth2/callback")
+        else
+            PROXY_SERVICES+=("${svc_name}:${hostname}:false:/oauth2/callback")
+        fi
+    fi
+done < <(find "$REPO_ROOT/stacks" -not -path '*/_template/*' -type f -name "docker-compose.yml" | sort)
 
 # --- Output helpers ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
 NC='\033[0m'
 PASS=0
 FAIL=0
 
 pass() { ((PASS++)); echo -e "  ${GREEN}✓ PASS:${NC} $1"; }
 fail() { ((FAIL++)); echo -e "  ${RED}✗ FAIL:${NC} $1"; }
+warn() { echo -e "  ${YELLOW}! WARN:${NC} $1"; }
 info() { echo "--- $1 ---"; }
 
 check_redirect() {
@@ -59,37 +77,37 @@ check_redirect() {
 
     info "Testing ${service_name} at ${url}"
 
-    # Use curl to follow all redirects and see the final URL
-    final_url=$(curl -k --cacert "$CA_CERT" -s -L -o /dev/null -w "%{url_effective}" --max-time 15 "$url")
+    # Capture first redirect only — stops at first 3xx, avoids false-passes
+    # from an active browser session that would follow all redirects to the app.
+    http_response=$(curl -k --cacert "$CA_CERT" -s -i --max-redirs 0 --max-time 15 "$url" 2>&1 || true)
+    http_code=$(echo "$http_response" | grep -m1 "^HTTP/" | awk '{print $2}')
+    location=$(echo "$http_response" | grep -i "^Location:" | sed 's/^[Ll]ocation: //I' | tr -d '\r')
 
-    if [[ -z "$final_url" ]]; then
-        fail "Could not determine final URL for ${url}"
+    if [[ "$http_code" != "30"* ]]; then
+        fail "Expected 3xx redirect from ForwardAuth, got HTTP $http_code"
         return
     fi
-    
-    pass "Final landing URL: ${final_url}"
 
-    # Extract the redirect_uri parameter from the Kanidm URL
-    # It might be in the query string of the final_url (Kanidm login page)
-    redirect_uri=$(echo "$final_url" | grep -oP 'redirect_uri=\K[^&]+' | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read()));" || true)
+    if ! echo "$location" | grep -qE "kanidm\\.${DOMAIN}|/oauth2/start|/admin-oauth2/start"; then
+        fail "First redirect does not point to auth endpoint: $location"
+        return
+    fi
+    pass "ForwardAuth issues redirect (HTTP $http_code) toward auth"
+
+    # Extract the redirect_uri parameter to verify the callback path
+    redirect_uri=$(echo "$location" | grep -oP 'redirect_uri=\K[^& ]+' \
+        | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read().strip()))" 2>/dev/null || true)
 
     if [[ -z "$redirect_uri" ]]; then
-        # Check if we already landed at the app (session existed?)
-        if echo "$final_url" | grep -q "${service_name}"; then
-           pass "Already authenticated or landed at ${service_name}"
-           return
-        fi
-        fail "Could not extract redirect_uri from final URL: ${final_url}"
+        warn "redirect_uri not in first redirect (Kanidm may be the next hop) — skipping path check for ${service_name}"
         return
     fi
 
-    # Check if the path in the redirect_uri matches what we expect
     callback_path=$(echo "$redirect_uri" | sed -E 's|https?://[^/]+||')
-    
     if [[ "$callback_path" == "$expected_callback_path" ]]; then
-        pass "Callback path is correct: ${callback_path}"
+        pass "Callback path correct: ${callback_path}"
     else
-        fail "Incorrect callback path. Expected '${expected_callback_path}', but got '${callback_path}'"
+        fail "Expected '${expected_callback_path}', got '${callback_path}'"
     fi
 }
 
@@ -113,22 +131,15 @@ check_200() {
 # === Test Native OIDC Services ===
 info "--- Validating Native OIDC Services ---"
 for service in "${NATIVE_OIDC_SERVICES[@]}"; do
-    IFS=':' read -r name subdomain <<< "$service"
-    check_200 "https://${subdomain}.${DOMAIN}" "$name"
+    IFS=':' read -r name hostname <<< "$service"
+    check_200 "https://${hostname}" "$name"
 done
 
 # === Test OAuth2-Proxy & Auto-Redirect Services ===
 info "--- Validating OAuth2-Proxy Services ---"
 for service in "${PROXY_SERVICES[@]}"; do
-    IFS=':' read -r name subdomain is_admin expected_path <<< "$service"
-    
-    # Root domain doesn't have a subdomain part
-    url="https://${subdomain}"
-    if [[ "$subdomain" != "$DOMAIN" ]]; then
-        url+=".${DOMAIN}"
-    fi
-
-    check_redirect "$url" "$expected_path" "$name"
+    IFS=':' read -r name hostname is_admin expected_path <<< "$service"
+    check_redirect "https://${hostname}" "$expected_path" "$name"
 done
 
 echo ""

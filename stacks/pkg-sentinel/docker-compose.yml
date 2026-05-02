@@ -21,6 +21,9 @@ services:
     image: localhost/pkg-sentinel:1.0.0
     container_name: pkg-sentinel
     restart: always
+    # Run as the host user so the Podman socket (owned by uid 1000) is accessible.
+    # The data volume uses :Z,U so Podman remaps ownership correctly at runtime.
+    user: "${CONTAINER_UID:-1000}"
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -44,7 +47,11 @@ services:
       - PKG_SENTINEL_TIMEOUT=${PKG_SENTINEL_TIMEOUT:-15s}
       - PKG_SENTINEL_DEFAULT_ACTION=${PKG_SENTINEL_DEFAULT_ACTION:-block}
       - PKG_SENTINEL_PODMAN_SOCK=/run/podman/podman.sock
-      - PKG_SENTINEL_SANDBOX_IMAGE=${PKG_SENTINEL_SANDBOX_IMAGE:-docker.io/library/node:20-alpine}
+      # Sandbox image: pin to a specific semver tag (avoid floating/mutable aliases).
+      # After first pull on each node, further-pin to digest via:
+      #   podman image inspect docker.io/library/node:20.19.1-alpine3.21 --format '{{.Digest}}'
+      # then set PKG_SENTINEL_SANDBOX_IMAGE=docker.io/library/node:20.19.1-alpine3.21@sha256:<digest>
+      - PKG_SENTINEL_SANDBOX_IMAGE=${PKG_SENTINEL_SANDBOX_IMAGE:-docker.io/library/node:20.19.1-alpine3.21}
       - PKG_SENTINEL_RAMDISK=/dev/shm/pkg-sentinel
       - PKG_SENTINEL_AZAZEL_BIN=/usr/local/bin/azazel
       # Optional: Connect to RamaLama for AI-powered behavioral analysis

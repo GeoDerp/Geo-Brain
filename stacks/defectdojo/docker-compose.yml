@@ -34,8 +34,7 @@ services:
       - DD_ADMIN_FIRST_NAME=Admin
       - DD_ADMIN_LAST_NAME=User
     volumes:
-      - ${DATA_DIR}/step-ca/step/certs/root_ca.crt:/etc/extra-ca/root_ca.crt:ro,z
-      - ${STACKS_PATH}/../certs/ca.crt:/etc/extra-ca/temp_ca.crt:ro,z
+      - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/etc/extra-ca/ca-bundle.crt:ro,z
       - defectdojo-static:/app/static
     networks:
       - vulnerability-net
@@ -53,6 +52,7 @@ services:
       start_period: 5m
     labels:
       - "kanidm.oidc.client_id=defectdojo"
+      - "kanidm.oidc.redirect_path=/complete/oidc/"
       - "traefik.enable=true"
       - "traefik.http.routers.defectdojo.rule=Host(`defectdojo.${DOMAIN}`)"
       - "traefik.http.routers.defectdojo.entrypoints=websecure"

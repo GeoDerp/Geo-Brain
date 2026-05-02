@@ -30,15 +30,14 @@ FAIL_COUNT=0
 # These must return valid JSON with the correct issuer.
 info "1. Validating OIDC Discovery Endpoints"
 
-# Common discovery paths
-DISCOVERY_APPS=(
-    "kanidm:https://kanidm.${DOMAIN}/oauth2/openid/oauth2-proxy/.well-known/openid-configuration"
-    "gitea:https://kanidm.${DOMAIN}/oauth2/openid/gitea/.well-known/openid-configuration"
-    "grafana:https://kanidm.${DOMAIN}/oauth2/openid/grafana/.well-known/openid-configuration"
-    "quay:https://kanidm.${DOMAIN}/oauth2/openid/quay/.well-known/openid-configuration"
-    "defectdojo:https://kanidm.${DOMAIN}/oauth2/openid/defectdojo/.well-known/openid-configuration"
-    "minio:https://kanidm.${DOMAIN}/oauth2/openid/minio/.well-known/openid-configuration"
-)
+# Auto-discover all registered OIDC clients from compose labels
+DISCOVERY_APPS=()
+while IFS= read -r compose; do
+    while IFS= read -r client_id; do
+        [[ -z "$client_id" ]] && continue
+        DISCOVERY_APPS+=("${client_id}:https://kanidm.${DOMAIN}/oauth2/openid/${client_id}/.well-known/openid-configuration")
+    done < <(grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' "$compose" 2>/dev/null || true)
+done < <(find "$REPO_ROOT/stacks" -not -path '*/_template/*' -type f -name "docker-compose.yml" | sort)
 
 for app_info in "${DISCOVERY_APPS[@]}"; do
     app="${app_info%%:*}"
@@ -60,10 +59,26 @@ done
 # We simulate a hit to the app and check how it sends the user to Kanidm.
 info "2. Validating Application Redirection Logic"
 
+# Core oauth2-proxy tests are always included
 TEST_CASES=(
     "oauth2-proxy|https://auth.${DOMAIN}/oauth2/start|client_id=oauth2-proxy"
-    "wazuh|https://wazuh.${DOMAIN}|client_id=oauth2-proxy-admin"
+    "oauth2-proxy-admin|https://auth.${DOMAIN}/admin-oauth2/start|client_id=oauth2-proxy-admin"
 )
+# Auto-discover ForwardAuth-protected services
+while IFS= read -r compose; do
+    has_proxy=$(grep -l "oauth2-proxy-admin@file\|oauth2-proxy@file" "$compose" 2>/dev/null || true)
+    [[ -z "$has_proxy" ]] && continue
+    grep -q 'kanidm\.oidc\.client_id=oauth2-proxy' "$compose" && continue
+    hostname=$(grep -oP 'traefik\.http\.routers\.[^.]+\.rule=Host\(`\K[^`]+' "$compose" | head -n1 || true)
+    [[ -z "$hostname" ]] && continue
+    if grep -q "oauth2-proxy-admin@file" "$compose"; then
+        client="oauth2-proxy-admin"
+    else
+        client="oauth2-proxy"
+    fi
+    svc_name=$(basename "$(dirname "$compose")")
+    TEST_CASES+=("${svc_name}|https://${hostname}|client_id=${client}")
+done < <(find "$REPO_ROOT/stacks" -not -path '*/_template/*' -type f -name "docker-compose.yml" | sort)
 
 for test_case in "${TEST_CASES[@]}"; do
     IFS='|' read -r app url params <<< "$test_case"
