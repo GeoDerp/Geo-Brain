@@ -5,7 +5,7 @@ set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
 
 if [[ -z "${KANIDM_ADMIN_PASSWORD:-}" ]]; then
   # Try to recover it
-  KANIDM_ADMIN_PASSWORD=$(podman exec kanidm /sbin/kanidmd recover-account -c /data/server.toml idm_admin 2>/dev/null | grep new_password | grep -o '"[^"]*"' | tr -d '"' || true)
+  KANIDM_ADMIN_PASSWORD=$(systemd-run --user --wait -p Type=oneshot -- sh -c "podman exec kanidm /sbin/kanidmd recover-account -c /data/server.toml idm_admin > /tmp/kanidm-recovery.tmp 2>&1" 2>/dev/null; grep new_password /tmp/kanidm-recovery.tmp 2>/dev/null | grep -o '"[^"]*"' | tr -d '"' || true)
 fi
 
 if [[ -z "$KANIDM_ADMIN_PASSWORD" ]]; then
@@ -120,7 +120,7 @@ done
 INNEREOF
 )
 
-setup_output=$(echo "$payload" | podman run -i --rm --network host --env KANIDM_PASSWORD="${KANIDM_ADMIN_PASSWORD}" docker.io/kanidm/tools:1.9.2 sh 2>&1) || true
+setup_output=$(echo "$payload" | DBUS_SESSION_BUS_ADDRESS="" XDG_RUNTIME_DIR=/run/user/1000 podman run -i --rm --network host --env KANIDM_PASSWORD="${KANIDM_ADMIN_PASSWORD}" docker.io/kanidm/tools:1.9.2 sh 2>&1) || true
 
 UPDATED_ENV=false
 
