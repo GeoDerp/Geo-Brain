@@ -500,7 +500,7 @@ test_gitea_vulnerability_net() {
 }
 
 # =============================================================================
-# REMOTE TESTS — Require SSH access to brain.home.lan
+# REMOTE TESTS — Require SSH access to remote homelab
 # =============================================================================
 
 test_remote_available() {

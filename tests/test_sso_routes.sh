@@ -34,7 +34,7 @@ NATIVE_OIDC_SERVICES=(
 # --- Services behind oauth2-proxy (Expect 302 Redirect to Kanidm) ---
 PROXY_SERVICES=(
     "wazuh:wazuh:true:/admin-oauth2/callback"
-    "homepage:brain.home.lan:false:/oauth2/callback" 
+    "homepage:${DOMAIN}:false:/oauth2/callback" 
     "dockge:dockge:true:/admin-oauth2/callback"
     "prometheus:prometheus:true:/admin-oauth2/callback"
     "n8n:n8n:false:/oauth2/callback"
@@ -124,7 +124,7 @@ for service in "${PROXY_SERVICES[@]}"; do
     
     # Root domain doesn't have a subdomain part
     url="https://${subdomain}"
-    if [[ "$subdomain" != "brain.home.lan" ]]; then
+    if [[ "$subdomain" != "$DOMAIN" ]]; then
         url+=".${DOMAIN}"
     fi
 

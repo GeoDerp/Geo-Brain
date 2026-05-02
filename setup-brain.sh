@@ -1,7 +1,7 @@
 #!/bin/bash
 # @GEMINI.md: Single Source of Truth for this script's mandates.
 # setup-brain.sh
-# Idempotent rootless Podman setup script for the Geo Brain environment
+# Idempotent rootless Podman setup script for the STIG-Homelab environment
 # This script configures Quay, Identity (Kanidm), PKI (Step-CA), SOC (DefectDojo/Wazuh), and Proxy.
 
 set -euo pipefail
@@ -22,7 +22,7 @@ INITIAL_BACKOFF=2
 DATA_DIR=${DATA_DIR:-/var/STIG-Homelab}
 DATA_DIR="${DATA_DIR/#\~/$HOME}"
 
-echo "Starting Geo Brain post-deployment rootless bootstrapper..."
+echo "Starting STIG-Homelab post-deployment rootless bootstrapper..."
 
 # Global state variables
 KANIDM_RECOVERY=""

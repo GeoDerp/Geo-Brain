@@ -61,7 +61,7 @@ fi
 
 # Default email to username@DOMAIN if not explicitly set
 if [[ -z "$EMAIL" ]]; then
-  EMAIL="${USERNAME}@${DOMAIN:-brain.home.lan}"
+  EMAIL="${USERNAME}@${DOMAIN:-example.local}"
 fi
 
 if [[ "$ROLE" != "admin" && "$ROLE" != "user" ]]; then

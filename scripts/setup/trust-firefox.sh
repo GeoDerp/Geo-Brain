@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CERT_FILE="$REPO_ROOT/stacks/traefik/config/certs/root_ca.crt"
 CERT_NAME="STIG-Homelab Homelab CA"
+OLD_NAMES=("Geo-Brain CA" "Geo-Brain Homelab CA" "Omni-Shield CA" "STIG-Homelab CA" "brain.home.lan CA")
 
 if [[ ! -f "$CERT_FILE" ]]; then
     echo "❌ Error: Root CA certificate not found at $CERT_FILE"
@@ -28,20 +29,26 @@ if [[ ! -d "$MOZILLA_DIR" ]]; then
     exit 0
 fi
 
-echo ">>> Importing '$CERT_NAME' into local Firefox profiles..."
+echo ">>> Cleaning up old certificates and importing '$CERT_NAME' into local Firefox profiles..."
 
 # Find all cert9.db files in the Firefox directory
 find "$MOZILLA_DIR" -name "cert9.db" -type f | while read -r certdb; do
     profile_dir=$(dirname "$certdb")
-    echo "  -> Found profile: $profile_dir"
+    echo "  -> Processing profile: $profile_dir"
     
-    # Check if already installed
-    if certutil -L -d "sql:$profile_dir" -n "$CERT_NAME" &>/dev/null; then
-        echo "     [SKIP] Certificate already installed."
+    # Remove old variants to avoid trust conflicts
+    for old_name in "${OLD_NAMES[@]}"; do
+        if certutil -L -d "sql:$profile_dir" -n "$old_name" &>/dev/null; then
+            echo "     [CLEAN] Removing old certificate: $old_name"
+            certutil -D -d "sql:$profile_dir" -n "$old_name" &>/dev/null || true
+        fi
+    done
+
+    # Add the new certificate with full trust flags (TCu,Cu,Tu)
+    if certutil -A -n "$CERT_NAME" -t "TCu,Cu,Tu" -i "$CERT_FILE" -d "sql:$profile_dir"; then
+        echo "     [DONE] Certificate successfully imported as '$CERT_NAME'."
     else
-        # Add the certificate with trust flags for server authentication (C,C,C)
-        certutil -A -n "$CERT_NAME" -t "C,," -i "$CERT_FILE" -d "sql:$profile_dir"
-        echo "     [DONE] Certificate successfully imported!"
+        echo "     [FAIL] Failed to import certificate."
     fi
 done
 

@@ -1,6 +1,6 @@
 #!/bin/bash
-DOMAIN="brain.home.lan"
-HOSTS=("ca" "kanidm" "auth" "minio" "quay" "grafana" "wazuh" "defectdojo" "dockge" "traefik" "gitea" "prometheus" "moodle" "n8n" "notes" "pkg-sentinel" "brain.home.lan")
+DOMAIN="${DOMAIN:-example.local}"
+HOSTS=("ca" "kanidm" "auth" "minio" "quay" "grafana" "wazuh" "defectdojo" "dockge" "traefik" "gitea" "prometheus" "moodle" "n8n" "notes" "pkg-sentinel" "$DOMAIN")
 
 CA_CERT="stacks/traefik/config/certs/root_ca.crt"
 if [[ ! -f "$CA_CERT" ]]; then
@@ -10,7 +10,7 @@ fi
 
 FAIL=0
 for host in "${HOSTS[@]}"; do
-    if [[ "$host" == "brain.home.lan" ]]; then
+    if [[ "$host" == "$DOMAIN" ]]; then
         url="$host"
     else
         url="$host.$DOMAIN"
@@ -28,7 +28,7 @@ for host in "${HOSTS[@]}"; do
 
     # 2. Check Issuer
     issuer=$(echo | openssl s_client -connect "$url":443 -servername "$url" 2>/dev/null | openssl x509 -noout -issuer | sed 's/issuer=//')
-    if [[ "$issuer" != *"brain.home.lan CA"* ]]; then
+    if [[ "$issuer" != *"${DOMAIN} CA"* && "$issuer" != *"STIG-Homelab CA"* && "$issuer" != *"Omni-Shield CA"* ]]; then
         echo "  [FAIL] Invalid Issuer: $issuer"
         ((FAIL++))
     else

@@ -1,10 +1,11 @@
 import requests
 import urllib3
 import sys
+import os
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-domain = "brain.home.lan"
+domain = os.environ.get("DOMAIN", "example.local")
 clients = {
     "grafana": f"https://grafana.{domain}/login/generic_oauth",
     "gitea": f"https://gitea.{domain}/user/oauth2/Kanidm",

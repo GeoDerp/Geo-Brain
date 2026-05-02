@@ -1,5 +1,5 @@
 # =============================================================================
-# GEO-BRAIN DEVELOPER STACK: pkg-sentinel
+# STIG-HOMELAB DEVELOPER STACK: pkg-sentinel
 # =============================================================================
 # Supply-Chain Security Proxy — intercepts package downloads from npm, PyPI,
 # and Maven registries, detonates them in ephemeral rootless Podman sandboxes,

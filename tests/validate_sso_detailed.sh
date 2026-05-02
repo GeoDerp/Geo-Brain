@@ -9,7 +9,7 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
     set -a; source "$REPO_ROOT/.env"; set +a
 fi
 
-DOMAIN="${DOMAIN:-brain.home.lan}"
+DOMAIN="${DOMAIN:-example.local}"
 CA_CERT="$REPO_ROOT/stacks/traefik/config/certs/root_ca.crt"
 
 RED='\033[0;31m'

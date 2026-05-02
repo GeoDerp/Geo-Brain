@@ -11,7 +11,7 @@ fi
 
 USERNAME="${1:-temp-tester}"
 DISPLAY_NAME="OIDC Automated Tester"
-DOMAIN="${DOMAIN:-brain.home.lan}"
+DOMAIN="${DOMAIN:-example.local}"
 KANIDM_URL="https://kanidm.${DOMAIN}"
 ADMIN_PASS="${KANIDM_ADMIN_PASSWORD:?KANIDM_ADMIN_PASSWORD must be set in .env}"
 

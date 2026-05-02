@@ -83,7 +83,7 @@ for APP_INFO in \$EXPECTED_APPS; do
     kanidm system oauth2 add-redirect-url "\$APP" "\${REDIRECT_URL}" -C /tmp/ca.crt >/dev/null 2>&1 || true
     # Register additional common variants
     if [ "\$APP" = "grafana" ]; then
-         kanidm system oauth2 add-redirect-url "\$APP" "https://grafana.brain.home.lan/login/generic_oauth" -C /tmp/ca.crt >/dev/null 2>&1 || true
+         kanidm system oauth2 add-redirect-url "\$APP" "https://grafana.${DOMAIN}/login/generic_oauth" -C /tmp/ca.crt >/dev/null 2>&1 || true
     fi
     # Register oauth2-proxy clients
     if [ "\$APP" = "oauth2-proxy" ]; then

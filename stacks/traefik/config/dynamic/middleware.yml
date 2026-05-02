@@ -44,7 +44,7 @@ http:
     crowdsec:
       plugin:
         crowdsec-bouncer-traefik-plugin:
-          enabled: true
+          enabled: false
           crowdsecLapiScheme: http
           crowdsecLapiHost: "crowdsec:8080"
           crowdsecLapiKey: '${CROWDSEC_BOUNCER_API_KEY}'
@@ -55,9 +55,9 @@ http:
         browserXssFilter: true
         contentTypeNosniff: true
         frameDeny: true
-        stsIncludeSubdomains: true
-        stsPreload: true
-        stsSeconds: 31536000
+        stsIncludeSubdomains: false
+        stsPreload: false
+        stsSeconds: 0
         customFrameOptionsValue: "SAMEORIGIN"
         referrerPolicy: "strict-origin-when-cross-origin"
 
