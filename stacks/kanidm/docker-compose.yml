@@ -37,6 +37,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.kanidm.rule=Host(`kanidm.${DOMAIN}`)"
+      - "traefik.http.routers.kanidm.priority=2000"
       - "traefik.http.routers.kanidm.entrypoints=websecure"
       - "traefik.http.routers.kanidm.tls=true"
       - "traefik.http.routers.kanidm.middlewares=security-headers@file"

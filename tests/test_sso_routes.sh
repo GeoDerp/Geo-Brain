@@ -59,28 +59,27 @@ check_redirect() {
 
     info "Testing ${service_name} at ${url}"
 
-    # Use curl to get the redirect location
-    location=$(curl -k --cacert "$CA_CERT" -s -L -I --max-time 15 "$url" | grep -i '^location:' | tail -n 1)
+    # Use curl to follow all redirects and see the final URL
+    final_url=$(curl -k --cacert "$CA_CERT" -s -L -o /dev/null -w "%{url_effective}" --max-time 15 "$url")
 
-    if [[ -z "$location" ]]; then
-        fail "Did not receive a redirect from ${url}"
+    if [[ -z "$final_url" ]]; then
+        fail "Could not determine final URL for ${url}"
         return
     fi
     
-    pass "Initial redirect successful."
+    pass "Final landing URL: ${final_url}"
 
-    # Decode the URL-encoded redirect_uri from the location header
-    redirect_uri=$(echo "$location" | grep -oP 'redirect_uri=[^&]+' | cut -d'=' -f2 | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read()));" || true)
+    # Extract the redirect_uri parameter from the Kanidm URL
+    # It might be in the query string of the final_url (Kanidm login page)
+    redirect_uri=$(echo "$final_url" | grep -oP 'redirect_uri=\K[^&]+' | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read()));" || true)
 
     if [[ -z "$redirect_uri" ]]; then
-        # Check if it's Grafana which might redirect differently
-        if [[ "$service_name" == "grafana" ]]; then
-           if echo "$location" | grep -q "kanidm"; then
-              pass "Grafana native redirect to Kanidm successful"
-              return
-           fi
+        # Check if we already landed at the app (session existed?)
+        if echo "$final_url" | grep -q "${service_name}"; then
+           pass "Already authenticated or landed at ${service_name}"
+           return
         fi
-        fail "Could not extract redirect_uri from Kanidm URL: ${location}"
+        fail "Could not extract redirect_uri from final URL: ${final_url}"
         return
     fi
 

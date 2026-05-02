@@ -16,19 +16,19 @@ services:
       - MINIO_CERTS_DIR=/root/.minio/certs
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_IDENTITY_OPENID_ENABLE=on
+      - MINIO_IDENTITY_OPENID_DISPLAY_NAME=Kanidm
       - MINIO_IDENTITY_OPENID_CONFIG_URL=https://kanidm.${DOMAIN}/oauth2/openid/minio/.well-known/openid-configuration
       - MINIO_IDENTITY_OPENID_CLIENT_ID=minio
       - MINIO_IDENTITY_OPENID_CLIENT_SECRET=${MINIO_OIDC_SECRET}
       - MINIO_IDENTITY_OPENID_SCOPES=openid,profile,email,groups
-      - MINIO_IDENTITY_OPENID_REDIRECT_URI=https://minio.${DOMAIN}/oauth_callback
-      - MINIO_IDENTITY_OPENID_DISPLAY_NAME=Kanidm
       - MINIO_SERVER_URL=https://minio.${DOMAIN}
       - MINIO_BROWSER_REDIRECT_URL=https://minio.${DOMAIN}
       - MINIO_UPDATE=off
       - MINIO_PROMETHEUS_AUTH_TYPE=public
     volumes:
       - ${DATA_DIR}/minio:/data:Z,U
-      - ${STACKS_PATH}/../certs/ca.crt:/root/.minio/certs/CAs/ca.crt:ro,z
+      - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/root/.minio/certs/CAs/ca.crt:ro,z
     ports:
       - 9000:9000
       - 9001:9001

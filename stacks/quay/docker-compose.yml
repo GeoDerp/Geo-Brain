@@ -126,7 +126,6 @@ services:
       - "8080:8080"
     volumes:
       - ./config:/conf/stack:Z
-      - ../../stacks/traefik/config/certs/ca-bundle.crt:/conf/stack/extra_ca_certs/ca-bundle.crt:ro,Z
       - ${DATA_DIR}/quay-storage:/datastorage:Z,U
     networks:
       - quay-net
@@ -134,7 +133,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 6G
+          memory: 10G
           cpus: '2.0'
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health/instance')\""]

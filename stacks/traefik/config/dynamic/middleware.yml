@@ -4,10 +4,10 @@
 
 http:
   middlewares:
-    # OAuth2 Proxy ForwardAuth — redirects unauthenticated users to Kanidm login
+    # OAuth2 Proxy ForwardAuth — natively redirects unauthenticated users to Kanidm
     oauth2-proxy:
       forwardAuth:
-        address: "http://oauth2-proxy:4180/oauth2/auth"
+        address: "http://oauth2-proxy:4180/oauth2/start"
         trustForwardHeader: true
         authResponseHeaders:
           - X-Auth-Request-User
@@ -17,7 +17,7 @@ http:
     # OAuth2 Proxy Admin ForwardAuth — only brain_admins group can access
     oauth2-proxy-admin:
       forwardAuth:
-        address: "http://oauth2-proxy-admin:4180/admin-oauth2/auth"
+        address: "http://oauth2-proxy-admin:4180/admin-oauth2/start"
         trustForwardHeader: true
         authResponseHeaders:
           - X-Auth-Request-User
@@ -30,7 +30,7 @@ http:
         status:
           - "401"
         service: auth-error-svc
-        query: "/oauth2/start?rd={header.X-Forwarded-Uri}"
+        query: "/oauth2/start"
 
     # Redirect to admin login page on 401 Unauthorized
     auth-admin-error:
@@ -38,7 +38,7 @@ http:
         status:
           - "401"
         service: auth-admin-error-svc
-        query: "/admin-oauth2/start?rd={header.X-Forwarded-Uri}"
+        query: "/admin-oauth2/start"
 
     # CrowdSec bouncer middleware — blocks IPs flagged by CrowdSec LAPI
     crowdsec:

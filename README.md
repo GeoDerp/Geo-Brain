@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/logo.svg" alt="Geo-Brain SSOF Logo" width="128"/>
+  <img src="./docs/logo.svg" alt="STIG-Homelab SSOF Logo" width="128"/>
 </br>
 <img src="./docs/homepage.png" />
 </p>
@@ -7,9 +7,9 @@
 
 
 
-# Geo-Brain: Single Node Homelab
+# STIG-Homelab: Single Node Homelab
 
-Welcome to the **Geo-Brain** Single Source of Truth (SSOT) repository. This project deploys a highly secure, STIG-compliant, and fully containerized homelab on a single node using rootless **Podman** and **Docker Compose**.
+Welcome to the **STIG-Homelab** Single Source of Truth (SSOT) repository. This project deploys a highly secure, STIG-compliant, and fully containerized homelab on a single node using rootless **Podman** and **Docker Compose**.
 
 > **Note:** This is not a CI/CD pipeline. It focuses on operational security, monitoring, and robust zero-trust access for pre-built containers.
 
@@ -19,7 +19,7 @@ For a detailed breakdown of every tool and architectural choice, see **[TOOLS_EX
 
 ## 📖 Overview
 
-The Geo-Brain homelab is organized into discrete **stacks**:
+The STIG-Homelab homelab is organized into discrete **stacks**:
 
 - **Core Infrastructure:** `step-ca` (Internal PKI), `quay` (Container Registry), `traefik` (Reverse Proxy)
 - **Identity & Access:** `kanidm` (Identity Provider), `oauth2-proxy` (SSO via OIDC)
@@ -34,7 +34,7 @@ The Geo-Brain homelab is organized into discrete **stacks**:
 
 ## 🚀 Quick Start Guide
 
-Follow these steps to deploy Geo-Brain from scratch on a remote node (e.g., `myhost.example.local`).
+Follow these steps to deploy STIG-Homelab from scratch on a remote node (e.g., `myhost.example.local`).
 
 ### Step 1: Environment Configuration
 
@@ -93,7 +93,7 @@ To avoid browser warnings, install the combined CA bundle (which includes the St
 
 - **Fedora/RHEL/openSUSE:** 
   ```bash
-  sudo cp stacks/traefik/config/certs/ca-bundle.crt /etc/pki/ca-trust/source/anchors/Geo-Brain-ca.crt && sudo update-ca-trust
+  sudo cp stacks/traefik/config/certs/ca-bundle.crt /etc/pki/ca-trust/source/anchors/STIG-Homelab-ca.crt && sudo update-ca-trust
   ```
 - **macOS:**
   ```bash
@@ -170,7 +170,7 @@ If you need to completely wipe the installation (destroy all data, volumes, and 
 ```bash
 ./scripts/clean-node.sh
 ```
-*Warning: This script permanently deletes `/var/Geo-Brain` and all rootless podman data on the remote node.*
+*Warning: This script permanently deletes `/var/STIG-Homelab` and all rootless podman data on the remote node.*
 
 ---
 

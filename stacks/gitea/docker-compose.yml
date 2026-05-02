@@ -52,7 +52,7 @@ services:
       - vulnerability-net
     volumes:
       - ${DATA_DIR}/gitea/data:/data:Z,U
-      - ${STACKS_PATH}/../certs/ca.crt:/usr/local/share/ca-certificates/step-ca.crt:ro,z
+      - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/usr/local/share/ca-certificates/step-ca.crt:ro,z
     entrypoint: ["/bin/sh", "-c", "cat /usr/local/share/ca-certificates/step-ca.crt >> /etc/ssl/certs/ca-certificates.crt && exec /usr/bin/entrypoint"]
     deploy:
       resources:

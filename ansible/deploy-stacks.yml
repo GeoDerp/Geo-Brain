@@ -1,15 +1,15 @@
 ---
 # ansible/deploy-stacks.yml
-# Ansible playbook to securely and declaratively deploy Geo-Brain stacks.
+# Ansible playbook to securely and declaratively deploy STIG-Homelab stacks.
 # Matches GEMINI.md mandate: "Declarative: All deployments and configurations must be strictly declarative."
 # Replaces the imperative logic of deploy.sh.
 
-- name: Deploy Geo-Brain Stacks
+- name: Deploy STIG-Homelab Stacks
   hosts: all
   become: no
   vars:
     repo_root: "{{ playbook_dir | dirname }}"
-    remote_base: "Geo-Brain"
+    remote_base: "STIG-Homelab"
     # Base stacks in deployment order
     ordered_stacks:
       - step-ca
@@ -127,7 +127,7 @@
     - name: Ensure compose volume directories exist on remote
       shell: |
         set -a; [ -f "$HOME/{{ remote_base }}/.env" ] && source "$HOME/{{ remote_base }}/.env"; set +a
-        DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
+        DATA_DIR="${DATA_DIR:-/var/STIG-Homelab}"
         DATA_DIR="${DATA_DIR/#\~/$HOME}"
         COMPOSE_FILE="$HOME/{{ remote_base }}/stacks/{{ item }}/docker-compose.yml"
         
@@ -155,6 +155,14 @@
       synchronize:
         src: "{{ repo_root }}/certs/"
         dest: "~/{{ remote_base }}/certs/"
+        owner: no
+        group: no
+      ignore_errors: true
+
+    - name: Synchronize scripts
+      synchronize:
+        src: "{{ repo_root }}/scripts/"
+        dest: "~/{{ remote_base }}/scripts/"
         owner: no
         group: no
       ignore_errors: true

@@ -94,9 +94,9 @@ def check_data_separation(compose_file, data):
                     # allowed absolute paths must start with variables
                     pass
                 if not (host_path.startswith('${DATA_DIR}') or host_path.startswith('./') or host_path.startswith('../') or host_path.startswith('${PODMAN_SOCK}') or host_path.startswith('${STACKS_PATH}') or not host_path.startswith('/')):
-                    # Some paths might be valid like /etc/localtime, let's just fail if it's hardcoded /var/Geo-Brain instead of ${DATA_DIR}
-                    if '/var/Geo-Brain' in host_path:
-                        failures += fail(f"[{stack}/{svc_name}] Volume '{vol}' uses hardcoded /var/Geo-Brain instead of ${{DATA_DIR}}")
+                    # Some paths might be valid like /etc/localtime, let's just fail if it's hardcoded /var/STIG-Homelab instead of ${DATA_DIR}
+                    if '/var/STIG-Homelab' in host_path:
+                        failures += fail(f"[{stack}/{svc_name}] Volume '{vol}' uses hardcoded /var/STIG-Homelab instead of ${{DATA_DIR}}")
     if failures == 0: pass_test(f"[{stack}] Data Separation rules met")
     return failures
 

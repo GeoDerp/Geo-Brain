@@ -34,3 +34,4 @@ stacks/harbor/config/core/root.crt
 stacks/traefik/config/dynamic/gen_*.yml
 stacks/traefik/config/dynamic/tls.yml
 /certs/
+.aider*

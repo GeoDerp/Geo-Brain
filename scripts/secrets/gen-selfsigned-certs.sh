@@ -40,12 +40,12 @@ DOMAIN="${DOMAIN:-example.local}"
 CA_DAYS=3650    # CA valid 10 years
 CERT_DAYS=825   # Leaf cert valid ~2.25 years (Apple max)
 KEY_SIZE=4096
-CA_SUBJECT="/C=US/ST=Local/L=Homelab/O=GEO-Brain/OU=SSOF/CN=${DOMAIN} Temporary CA"
+CA_SUBJECT="/C=US/ST=Local/L=Homelab/O=STIG-Homelab/OU=SSOF/CN=${DOMAIN} Temporary CA"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
 REMOTE_HOST="${REMOTE_HOST:-homelab.local}"
 REMOTE_USER="${REMOTE_USER:-$USER}"
-DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
+DATA_DIR="${DATA_DIR:-/var/STIG-Homelab}"
 
 _SCRIPT_STARTED_AGENT=0
 cleanup() {
@@ -221,7 +221,7 @@ prompt             = no
 C  = US
 ST = Local
 L  = Homelab
-O  = GEO-Brain
+O  = STIG-Homelab
 OU = SSOF
 CN = *.${DOMAIN}
 
@@ -276,7 +276,7 @@ distinguished_name = dn
 C = US
 ST = Local
 L = Homelab
-O = GEO-Brain
+O = STIG-Homelab
 OU = SSOF
 CN = idm.$DOMAIN
 
@@ -387,12 +387,12 @@ if $DO_TRUST_LOCAL; then
   # Detect OS and install accordingly
   if command -v update-ca-trust &>/dev/null; then
     # RHEL/Fedora/openSUSE
-    sudo cp "$CERT_DIR/ca.crt" /etc/pki/ca-trust/source/anchors/Geo-Brain-ca.crt
+    sudo cp "$CERT_DIR/ca.crt" /etc/pki/ca-trust/source/anchors/STIG-Homelab-ca.crt
     sudo update-ca-trust
     echo "    Installed via update-ca-trust (RHEL/Fedora/SUSE)"
   elif command -v update-ca-certificates &>/dev/null; then
     # Debian/Ubuntu
-    sudo cp "$CERT_DIR/ca.crt" /usr/local/share/ca-certificates/Geo-Brain-ca.crt
+    sudo cp "$CERT_DIR/ca.crt" /usr/local/share/ca-certificates/STIG-Homelab-ca.crt
     sudo update-ca-certificates
     echo "    Installed via update-ca-certificates (Debian/Ubuntu)"
   else
@@ -404,7 +404,7 @@ if $DO_TRUST_LOCAL; then
   if command -v certutil &>/dev/null; then
     for certdb in $(find "$HOME" -name "cert9.db" -path "*/mozilla/*" 2>/dev/null); do
       dbdir="$(dirname "$certdb")"
-      certutil -A -n "Geo-Brain-ca" -t "CT,C,C" -i "$CERT_DIR/ca.crt" -d "sql:$dbdir" 2>/dev/null && \
+      certutil -A -n "STIG-Homelab-ca" -t "CT,C,C" -i "$CERT_DIR/ca.crt" -d "sql:$dbdir" 2>/dev/null && \
         echo "    Added to NSS DB: $dbdir" || true
     done
   fi
@@ -422,12 +422,12 @@ if $DO_TRUST_REMOTE; then
   echo ">>> Installing CA into remote host trust store ($REMOTE_HOST)..."
   scp -i "$SSH_KEY" \
     "$CERT_DIR/ca.crt" \
-    "${REMOTE_USER}@${REMOTE_HOST}:/tmp/Geo-Brain-ca.crt"
+    "${REMOTE_USER}@${REMOTE_HOST}:/tmp/STIG-Homelab-ca.crt"
 
-  ssh_cmd "sudo cp /tmp/Geo-Brain-ca.crt /etc/pki/ca-trust/source/anchors/Geo-Brain-ca.crt 2>/dev/null || \
-           sudo cp /tmp/Geo-Brain-ca.crt /usr/local/share/ca-certificates/Geo-Brain-ca.crt 2>/dev/null; \
+  ssh_cmd "sudo cp /tmp/STIG-Homelab-ca.crt /etc/pki/ca-trust/source/anchors/STIG-Homelab-ca.crt 2>/dev/null || \
+           sudo cp /tmp/STIG-Homelab-ca.crt /usr/local/share/ca-certificates/STIG-Homelab-ca.crt 2>/dev/null; \
            sudo update-ca-trust 2>/dev/null || sudo update-ca-certificates 2>/dev/null; \
-           rm -f /tmp/Geo-Brain-ca.crt; \
+           rm -f /tmp/STIG-Homelab-ca.crt; \
            echo 'CA installed on remote'"
 fi
 

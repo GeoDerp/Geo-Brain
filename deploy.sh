@@ -30,7 +30,7 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
 fi
 
 # Expand tilde in DATA_DIR and SSH_KEY if they exist
-DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
+DATA_DIR="${DATA_DIR:-/var/STIG-Homelab}"
 DATA_DIR="${DATA_DIR/#\~/$HOME}"
 SSH_KEY="${SSH_KEY:-~/.ssh/id_ed25519}"
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
@@ -78,7 +78,7 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
     ensure_ssh_agent
     PODMAN_CONNECTION="${PODMAN_CONNECTION:-homelab}"
     SSH_CMD=(ssh -o StrictHostKeyChecking=accept-new -i "${SSH_KEY}" -p "${SSH_PORT:-22}" "${REMOTE_USER}@${REMOTE_HOST}")
-    REMOTE_BASE="${REMOTE_PROJECT_DIR:-Geo-Brain}"
+    REMOTE_BASE="${REMOTE_PROJECT_DIR:-STIG-Homelab}"
 else
     DEPLOY_MODE="local"
     LOCAL_UID=$(id -u)
@@ -372,11 +372,12 @@ generate_traefik_config() {
     # Use the service name as the subdomain if not explicitly overridden by labels
     local rule="Host(\`${service_name}.${DOMAIN}\`)"
     if grep -q "traefik.http.routers.*.rule" "$compose_file"; then
-        local raw_rule=$(grep "traefik.http.routers.*.rule" "$compose_file" | sed -E 's/.*Host\(`([^`]+)`\).*/\1/' | head -n 1)
-        rule="Host(\`$(echo "$raw_rule" | sed "s/\${DOMAIN}/${DOMAIN}/g" | sed "s/\$DOMAIN/${DOMAIN}/g" | sed "s/{{DOMAIN}}/${DOMAIN}/g")\`)"
+        local raw_rule=$(grep "traefik.http.routers.*.rule" "$compose_file" | sed -E 's/.*rule="?([^"]+)"?/\1/' | head -n 1)
+        rule=$(echo "$raw_rule" | sed "s/\${DOMAIN}/${DOMAIN}/g" | sed "s/\$DOMAIN/${DOMAIN}/g" | sed "s/{{DOMAIN}}/${DOMAIN}/g" | sed 's/\$\$/$/g' | sed 's/\\\\/\\/g')
     fi
     
     local port=$(grep "traefik.http.services.*.port" "$compose_file" | sed -E 's/.*port[=:]"?([0-9]+)"?.*/\1/' | head -n 1)
+    local priority=$(grep "traefik.http.routers.*.priority" "$compose_file" | sed -E 's/.*priority[=:]"?([0-9]+)"?.*/\1/' | head -n 1)
     local scheme=$(grep "traefik.http.services.*.scheme" "$compose_file" | sed -E 's/.*scheme[=:]"?([https]+)"?.*/\1/' | head -n 1)
     local resolver=$(grep "traefik.http.routers.*.certresolver" "$compose_file" | sed -E 's/.*certresolver[=:]"?([^"]+)"?.*/\1/' | head -n 1)
     local middlewares=$(grep "traefik.http.routers.*.middlewares" "$compose_file" | sed -E 's/.*middlewares[=:]"?([^"]+)"?.*/\1/' | head -n 1)
@@ -429,7 +430,8 @@ generate_traefik_config() {
 http:
   routers:
     ${stack_name/\//_}_${service_name}:
-      rule: "$rule"
+      rule: '$rule'
+$(if [[ -n "$priority" ]]; then echo "      priority: $priority"; fi)
       entryPoints:
         - websecure
       service: ${custom_service:-${stack_name/\//_}_${service_name}}

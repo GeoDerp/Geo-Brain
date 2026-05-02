@@ -31,15 +31,14 @@ services:
       - BPF           # Required for eBPF program attachment
       - PERFMON       # Required for perf event access
     read_only: true
-    tmpfs:
-      - /tmp
     volumes:
       # Podman socket for sandbox container lifecycle (read-only)
       - ${PODMAN_SOCK}:/run/podman/podman.sock:ro
-      # RAM disk for temporary package cache during detonation
-      - /dev/shm/pkg-sentinel:/dev/shm/pkg-sentinel:Z
       # Persistent log storage
       - ${DATA_DIR}/pkg-sentinel/logs:/var/log/pkg-sentinel:Z,U
+    tmpfs:
+      - /tmp
+      - /dev/shm/pkg-sentinel
     environment:
       - PKG_SENTINEL_LISTEN=:8443
       - PKG_SENTINEL_TIMEOUT=${PKG_SENTINEL_TIMEOUT:-15s}

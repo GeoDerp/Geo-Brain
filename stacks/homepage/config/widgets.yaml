@@ -1,7 +1,7 @@
 ---
 - greeting:
     text_size: xl
-    text: Geo-Brain
+    text: STIG-Homelab
 - datetime:
     text_size: l
     format:

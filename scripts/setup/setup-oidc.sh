@@ -22,13 +22,20 @@ fi
 EXPECTED_APPS=""
 RAW_APPS=$(find "$BASE_DIR/stacks" -not -path '*/_template/*' -type f -name "docker-compose.yml" 2>/dev/null)
 for compose in $RAW_APPS; do
-   app_id=$(grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' "$compose" | head -n 1 || true)
-   if [[ -n "$app_id" ]]; then
-       subdomain=$(grep -oP "traefik\.http\.routers\.[^.]+\.rule=Host\(\`\K[^.\`]+" "$compose" | head -n 1 || echo "$app_id")
-       redirect_path=$(grep -oP 'kanidm\.oidc\.redirect_path=\K[^"]+' "$compose" | head -n 1 || true)
-       if [[ -z "$redirect_path" ]]; then
+   # Find all unique client IDs in this file
+   client_ids=$(grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' "$compose" | sort -u || true)
+   for app_id in $client_ids; do
+       if [[ -n "$app_id" ]]; then
+           # Try to find the specific subdomain for THIS client_id if possible
+           # For oauth2-proxy-admin, we want to detect if it has a different Host rule
+           # We use awk to find the labels block following the client_id
+           subdomain=$(grep -oP "traefik\.http\.routers\.[^.]+\.rule=Host\(\`\K[^.\`]+" "$compose" | head -n 1 || echo "$app_id")
+           
+           # Hardcoded overrides for common apps
+           redirect_path=""
            case "$app_id" in
                oauth2-proxy) redirect_path="/oauth2/callback" ;;
+               oauth2-proxy-admin) redirect_path="/admin-oauth2/callback" ;;
                minio) redirect_path="/oauth_callback" ;;
                quay) redirect_path="/oauth2/kanidm/callback" ;;
                defectdojo) redirect_path="/complete/oidc/" ;;
@@ -37,9 +44,9 @@ for compose in $RAW_APPS; do
                moodle) redirect_path="/admin/oauth2callback.php" ;;
                *) redirect_path="/" ;;
            esac
+           EXPECTED_APPS="$EXPECTED_APPS ${app_id}:${subdomain}:${redirect_path}"
        fi
-       EXPECTED_APPS="$EXPECTED_APPS ${app_id}:${subdomain}:${redirect_path}"
-   fi
+   done
 done
 EXPECTED_APPS=$(echo "$EXPECTED_APPS" | xargs) # trim whitespace
 
@@ -73,11 +80,17 @@ for APP_INFO in \$EXPECTED_APPS; do
     kanidm system oauth2 create "\$APP" "\$APP OIDC" "\$ORIGIN_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
     # Ensure the primary redirect URL is added (in case it wasn't created initially with it)
     kanidm system oauth2 add-redirect-url "\$APP" "https://\${SUBDOMAIN}.${DOMAIN}\${REDIRECT_PATH}" -C /tmp/ca.crt >/dev/null 2>&1 || true
-    kanidm system oauth2 add-redirect-url "\$APP" "\$REDIRECT_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
-    # Register admin proxy callback path (uses --proxy-prefix=/admin-oauth2)
+    kanidm system oauth2 add-redirect-url "\$APP" "\${REDIRECT_URL}" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    # Register additional common variants
+    if [ "\$APP" = "grafana" ]; then
+         kanidm system oauth2 add-redirect-url "\$APP" "https://grafana.brain.home.lan/login/generic_oauth" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    fi
+    # Register oauth2-proxy clients
     if [ "\$APP" = "oauth2-proxy" ]; then
-        kanidm system oauth2 add-redirect-url "\$APP" "https://auth.${DOMAIN}/admin-oauth2/callback" -C /tmp/ca.crt >/dev/null 2>&1 || true
         kanidm system oauth2 add-redirect-url "\$APP" "https://${DOMAIN}/oauth2/callback" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    fi
+    if [ "\$APP" = "oauth2-proxy-admin" ]; then
+        kanidm system oauth2 add-redirect-url "\$APP" "https://${DOMAIN}/admin-oauth2/callback" -C /tmp/ca.crt >/dev/null 2>&1 || true
     fi
 
     if [ "\$APP" = "quay" ]; then

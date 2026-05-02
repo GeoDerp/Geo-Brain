@@ -10,7 +10,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CERT_FILE="$REPO_ROOT/stacks/traefik/config/certs/root_ca.crt"
-CERT_NAME="Geo-Brain Homelab CA"
+CERT_NAME="STIG-Homelab Homelab CA"
 
 if [[ ! -f "$CERT_FILE" ]]; then
     echo "❌ Error: Root CA certificate not found at $CERT_FILE"
@@ -46,8 +46,32 @@ find "$MOZILLA_DIR" -name "cert9.db" -type f | while read -r certdb; do
 done
 
 echo "================================================="
+echo ">>> Attempting to install CA into the system trust store..."
+echo "    (This enables Firefox's 'security.enterprise_roots.enabled' feature)"
+echo "    You may be prompted for your sudo password."
+
+if [ -d "/etc/pki/ca-trust/source/anchors/" ]; then
+    # Fedora / CentOS / RHEL
+    if sudo cp "$CERT_FILE" /etc/pki/ca-trust/source/anchors/stig-homelab-ca.crt; then
+        sudo update-ca-trust
+        echo "    [DONE] System trust store updated (Fedora/RHEL)."
+    else
+        echo "    [WARN] Failed to copy to /etc/pki/ca-trust/source/anchors/. Skipping system-wide trust."
+    fi
+elif [ -d "/usr/local/share/ca-certificates/" ]; then
+    # Ubuntu / Debian
+    if sudo cp "$CERT_FILE" /usr/local/share/ca-certificates/stig-homelab-ca.crt; then
+        sudo update-ca-certificates
+        echo "    [DONE] System trust store updated (Debian/Ubuntu)."
+    else
+        echo "    [WARN] Failed to copy to /usr/local/share/ca-certificates/. Skipping system-wide trust."
+    fi
+else
+    echo "    [WARN] OS trust store directory not recognized. Skipping system-wide trust."
+fi
+
+echo "================================================="
 echo "✅ Complete! Restart Firefox for the changes to take effect."
-echo "   Alternatively, you can go to about:config and set:"
-echo "   security.enterprise_roots.enabled = true"
-echo "   to force Firefox to use the system-wide certificate store."
+echo "   Since 'security.enterprise_roots.enabled' is true, Firefox"
+echo "   will now natively trust the STIG-Homelab CA from the OS store."
 echo "================================================="

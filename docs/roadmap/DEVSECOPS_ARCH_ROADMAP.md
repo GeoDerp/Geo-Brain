@@ -1,6 +1,6 @@
-# GEO-Brain DevSecOps Architectural Roadmap
+# STIG-Homelab DevSecOps Architectural Roadmap
 
-This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from its current state into a highly resilient, enterprise-ready DevSecOps platform, strictly maintaining the rootless Podman architecture.
+This roadmap outlines the prioritized steps to mature the STIG-Homelab homelab from its current state into a highly resilient, enterprise-ready DevSecOps platform, strictly maintaining the rootless Podman architecture.
 
 ## Phase 1: Immediate Fixes (Bootstrapping & Core Security)
 

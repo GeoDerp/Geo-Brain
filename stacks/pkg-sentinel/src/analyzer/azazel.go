@@ -16,7 +16,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/geo-brain/pkg-sentinel/rules"
+	"github.com/stig-homelab/pkg-sentinel/rules"
 )
 
 // Result captures the outcome of an Azazel detonation analysis session.

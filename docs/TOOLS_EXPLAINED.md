@@ -1,6 +1,6 @@
-# GEO-Brain Tools: A Deep Dive
+# STIG-Homelab Tools: A Deep Dive
 
-This document provides an educational overview of all tools and technologies used in the GEO-Brain SSOF homelab infrastructure. It explains what each tool does, why it was selected, and how it fits into the overall security-focused architecture defined in [GEMINI.md](../GEMINI.md).
+This document provides an educational overview of all tools and technologies used in the STIG-Homelab SSOF homelab infrastructure. It explains what each tool does, why it was selected, and how it fits into the overall security-focused architecture defined in [GEMINI.md](../GEMINI.md).
 
 ---
 
@@ -46,7 +46,7 @@ This document provides an educational overview of all tools and technologies use
 
 ## Architecture Diagram
 
-The following diagram illustrates how all components interact within the GEO-Brain homelab infrastructure. Edge labels describe what data flows between components.
+The following diagram illustrates how all components interact within the STIG-Homelab homelab infrastructure. Edge labels describe what data flows between components.
 
 ```mermaid
 graph TD
@@ -287,7 +287,7 @@ labels:
 - **Real-time Logs:** View container logs directly from the UI.
 - **YAML Editing:** Built-in editor for compose files with syntax highlighting.
 
-**Integration with GEO-Brain:**
+**Integration with STIG-Homelab:**
 - All stacks in this repository are managed through Dockge
 - Changes are synced from Git to ensure version control
 - Provides visual feedback on stack health and status
@@ -645,4 +645,4 @@ Client → Traefik (TLS) → Caddy Sidecar (mTLS) → 127.0.0.1:app_port → App
 
 ---
 
-*This document is part of the GEO-Brain SSOF (Single Source of Truth) repository. For architectural mandates and system requirements, see [GEMINI.md](../GEMINI.md).*
+*This document is part of the STIG-Homelab SSOF (Single Source of Truth) repository. For architectural mandates and system requirements, see [GEMINI.md](../GEMINI.md).*

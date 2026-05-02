@@ -1,4 +1,4 @@
-# GEMINI Context: Geo-Brain (Single Source of Truth)
+# GEMINI Context: STIG-Homelab (Single Source of Truth)
 
 This repository serves as the Single Source of Truth (SSOT) for a DISA STIG compliant, single-node homelab. It manages infrastructure-as-code via Podman and Docker Compose.
 
@@ -18,7 +18,7 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - **Zero-Trust mTLS Architecture:** All backend services and databases MUST utilize the mTLS Sidecar Pattern (e.g., Caddy). Applications bind strictly to `127.0.0.1` and share a network namespace with a sidecar proxy that handles mTLS termination via Step-CA. 
 - **Network Micro-Segmentation:** Applications reside on dedicated Podman networks. Internal backend networks MUST be set to `internal: true` to air-gap them and drop the default NAT gateway. No inter-stack communication unless explicitly defined via an mTLS sidecar.
 - **Air-gap Preparedness:** All images are pinned to specific versions/digests. No `:latest` tags.
-- **Data Separation:** Persistent data lives under `${DATA_DIR}` (default `/var/Geo-Brain`) on a large partition. Config files stay relative (`./config`) for rsync portability. New stacks mount data as `${DATA_DIR}/<stack-name>/...`.
+- **Data Separation:** Persistent data lives under `${DATA_DIR}` (default `/var/STIG-Homelab`) on a large partition. Config files stay relative (`./config`) for rsync portability. New stacks mount data as `${DATA_DIR}/<stack-name>/...`.
 - **Single Source of Truth:** All infrastructure state is defined in this repository. Manual changes on the host are forbidden.
 - **HTTPS Only:** All HTTP endpoints MUST be encrypted with TLS. Plain HTTP is only allowed for local bootstrap redirects to HTTPS.
 
@@ -388,14 +388,14 @@ setup-brain.sh → runs AFTER deploy.sh:
 
 ```mermaid
 C4Container
-    title Container diagram for Geo-Brain Homelab
+    title Container diagram for STIG-Homelab Homelab
 
     System_Ext(github, "GitHub", "External Git Repository")
 
     Person(user, "User", "Homelab User")
     Person(admin, "Admin", "Homelab Admin")
 
-    System_Boundary(homelab, "Geo-Brain Homelab") {
+    System_Boundary(homelab, "STIG-Homelab Homelab") {
         Container(traefik, "Traefik", "Go", "Edge Proxy")
         Container(stepca, "Step-CA", "Go", "Internal CA")
         
