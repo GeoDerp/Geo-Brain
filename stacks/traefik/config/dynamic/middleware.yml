@@ -15,7 +15,7 @@ http:
           - X-Auth-Request-Email
           - X-Auth-Request-Groups
 
-    # OAuth2 Proxy Admin ForwardAuth — only brain_admins group can access
+    # OAuth2 Proxy Admin ForwardAuth — only stig_admins group can access
     oauth2-proxy-admin:
       forwardAuth:
         address: "http://oauth2-proxy-admin:4180/"

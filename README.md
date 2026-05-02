@@ -124,12 +124,12 @@ Before logging into downstream apps, you **must** bootstrap your identity provid
 
    | Group | Role | Access |
    |-------|------|--------|
-   | `brain_admins` | Admin | **All** applications — infrastructure, SOC, observability, and user stacks |
-   | `brain_users` | User | **User stacks only** — moodle, n8n, notes, and other `user/` applications |
+   | `stig_admins` | Admin | **All** applications — infrastructure, SOC, observability, and user stacks |
+   | `stig_users` | User | **User stacks only** — moodle, n8n, notes, and other `user/` applications |
 
    OAuth2 Proxy enforces group-based access at the Traefik ForwardAuth layer:
-   - **Admin-only routes** (Traefik, Wazuh, Dockge, DefectDojo) use the `oauth2-proxy-admin` middleware — requires `brain_admins` membership.
-   - **All other routes** use the `oauth2-proxy` middleware — requires `brain_admins` OR `brain_users` membership.
+   - **Admin-only routes** (Traefik, Wazuh, Dockge, DefectDojo) use the `oauth2-proxy-admin` middleware — requires `stig_admins` membership.
+   - **All other routes** use the `oauth2-proxy` middleware — requires `stig_admins` OR `stig_users` membership.
    - OIDC scopes requested: `openid`, `profile`, `email`, `groups`.
 
 2. **Quay (Registry):** `https://quay.<DOMAIN>`
@@ -208,4 +208,4 @@ You can deploy your own applications via the `stacks/user/` directory.
 2. Add your `docker-compose.yml` following the [template](stacks/_template/docker-compose.yml).
 3. Deploy it: `./deploy.sh user/myapp up`
 
-All user stacks automatically receive Traefik reverse proxy configuration and OAuth2 Proxy SSO protection if they include the label `traefik.enable=true`. User stacks are accessible to members of both `brain_admins` and `brain_users` groups.
+All user stacks automatically receive Traefik reverse proxy configuration and OAuth2 Proxy SSO protection if they include the label `traefik.enable=true`. User stacks are accessible to members of both `stig_admins` and `stig_users` groups.

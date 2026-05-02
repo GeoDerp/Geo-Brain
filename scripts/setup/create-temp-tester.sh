@@ -41,8 +41,8 @@ run_remote "podman run -i --rm --network host \
     kanidm login -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs --password "\${ADMIN_PASS}"
     kanidm person delete ${USERNAME} -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs 2>/dev/null || true
     kanidm person create ${USERNAME} \"${DISPLAY_NAME}\" -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs
-    kanidm group add-members brain_admins ${USERNAME} -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs
-    kanidm group add-members brain_users ${USERNAME} -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs
+    kanidm group add-members stig_admins ${USERNAME} -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs
+    kanidm group add-members stig_users ${USERNAME} -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs
   '"
 
 # Use recover-account to set a known-ish (random but captured) password

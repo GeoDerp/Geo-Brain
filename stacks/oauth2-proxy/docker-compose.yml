@@ -30,7 +30,7 @@ services:
       - OAUTH2_PROXY_OIDC_EMAIL_CLAIM=preferred_username
       - OAUTH2_PROXY_OIDC_GROUPS_CLAIM=groups
       - OAUTH2_PROXY_SCOPE=openid profile email groups
-      - OAUTH2_PROXY_ALLOWED_GROUPS=brain_admins@${DOMAIN},brain_users@${DOMAIN}
+      - OAUTH2_PROXY_ALLOWED_GROUPS=stig_admins@${DOMAIN},stig_users@${DOMAIN}
       - OAUTH2_PROXY_REDIRECT_URL=https://${DOMAIN}/oauth2/callback
       - OAUTH2_PROXY_WHITELIST_DOMAINS=.${DOMAIN}
       - OAUTH2_PROXY_SET_XAUTHREQUEST=true
@@ -105,7 +105,7 @@ services:
       - OAUTH2_PROXY_OIDC_EMAIL_CLAIM=preferred_username
       - OAUTH2_PROXY_OIDC_GROUPS_CLAIM=groups
       - OAUTH2_PROXY_SCOPE=openid profile email groups
-      - OAUTH2_PROXY_ALLOWED_GROUPS=brain_admins@${DOMAIN}
+      - OAUTH2_PROXY_ALLOWED_GROUPS=stig_admins@${DOMAIN}
       - OAUTH2_PROXY_REDIRECT_URL=https://${DOMAIN}/admin-oauth2/callback
       - OAUTH2_PROXY_WHITELIST_DOMAINS=.${DOMAIN}
       - OAUTH2_PROXY_PROXY_PREFIX=/admin-oauth2

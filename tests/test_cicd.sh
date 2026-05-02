@@ -27,7 +27,7 @@ GITEA_TOKEN="${GITEA_ADMIN_TOKEN}" # Needs an admin token with repo creation per
 DOJO_API_KEY="${DEFECTDOJO_API_KEY}" # Needs an API key for a user with product access
 
 REPO_NAME="test-cicd-repo-${RANDOM}"
-DUMMY_SECRET="DUMMY_GEO_BRAIN_SECRET_KEY=a1b2c3d4e5f67890a1b2c3d4e5f67890"
+DUMMY_SECRET="DUMMY_STIG_HOMELAB_SECRET_KEY=a1b2c3d4e5f67890a1b2c3d4e5f67890"
 
 # --- Output helpers ---
 RED='\033[0;31m'
