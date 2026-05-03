@@ -28,7 +28,7 @@ for host in "${HOSTS[@]}"; do
 
     # 2. Check Issuer
     issuer=$(echo | openssl s_client -connect "$url":443 -servername "$url" 2>/dev/null | openssl x509 -noout -issuer | sed 's/issuer=//')
-    if [[ "$issuer" != *"${DOMAIN} CA"* && "$issuer" != *"STIG-Homelab CA"* && "$issuer" != *"Omni-Shield CA"* ]]; then
+    if [[ "$issuer" != *"${DOMAIN} CA"* && "$issuer" != *"My-HomeLab CA"* && "$issuer" != *"Omni-Shield CA"* ]]; then
         echo "  [FAIL] Invalid Issuer: $issuer"
         ((FAIL++))
     else

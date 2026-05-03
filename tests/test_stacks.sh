@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test_stacks.sh: Dynamic unit tests for all STIG-Homelab stacks.
+# test_stacks.sh: Dynamic unit tests for all My-HomeLab stacks.
 # Validates STIG compliance, compose correctness, Traefik config gen,
 # container health (remote), and endpoint reachability.
 #
@@ -23,7 +23,7 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
 fi
 
 DOMAIN="${DOMAIN:-example.local}"
-DATA_DIR="${DATA_DIR:-/var/STIG-Homelab}"
+DATA_DIR="${DATA_DIR:-/var/My-HomeLab}"
 SSH_KEY="${SSH_KEY:-~/.ssh/id_ed25519}"
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
 REMOTE_HOST="${REMOTE_HOST:-}"
@@ -614,7 +614,7 @@ test_remote_networks() {
 # --- T24: .env rendered on remote ---
 test_remote_env() {
     local remote_env
-    remote_env=$(ssh_cmd "cat ~/STIG-Homelab/.env 2>/dev/null | wc -l" || echo "0")
+    remote_env=$(ssh_cmd "cat ~/My-HomeLab/.env 2>/dev/null | wc -l" || echo "0")
     if [[ "$remote_env" -gt 5 ]]; then
         pass ".env present on remote ($remote_env lines)"
     else
@@ -987,7 +987,7 @@ print_summary() {
 # MAIN
 # =============================================================================
 
-echo -e "${BOLD}STIG-Homelab Stack Test Suite${NC}"
+echo -e "${BOLD}My-HomeLab Stack Test Suite${NC}"
 echo "Mode: $MODE | Domain: $DOMAIN | Remote: ${REMOTE_HOST:-none}"
 echo "─────────────────────────────────────────"
 

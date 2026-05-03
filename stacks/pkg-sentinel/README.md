@@ -1,6 +1,6 @@
 # pkg-sentinel — Developer Setup Guide
 
-**Supply-Chain Security Proxy** for STIG-Homelab
+**Supply-Chain Security Proxy** for My-HomeLab
 
 pkg-sentinel is an optional developer stack that intercepts package downloads
 from npm, PyPI, and Maven registries. Each package is detonated inside an
@@ -34,7 +34,7 @@ eBPF tracing monitors for information exfiltration. Safe packages are served
 | **Azazel eBPF**     | —               | Must be installed on the host               |
 | **Kernel**          | 5.8+            | Required for BPF ring buffer support        |
 | **Host Caps**       | —               | `CAP_BPF`, `CAP_SYS_ADMIN`, `CAP_PERFMON`  |
-| **STIG-Homelab Stack** | —               | Step-CA + Traefik deployed and healthy      |
+| **My-HomeLab Stack** | —               | Step-CA + Traefik deployed and healthy      |
 
 > **Note:** pkg-sentinel requires elevated capabilities for eBPF tracing.
 > The container is labeled `security.stig.bypass_privileged=true` per
@@ -101,7 +101,7 @@ Developer / CI                 pkg-sentinel                    Upstream Registry
 ### Quick Start (Recommended)
 
 ```bash
-# From the STIG-Homelab repository root:
+# From the My-HomeLab repository root:
 
 # 1. Ensure base infrastructure is running
 ./deploy.sh base up

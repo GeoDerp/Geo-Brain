@@ -10,7 +10,7 @@
 # sets up the PULL direction (Gitea periodically pulls from GitHub).
 #
 # Usage:
-#   export GITEA_URL=https://gitea.brain.home.lan
+#   export GITEA_URL=https://gitea.${DOMAIN}
 #   export GITEA_TOKEN=<your-gitea-api-token>
 #   export GITEA_ORG=<org or username in gitea>
 #   export GITHUB_URL=https://github.com/user/repo.git
@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-: "${GITEA_URL:?GITEA_URL must be set (e.g. https://gitea.brain.home.lan)}"
+: "${GITEA_URL:?GITEA_URL must be set (e.g. https://gitea.your-domain.local)}"
 : "${GITEA_TOKEN:?GITEA_TOKEN must be set (Gitea API token)}"
 : "${GITEA_ORG:?GITEA_ORG must be set (Gitea org or username)}"
 : "${GITHUB_URL:?GITHUB_URL must be set (upstream GitHub clone URL)}"

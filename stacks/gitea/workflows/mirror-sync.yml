@@ -35,7 +35,8 @@ jobs:
         env:
           UPSTREAM: ${{ secrets.MIRROR_UPSTREAM_URL }}
         run: |
-          git config --global user.email "ci@brain.home.lan"
+          GITEA_HOST=$(echo "${{ github.server_url }}" | sed 's|^https\?://||')
+          git config --global user.email "ci@${GITEA_HOST}"
           git config --global user.name "Gitea CI Mirror"
           git remote add upstream "$UPSTREAM"
           # Push only the main branch (not all refs) to avoid pushing CI internals

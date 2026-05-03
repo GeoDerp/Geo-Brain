@@ -119,6 +119,6 @@
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "",
-  "title": "STIG-Homelab: Comprehensive Security Dashboard",
+  "title": "My-HomeLab: Comprehensive Security Dashboard",
   "version": 2
 }

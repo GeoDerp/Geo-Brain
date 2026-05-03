@@ -1,17 +1,17 @@
 ---
 # ansible/deploy-stacks.yml
-# Ansible playbook to securely and declaratively deploy STIG-Homelab stacks.
+# Ansible playbook to securely and declaratively deploy My-HomeLab stacks.
 # Matches GEMINI.md mandate: "Declarative: All deployments and configurations must be strictly declarative."
 # Replaces the imperative logic of deploy.sh.
 
-- name: Deploy STIG-Homelab Stacks
+- name: Deploy My-HomeLab Stacks
   hosts: all
   become: no
   vars:
     repo_root: "{{ playbook_dir | dirname }}"
-    remote_base: "{{ lookup('env', 'REMOTE_PROJECT_DIR') | default('STIG-Homelab', true) }}"
+    remote_base: "{{ lookup('env', 'REMOTE_PROJECT_DIR') | default('My-HomeLab', true) }}"
     # remote_base is read from $REMOTE_PROJECT_DIR env var (set in .env before running ansible-playbook).
-    # Default fallback: 'STIG-Homelab' for backwards compatibility with existing deployments.
+    # Default fallback: 'My-HomeLab' for backwards compatibility with existing deployments.
     # Base stacks in deployment order
     ordered_stacks:
       - step-ca
@@ -129,7 +129,7 @@
     - name: Ensure compose volume directories exist on remote
       shell: |
         set -a; [ -f "$HOME/{{ remote_base }}/.env" ] && source "$HOME/{{ remote_base }}/.env"; set +a
-        DATA_DIR="${DATA_DIR:-/var/STIG-Homelab}"
+        DATA_DIR="${DATA_DIR:-/var/My-HomeLab}"
         DATA_DIR="${DATA_DIR/#\~/$HOME}"
         COMPOSE_FILE="$HOME/{{ remote_base }}/stacks/{{ item }}/docker-compose.yml"
         

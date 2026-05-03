@@ -10,8 +10,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CERT_FILE="$REPO_ROOT/stacks/traefik/config/certs/root_ca.crt"
-CERT_NAME="STIG-Homelab Homelab CA"
-OLD_NAMES=("Geo-Brain CA" "Geo-Brain Homelab CA" "Omni-Shield CA" "STIG-Homelab CA" "brain.home.lan CA")
+CERT_NAME="My-HomeLab Homelab CA"
+OLD_NAMES=("Geo-Brain CA" "Geo-Brain Homelab CA" "Omni-Shield CA" "My-HomeLab CA" "brain.home.lan CA")
 
 if [[ ! -f "$CERT_FILE" ]]; then
     echo "❌ Error: Root CA certificate not found at $CERT_FILE"
@@ -80,5 +80,5 @@ fi
 echo "================================================="
 echo "✅ Complete! Restart Firefox for the changes to take effect."
 echo "   Since 'security.enterprise_roots.enabled' is true, Firefox"
-echo "   will now natively trust the STIG-Homelab CA from the OS store."
+echo "   will now natively trust the My-HomeLab CA from the OS store."
 echo "================================================="

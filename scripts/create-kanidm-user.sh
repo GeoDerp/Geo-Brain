@@ -41,6 +41,9 @@ set -- "${POSITIONAL[@]}"
 USERNAME="${1:-}"
 DISPLAY_NAME="${2:-}"
 
+# Normalize display name: collapse embedded newlines/CRs and trim surrounding whitespace
+DISPLAY_NAME="$(printf '%s' "$DISPLAY_NAME" | tr '\n\r' '  ' | sed 's/  */ /g; s/^ //; s/ $//')"
+
 if [ -z "$USERNAME" ] || [ -z "$DISPLAY_NAME" ]; then
   echo "Usage: $0 [--role admin|user] [--email user@domain] <username> <\"Display Name\">"
   echo ""
@@ -69,7 +72,7 @@ if [[ "$ROLE" != "admin" && "$ROLE" != "user" ]]; then
   exit 1
 fi
 
-KANIDM_GROUP="brain_${ROLE}s"
+KANIDM_GROUP="stig_${ROLE}s"
 
 # Kanidm reserves 'admin' and 'idm_admin' as built-in service accounts.
 # Creating a person with these names silently fails, and recover-account
@@ -139,6 +142,7 @@ echo ">>> Creating Kanidm user '${USERNAME}' via kanidm/tools container..."
 
 # All operations use the kanidm CLI tools container via the Kanidm API.
 # (podman exec into the kanidm server container hangs due to the minimal image.)
+set +e
 SETUP_OUTPUT=$(run_remote "podman run -i --rm --network host \
   --env KANIDM_PASSWORD='${PASSWORD}' \
   --env DISPLAY_NAME_VAL="$(printf '%s' "${DISPLAY_NAME}" | base64 -w0)" \
@@ -166,7 +170,7 @@ SETUP_OUTPUT=$(run_remote "podman run -i --rm --network host \
 
     echo \">>> Generating credential reset token...\"
     RESET_TOKEN=\$(kanidm person credential create-reset-token ${USERNAME} 3600 -H ${KANIDM_URL} -D idm_admin --accept-invalid-certs 2>&1)
-    TOKEN_VALUE=\$(echo \"\$RESET_TOKEN\" | grep -oP \"\\?token=\\K[^ ]+\" | head -1)
+    TOKEN_VALUE=\$(echo \"\$RESET_TOKEN\" | grep -o \"token=[^ ]*\" | cut -d= -f2 | head -1)
     if [ -n \"\$TOKEN_VALUE\" ]; then
         echo \"KANIDM_RESET_TOKEN=\$TOKEN_VALUE\"
     else
@@ -174,6 +178,13 @@ SETUP_OUTPUT=$(run_remote "podman run -i --rm --network host \
         echo \"\$RESET_TOKEN\"
     fi
   '" 2>&1)
+REMOTE_EXIT=$?
+set -e
+if [[ $REMOTE_EXIT -ne 0 ]] && ! echo "$SETUP_OUTPUT" | grep -qE "^KANIDM_"; then
+    echo "❌ Error: Remote command failed unexpectedly (exit $REMOTE_EXIT). Check SSH and kanidm."
+    [[ -n "$SETUP_OUTPUT" ]] && echo "--- Debug output ---" && echo "$SETUP_OUTPUT" && echo "--------------------"
+    exit 1
+fi
 
 echo "$SETUP_OUTPUT" | grep -v "^KANIDM_"
 

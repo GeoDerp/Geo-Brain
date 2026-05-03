@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# validate_sso_detailed.sh: Deep validation of OIDC configuration across all STIG-Homelab stacks.
+# validate_sso_detailed.sh: Deep validation of OIDC configuration across all My-HomeLab stacks.
 # Checks: Discovery endpoints, Redirection logic, Client ID matching, and Redirect URI registration.
 
 set -uo pipefail

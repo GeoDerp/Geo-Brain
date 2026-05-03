@@ -1,6 +1,6 @@
 ---
 # =============================================================================
-# STIG-Homelab: Remote Node Initialization
+# My-HomeLab: Remote Node Initialization
 # =============================================================================
 # Replaces init-node.sh — provisions a remote homelab node and configures
 # local podman-remote access.
@@ -79,7 +79,7 @@
     - name: Display connection info
       ansible.builtin.debug:
         msg: |-
-          STIG-Homelab: Remote Node Initialization
+          My-HomeLab: Remote Node Initialization
             Target: {{ target_user }}@{{ remote_host }}:{{ ssh_port }}
             Key:    {{ ssh_key }}
 
@@ -125,7 +125,7 @@
       - ssh
       - http
       - https
-    project_dir: STIG-Homelab
+    project_dir: My-HomeLab
 
   tasks:
     # ----- Detect OS type from /etc/os-release VARIANT_ID -----
@@ -396,7 +396,7 @@
       when: "'Linger=yes' not in (linger_check.stdout | default(''))"
       changed_when: true
 
-    - name: "[11/11] Create persistent DATA_DIR (/var/STIG-Homelab)"
+    - name: "[11/11] Create persistent DATA_DIR (/var/My-HomeLab)"
       become: true
       ansible.builtin.file:
         path: "/var/{{ project_dir }}"
@@ -417,7 +417,7 @@
   vars:
     auto_yes: false
     connection_name: homelab
-    project_dir: STIG-Homelab
+    project_dir: My-HomeLab
 
   tasks:
     - name: Pull connection variables from remote host facts

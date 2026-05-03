@@ -43,7 +43,7 @@ with open('$tmp_dir/stripped.yml', 'w') as f:
         continue
     fi
     
-    # 2. Scan the Kube YAML against STIG-Homelab requirements
+    # 2. Scan the Kube YAML against My-HomeLab requirements
     errors=$(python3 -c "
 import sys, yaml
 

@@ -30,7 +30,7 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
 fi
 
 # Expand tilde in DATA_DIR and SSH_KEY if they exist
-DATA_DIR="${DATA_DIR:-/var/STIG-Homelab}"
+DATA_DIR="${DATA_DIR:-/var/My-HomeLab}"
 DATA_DIR="${DATA_DIR/#\~/$HOME}"
 SSH_KEY="${SSH_KEY:-~/.ssh/id_ed25519}"
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
@@ -117,7 +117,7 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
     ensure_ssh_agent
     PODMAN_CONNECTION="${PODMAN_CONNECTION:-homelab}"
     SSH_CMD=(ssh -o StrictHostKeyChecking=accept-new -i "${SSH_KEY}" -p "${SSH_PORT:-22}" "${REMOTE_USER}@${REMOTE_HOST}")
-    REMOTE_BASE="${REMOTE_PROJECT_DIR:-STIG-Homelab}"
+    REMOTE_BASE="${REMOTE_PROJECT_DIR:-My-HomeLab}"
 else
     DEPLOY_MODE="local"
     LOCAL_UID=$(id -u)

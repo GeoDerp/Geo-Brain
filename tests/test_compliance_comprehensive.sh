@@ -1,5 +1,5 @@
 #!/bin/bash
-# test_compliance_comprehensive.sh: Comprehensive Test Suite for STIG-Homelab
+# test_compliance_comprehensive.sh: Comprehensive Test Suite for My-HomeLab
 # Validates the repository configuration and live state against the GEMINI.md mandates.
 # Includes: Zero-Trust, DISA-STIG, IDS, Quay Image Origin, Clair Scanning,
 # Gitea Two-Way Mirror, Sandboxed Runners, and Wazuh integration.

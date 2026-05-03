@@ -185,7 +185,7 @@
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "STIG-Homelab Platform Health",
+  "title": "My-HomeLab Platform Health",
   "uid": "stig-homelab-health",
   "version": 1
 }

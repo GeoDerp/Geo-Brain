@@ -21,7 +21,7 @@ services:
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - GF_SECURITY_DISABLE_GRAVATAR=true
       - GF_SERVER_ROOT_URL=https://grafana.${DOMAIN}/
-      - GF_SERVER_INSTANCE_NAME=STIG-Homelab
+      - GF_SERVER_INSTANCE_NAME=My-HomeLab
       - GF_USERS_ALLOW_SIGN_UP=true # OIDC users are created on first login
       - GF_AUTH_GENERIC_OAUTH_ENABLED=true
       - GF_AUTH_GENERIC_OAUTH_NAME=Kanidm
