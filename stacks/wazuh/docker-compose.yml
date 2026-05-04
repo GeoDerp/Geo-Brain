@@ -14,6 +14,10 @@ services:
     volumes:
       - ${DATA_DIR}/wazuh/indexer:/var/lib/opensearch/data:Z,U
       - ./config/indexer/opensearch.yml:/usr/share/wazuh-indexer/config/opensearch.yml:ro,U
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     networks:
       wazuh-net:
         aliases:

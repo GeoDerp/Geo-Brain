@@ -71,6 +71,8 @@ while IFS= read -r compose; do
     grep -q 'kanidm\.oidc\.client_id=oauth2-proxy' "$compose" && continue
     hostname=$(grep -oP 'traefik\.http\.routers\.[^.]+\.rule=Host\(`\K[^`]+' "$compose" | head -n1 || true)
     [[ -z "$hostname" ]] && continue
+    # Expand ${DOMAIN} placeholder that appears literally in compose label strings
+    hostname="${hostname/\$\{DOMAIN\}/$DOMAIN}"
     if grep -q "oauth2-proxy-admin@file" "$compose"; then
         client="oauth2-proxy-admin"
     else

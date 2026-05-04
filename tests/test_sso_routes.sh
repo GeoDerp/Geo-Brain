@@ -35,6 +35,8 @@ while IFS= read -r compose; do
 
     # Extract full hostname from Host() rule (everything between backticks)
     hostname=$(grep -oP 'traefik\.http\.routers\.[^.]+\.rule=Host\(`\K[^`]+' "$compose" | head -n1 || true)
+    # Expand ${DOMAIN} placeholder that appears literally in compose label strings
+    hostname="${hostname/\$\{DOMAIN\}/$DOMAIN}"
     # service name is stack dir basename
     svc_name=$(basename "$(dirname "$compose")")
 
