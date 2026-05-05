@@ -47,6 +47,7 @@ services:
       - GITEA__service__ALLOW_ONLY_EXTERNAL_REGISTRATION=true
       - GITEA__service__SHOW_REGISTRATION_BUTTON=false
       - GITEA__security__LOGIN_REMEMBER_DAYS=7
+      - GITEA__actions__ENABLED=true
     networks:
       - proxy-net
       - vulnerability-net
@@ -66,7 +67,7 @@ services:
       retries: 3
     labels:
       - "kanidm.oidc.client_id=gitea"
-      - "kanidm.oidc.redirect_path=/user/oauth2/kanidm/callback"
+      - "kanidm.oidc.redirect_path=/user/oauth2/Kanidm/callback"
       - "security.stig.compliance=true"
       - "traefik.enable=true"
       - "traefik.http.routers.gitea.rule=Host(`gitea.${DOMAIN}`)"

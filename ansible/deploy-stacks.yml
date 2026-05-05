@@ -200,7 +200,8 @@
     - name: Deploy stacks using Podman Compose
       shell: |
         set -a; [ -f "$HOME/{{ remote_base }}/.env" ] && source "$HOME/{{ remote_base }}/.env"; set +a
-        podman-compose up -d --build --remove-orphans
+        podman-compose up -d --build --remove-orphans{% if force_recreate is defined and force_recreate %} --force-recreate{% endif %}
+
       args:
         chdir: "~/{{ remote_base }}/stacks/{{ item }}"
         executable: /bin/bash
@@ -240,10 +241,10 @@
         flat: yes
       when: oidc_automation.changed
 
-    - name: Redeploy stacks to pick up new OIDC secrets
+    - name: Redeploy oauth2-proxy stacks to pick up new OIDC secrets
       shell: |
         set -a; [ -f "$HOME/{{ remote_base }}/.env" ] && source "$HOME/{{ remote_base }}/.env"; set +a
-        podman-compose up -d --build --remove-orphans
+        podman-compose up -d --build --remove-orphans --force-recreate
       args:
         chdir: "~/{{ remote_base }}/stacks/{{ item }}"
         executable: /bin/bash
@@ -251,7 +252,7 @@
         CONTAINER_UID: "{{ ansible_facts.user_uid }}"
         PODMAN_SOCK: "/run/user/{{ ansible_facts.user_uid }}/podman/podman.sock"
         STACKS_PATH: "{{ ansible_env.HOME }}/{{ remote_base }}/stacks"
-      loop: "{{ target_stacks }}"
+      loop: "{{ target_stacks | intersect(['oauth2-proxy']) }}"
       when: oidc_automation.changed
       register: compose_redeploy
       changed_when: "'Created' in compose_redeploy.stdout or 'Recreated' in compose_redeploy.stdout"

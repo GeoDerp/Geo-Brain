@@ -80,7 +80,7 @@
       "title": "Traefik Gateway Errors (4xx/5xx)",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [ { "expr": "sum(rate(traefik_service_requests_total{code=~"[45].."}[5m])) by (service, code)", "legendFormat": "{{service}} - {{code}}" } ]
+      "targets": [ { "expr": "sum(rate(traefik_service_requests_total{code=~\"[45]..\"}[5m])) by (service, code)", "legendFormat": "{{service}} - {{code}}" } ]
     },
     {
         "title": "Latest High-Severity Wazuh Alerts",

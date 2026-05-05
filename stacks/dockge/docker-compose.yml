@@ -14,7 +14,7 @@ services:
     volumes:
       - ${PODMAN_SOCK}:/var/run/docker.sock:ro
       - ${DATA_DIR}/dockge:/app/data:z,U
-      - ${STACKS_PATH}:${STACKS_PATH}:z,U
+      - ${STACKS_PATH}:${STACKS_PATH}:ro,z
       - ./config/docker-podman-shim.sh:/usr/local/bin/docker:ro,z
     environment:
       - DOCKGE_STACKS_DIR=${STACKS_PATH}

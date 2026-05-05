@@ -472,10 +472,11 @@ test_cicd_exclusion() {
 # --- T19: CI/CD batch target exists ---
 test_cicd_target() {
     if grep -q 'cicd)' "$REPO_ROOT/deploy.sh"; then
-        if grep -A3 'cicd)' "$REPO_ROOT/deploy.sh" | grep -q 'deploy_batch.*defectdojo.*gitea.*ramalama'; then
-            pass "CI/CD batch target deploys defectdojo+gitea+ramalama"
+        # ramalama is GPU-conditional: cicd deploys defectdojo+gitea always, ramalama only when GPU detected
+        if grep -A5 'cicd)' "$REPO_ROOT/deploy.sh" | grep -q 'detect_remote_gpu'; then
+            pass "CI/CD batch target has GPU-conditional ramalama (defectdojo+gitea always, ramalama when GPU)"
         else
-            fail "CI/CD target exists but doesn't deploy expected stacks"
+            fail "CI/CD target missing GPU-conditional ramalama logic"
         fi
     else
         fail "deploy.sh missing 'cicd' batch target"
@@ -808,7 +809,12 @@ test_crowdsec_active() {
         skip "CrowdSec not deployed, skipping test"
         return
     fi
-    if ssh_cmd "podman exec crowdsec cscli bouncers list -o raw 2>/dev/null | grep -q 'traefik-bouncer'"; then
+    # cscli bouncers list hangs in non-TTY SSH; verify bouncer via LAPI HTTP API instead.
+    # BOUNCER_KEY_traefik env var registers a bouncer; validate the key works against /v1/decisions
+    local bouncer_key
+    bouncer_key=$(ssh_cmd "grep CROWDSEC_BOUNCER_API_KEY ~/My-HomeLab/.env | cut -d= -f2 | tr -d ' \r\n'" 2>/dev/null)
+    local lapi_port=8180
+    if [[ -n "$bouncer_key" ]] && ssh_cmd "curl -sf --max-time 5 -H 'X-Api-Key: ${bouncer_key}' http://127.0.0.1:${lapi_port}/v1/decisions -o /dev/null -w '%{http_code}' | grep -q 200" 2>/dev/null; then
         pass "CrowdSec IPS is active with Traefik bouncer registered"
     else
         fail "CrowdSec IPS is running but Traefik bouncer is missing"

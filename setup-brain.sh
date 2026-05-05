@@ -407,9 +407,9 @@ setup_gitea() {
   # NOTE: Must exec as 'git' user — Gitea refuses to run as root.
   echo "Ensuring Gitea admin account exists..."
   run_on_node "podman exec --user git gitea gitea admin user create \
-    --admin --username admin \
+    --admin --username gitadmin \
     --password '${ADMIN_PASSWORD}' \
-    --email 'admin@${DOMAIN}' \
+    --email 'gitadmin@${DOMAIN}' \
     --must-change-password=false" 2>/dev/null || true
 
   # Add Kanidm OIDC auth source (idempotent — check if exists first)
@@ -436,6 +436,55 @@ setup_gitea() {
     else
       echo "⚠️ Failed to add Gitea OIDC auth source. Configure manually at https://gitea.${DOMAIN}/-/admin/auths/new"
     fi
+  fi
+
+  # Fetch and persist the runner registration token (idempotent).
+  # NOTE: Gitea 1.21.x does not expose /api/v1/admin/runners/registration-token.
+  # Tokens are written directly to the SQLite DB via podman unshare.
+  # In action_runner_token: is_active=1 = valid/usable; is_active=0 = invalidated.
+  echo "Ensuring Gitea runner registration token exists..."
+  local current_token
+  current_token=$(run_on_node "python3 -c \"
+import sqlite3
+DB='${DATA_DIR}/gitea/data/gitea/gitea.db'
+try:
+    conn = sqlite3.connect(DB)
+    row = conn.execute('SELECT token FROM action_runner_token WHERE is_active=1 AND (deleted IS NULL OR deleted=0) AND owner_id=0 AND repo_id=0 ORDER BY id DESC LIMIT 1').fetchone()
+    print(row[0] if row else '')
+    conn.close()
+except Exception as e:
+    print('')
+\" 2>/dev/null" 2>/dev/null || true)
+
+  local env_token="${GITEA_RUNNER_TOKEN:-}"
+  if [[ -z "$current_token" ]]; then
+    # No valid token exists — generate and insert one
+    local new_token
+    new_token=$(python3 -c "import secrets; print(secrets.token_hex(20))" 2>/dev/null)
+    run_on_node "XDG_RUNTIME_DIR=/run/user/1000 podman unshare python3 -c \"
+import sqlite3, time
+DB='${DATA_DIR}/gitea/data/gitea/gitea.db'
+conn = sqlite3.connect(DB)
+# Deactivate old tokens first
+conn.execute(\\\"UPDATE action_runner_token SET is_active=0 WHERE owner_id=0 AND repo_id=0\\\")
+now = int(time.time())
+conn.execute(\\\"INSERT OR REPLACE INTO action_runner_token (token, owner_id, repo_id, is_active, created, updated) VALUES (?, 0, 0, 1, ?, ?)\\\", ('${new_token}', now, now))
+conn.commit()
+conn.close()
+print('Token inserted')
+\" 2>&1" 2>/dev/null || true
+    write_env_secret "GITEA_RUNNER_TOKEN" "$new_token"
+    echo "✅ Gitea runner registration token created and saved to .env."
+    echo ">>> Redeploying Gitea runners to pick up new token..."
+    ./deploy.sh gitea redeploy 2>/dev/null || true
+  elif [[ "$current_token" != "$env_token" ]]; then
+    # Token in DB differs from .env — sync .env
+    write_env_secret "GITEA_RUNNER_TOKEN" "$current_token"
+    echo "✅ Gitea runner token synced to .env."
+    echo ">>> Redeploying Gitea runners to pick up token..."
+    ./deploy.sh gitea redeploy 2>/dev/null || true
+  else
+    echo "🔹 Gitea runner token already valid and in sync."
   fi
 }
 
@@ -502,6 +551,18 @@ main() {
     setup_soc
     echo ">>> [main] calling setup_gitea"
     setup_gitea
+    echo ">>> [main] calling setup_crowdsec"
+    setup_crowdsec
+  fi
+  if [[ "$section" == "gitea" ]]; then
+    echo ">>> [main] calling setup_gitea"
+    setup_gitea
+  fi
+  if [[ "$section" == "soc" ]]; then
+    echo ">>> [main] calling setup_soc"
+    setup_soc
+  fi
+  if [[ "$section" == "crowdsec" ]]; then
     echo ">>> [main] calling setup_crowdsec"
     setup_crowdsec
   fi

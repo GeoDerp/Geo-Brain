@@ -134,9 +134,30 @@ if [ -z "$STACK_NAME" ]; then
     echo "  all   - Deploy all stacks (base + user, excludes cicd)"
     echo "  base  - Deploy all base infrastructure stacks"
     echo "  user  - Deploy all user application stacks"
-    echo "  cicd  - Deploy CI/CD pipeline (gitea + defectdojo + ramalama)"
+    echo "  cicd  - Deploy CI/CD pipeline (gitea + defectdojo [+ ramalama if GPU found])"
     exit 1
 fi
+
+# --- GPU Detection ---
+# Probes the target host for discrete GPU devices.
+# Returns: "nvidia", "amd", or "none"
+detect_remote_gpu() {
+    local result="none"
+    if [[ "$DEPLOY_MODE" == "remote" ]]; then
+        if "${SSH_CMD[@]}" 'ls /dev/nvidia0 2>/dev/null | grep -q nvidia0' 2>/dev/null; then
+            result="nvidia"
+        elif "${SSH_CMD[@]}" 'ls /dev/dri/renderD128 2>/dev/null | grep -q renderD' 2>/dev/null; then
+            result="amd"
+        fi
+    else
+        if ls /dev/nvidia0 2>/dev/null | grep -q nvidia0; then
+            result="nvidia"
+        elif ls /dev/dri/renderD128 2>/dev/null | grep -q renderD; then
+            result="amd"
+        fi
+    fi
+    echo "$result"
+}
 
 # --- Stack Discovery ---
 
@@ -215,7 +236,7 @@ get_all_stacks() {
     # Also include cicd stacks for full coverage
     for dir in "$REPO_ROOT"/stacks/*/; do
         local name=$(basename "$dir")
-        if [[ "$name" == "gitea" || "$name" == "defectdojo" || "$name" == "ramalama" || "$name" == "prometheus" ]]; then
+        if [[ "$name" == "gitea" || "$name" == "defectdojo" || "$name" == "prometheus" ]]; then
              echo "$name"
         fi
     done | sort -u
@@ -541,10 +562,10 @@ deploy_single() {
             check_security "$REPO_ROOT/$stack_dir" "$stack_name" || return 1
             if [[ "$DEPLOY_MODE" == "remote" ]]; then
                 echo ">>> Delegating remote redeployment to Ansible Playbook for $stack_name..."
-                ansible-playbook -i "$REMOTE_HOST," -u "$REMOTE_USER" --private-key "$SSH_KEY" "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$stack_name"
+                ansible-playbook -i "$REMOTE_HOST," -u "$REMOTE_USER" --private-key "$SSH_KEY" "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$stack_name" -e "force_recreate=true"
             else
                 echo ">>> Delegating local redeployment to Ansible Playbook for $stack_name..."
-                ansible-playbook -i "localhost," -c local "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$stack_name"
+                ansible-playbook -i "localhost," -c local "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$stack_name" -e "force_recreate=true"
             fi
             ;;
         down)    run_compose "$stack_dir" "down" ;;
@@ -591,12 +612,14 @@ deploy_batch() {
     if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
         local limit_stacks
         limit_stacks=$(IFS=,; echo "${stacks[*]}")
+        local force_flag=""
+        [[ "$COMMAND" == "redeploy" ]] && force_flag="-e force_recreate=true"
         if [[ "$DEPLOY_MODE" == "remote" ]]; then
             echo ">>> Delegating remote batch deployment to Ansible Playbook..."
-            ansible-playbook -i "$REMOTE_HOST," -u "$REMOTE_USER" --private-key "$SSH_KEY" "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$limit_stacks"
+            ansible-playbook -i "$REMOTE_HOST," -u "$REMOTE_USER" --private-key "$SSH_KEY" "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$limit_stacks" $force_flag
         else
             echo ">>> Delegating local batch deployment to Ansible Playbook..."
-            ansible-playbook -i "localhost," -c local "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$limit_stacks"
+            ansible-playbook -i "localhost," -c local "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$limit_stacks" $force_flag
         fi
         if [ $? -ne 0 ]; then
             echo ">>> Batch $COMMAND failed during Ansible execution."
@@ -639,13 +662,23 @@ case $STACK_NAME in
         deploy_batch "${stacks[@]}"
         ;;
     cicd)
-        # CI/CD pipeline: Gitea (code hosting) + DefectDojo (vuln mgmt) + RamaLama (AI analysis)
-        # These three stacks share vulnerability-net and are deployed as a unit.
-        deploy_batch "defectdojo" "gitea" "ramalama"
+        # CI/CD pipeline: Gitea (code hosting) + DefectDojo (vuln mgmt)
+        # RamaLama (AI log triage) enabled only when a GPU is detected on the target host.
+        GPU_TYPE=$(detect_remote_gpu)
+        if [[ "$GPU_TYPE" != "none" ]]; then
+            echo ">>> GPU detected ($GPU_TYPE) — enabling RamaLama in CI/CD batch."
+            export GPU_TYPE
+            deploy_batch "defectdojo" "gitea" "ramalama"
+        else
+            echo ">>> No GPU detected — RamaLama requires a GPU and will be skipped."
+            echo "    To enable: add a GPU to the host and re-run './deploy.sh cicd up'."
+            deploy_batch "defectdojo" "gitea"
+        fi
         ;;
     dev)
-        # Developer tools: pkg-sentinel (Supply-Chain Security Proxy) + RamaLama (AI analysis)
-        deploy_batch "pkg-sentinel" "ramalama"
+        # Developer tools: pkg-sentinel (Supply-Chain Security Proxy)
+        # ramalama disabled — see TODO in README.md
+        deploy_batch "pkg-sentinel"
         ;;
     *)
         # Always cleanup old generated configs at the start of a run (if up/redeploy)
