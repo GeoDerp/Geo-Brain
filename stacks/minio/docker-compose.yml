@@ -22,6 +22,10 @@ services:
       - MINIO_IDENTITY_OPENID_CLIENT_ID=minio
       - MINIO_IDENTITY_OPENID_CLIENT_SECRET=${MINIO_OIDC_SECRET}
       - MINIO_IDENTITY_OPENID_SCOPES=openid,profile,email,groups
+      # redirect_uri must exactly match what setup-oidc.sh registers in Kanidm.
+      - MINIO_IDENTITY_OPENID_REDIRECT_URI=https://minio.${DOMAIN}/oauth_callback
+      # Map Kanidm's 'groups' claim to MinIO policy names.
+      - MINIO_IDENTITY_OPENID_CLAIM_NAME=groups
       - MINIO_SERVER_URL=https://minio.${DOMAIN}
       - MINIO_BROWSER_REDIRECT_URL=https://minio.${DOMAIN}
       - MINIO_UPDATE=off

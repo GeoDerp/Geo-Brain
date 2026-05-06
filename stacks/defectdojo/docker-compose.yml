@@ -17,8 +17,10 @@ services:
       - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
       - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
       - DD_SOCIAL_AUTH_OIDC_AUTH_ENABLED=True
-      - DD_ENABLE_OIDC=True
       - DD_SOCIAL_AUTH_REDIRECT_IS_HTTPS=True
+      # SSL_CERT_FILE: covers Python's native ssl module (supplements REQUESTS_CA_BUNDLE
+      # which only covers the requests library). Both are needed for full TLS trust.
+      - SSL_CERT_FILE=/tmp/ca-bundle.crt
       - DD_SOCIAL_AUTH_OIDC_OIDC_ENDPOINT=https://kanidm.${DOMAIN}/oauth2/openid/defectdojo
       - DD_SOCIAL_AUTH_OIDC_KEY=defectdojo
       - DD_SOCIAL_AUTH_OIDC_SECRET=${DEFECTDOJO_OIDC_SECRET}

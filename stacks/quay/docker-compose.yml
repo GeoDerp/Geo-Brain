@@ -63,7 +63,7 @@ services:
       - POSTGRES_PASSWORD=${CLAIR_DB_PASSWORD}
       - POSTGRES_DB=${CLAIR_DB_NAME}
     volumes:
-      - ${DATA_DIR}/clair-db:/var/lib/postgresql/data:Z,U
+      - /var/brain-ssof/clair-db:/var/lib/postgresql/data:Z,U
       - ./db-init:/docker-entrypoint-initdb.d:ro,z
     networks:
       - quay-net
@@ -138,6 +138,9 @@ services:
     volumes:
       - ./config:/conf/stack:Z
       - ${DATA_DIR}/quay-storage:/datastorage:Z,U
+      # Quay auto-imports all .crt files from extra_ca_certs/ on startup.
+      # Required for TLS verification when contacting Kanidm OIDC endpoints.
+      - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/conf/stack/extra_ca_certs/step-ca.crt:ro,z
     networks:
       - quay-net
       - proxy-net

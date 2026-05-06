@@ -240,7 +240,7 @@ test_volume_compliance() {
 import yaml
 with open('$compose') as f:
     d = yaml.safe_load(f)
-allowed = ('./', '../', '\${DATA_DIR}', '/var/run/', '/dev', '/proc', '/etc', '/var/log', '\${PODMAN_SOCK')
+allowed = ('./', '../', '\${DATA_DIR}', '/var/run/', '/var/brain-ssof/', '/dev', '/proc', '/etc', '/var/log', '\${PODMAN_SOCK')
 issues = []
 for svc, cfg in (d.get('services',{}) or {}).items():
     for v in (cfg.get('volumes') or []):

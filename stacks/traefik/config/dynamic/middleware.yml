@@ -29,7 +29,7 @@ http:
     crowdsec:
       plugin:
         crowdsec-bouncer-traefik-plugin:
-          enabled: false
+          enabled: true
           crowdsecLapiScheme: http
           crowdsecLapiHost: "crowdsec:8080"
           crowdsecLapiKey: '${CROWDSEC_BOUNCER_API_KEY}'

@@ -14,7 +14,9 @@ FEATURE_OIDC_LOGIN: true
 OIDC_LOGIN_CONFIG:
   CLIENT_ID: "quay"
   CLIENT_SECRET: "${QUAY_OIDC_SECRET}"
-  OIDC_SERVER: "https://kanidm.${DOMAIN}/oauth2/openid/quay/"
+  # Trailing slash omitted: Quay appends /.well-known/openid-configuration and
+  # compares the iss claim against this value — both require no trailing slash.
+  OIDC_SERVER: "https://kanidm.${DOMAIN}/oauth2/openid/quay"
   SERVICE_NAME: "kanidm"
   LOGIN_SCOPES: ["openid", "profile", "email", "groups"]
 SECRET_KEY: "${QUAY_SECRET_KEY}"
