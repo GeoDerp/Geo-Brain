@@ -427,24 +427,26 @@ setup_gitea() {
     # (openid+profile+email+groups+openid) that Kanidm rejects with an error.
     local auth_id
     auth_id=$(echo "$existing_source" | awk '{print $1}')
-    echo "🔹 Gitea OIDC auth source 'kanidm' (ID: ${auth_id}) exists — patching scopes..."
+    echo "🔹 Gitea OIDC auth source 'kanidm' (ID: ${auth_id}) exists — patching scopes and secret..."
     run_on_node "podman exec --user git gitea gitea admin auth update-oauth \
       --id '${auth_id}' \
+      --name kanidm \
+      --secret '${GITEA_SECRET}' \
       --scopes 'profile email groups'" 2>/dev/null && \
-      echo "✅ Gitea auth source scopes updated (openid removed — Gitea adds it automatically)." || \
-      echo "⚠️ Failed to update Gitea auth source scopes (non-fatal)."
+      echo "✅ Gitea auth source updated (name=kanidm, secret synced, scopes set)." || \
+      echo "⚠️ Failed to update Gitea auth source (non-fatal)."
   else
     echo "Adding Kanidm OIDC auth source to Gitea..."
     # NOTE: Do NOT include 'openid' in --scopes. Gitea appends it automatically to
     # all OIDC requests. Passing it here causes duplicate scope → Kanidm rejects.
     if run_on_node "podman exec --user git gitea gitea admin auth add-oauth \
-      --name Kanidm \
+      --name kanidm \
       --provider openidConnect \
       --key gitea \
       --secret '${GITEA_SECRET}' \
       --auto-discover-url 'https://kanidm.${DOMAIN}/oauth2/openid/gitea/.well-known/openid-configuration' \
       --scopes 'profile email groups'" 2>/dev/null; then
-      echo "✅ Gitea OIDC auth source configured for Kanidm."
+      echo "✅ Gitea OIDC auth source configured for Kanidm (name=kanidm, callback=/user/oauth2/kanidm/callback)."
     else
       echo "⚠️ Failed to add Gitea OIDC auth source. Configure manually at https://gitea.${DOMAIN}/-/admin/auths/new"
     fi

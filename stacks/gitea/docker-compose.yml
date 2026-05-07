@@ -31,11 +31,9 @@ services:
       - GITEA__service__REQUIRE_SIGNIN_VIEW=true
       - GITEA__oauth2__ENABLED=true
       - GITEA__openid__ENABLE_OPENID_SIGNIN=false
-      - GITEA__service.oauth2__PROVIDER=openidConnect
-      - GITEA__service.oauth2__NAME=Kanidm
-      - GITEA__service.oauth2__CLIENT_ID=gitea
-      - GITEA__service.oauth2__CLIENT_SECRET=${GITEA_OIDC_SECRET}
-      - GITEA__service.oauth2__AUTO_DISCOVER_URL=https://kanidm.${DOMAIN}/oauth2/openid/gitea/.well-known/openid-configuration
+      # Note: GITEA__service.oauth2__* would map to [service.oauth2] INI section which
+      # does not exist in Gitea. OIDC auth source is managed by setup_gitea() in setup-brain.sh
+      # via `gitea admin auth add-oauth --name kanidm` (callback: /user/oauth2/kanidm/callback).
       - GITEA__service__ENABLE_REVERSE_PROXY_AUTHENTICATION=true
       - GITEA__service__ENABLE_REVERSE_PROXY_AUTO_REGISTRATION=true
       - GITEA__service__ENABLE_REVERSE_PROXY_EMAIL=true
@@ -67,7 +65,7 @@ services:
       retries: 3
     labels:
       - "kanidm.oidc.client_id=gitea"
-      - "kanidm.oidc.redirect_path=/user/oauth2/Kanidm/callback"
+      - "kanidm.oidc.redirect_path=/user/oauth2/kanidm/callback"
       - "security.stig.compliance=true"
       - "traefik.enable=true"
       - "traefik.http.routers.gitea.rule=Host(`gitea.${DOMAIN}`)"

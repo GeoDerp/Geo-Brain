@@ -26,7 +26,11 @@ services:
       - MINIO_IDENTITY_OPENID_REDIRECT_URI=https://minio.${DOMAIN}/oauth_callback
       # Map Kanidm's 'groups' claim to MinIO policy names.
       - MINIO_IDENTITY_OPENID_CLAIM_NAME=groups
-      - MINIO_SERVER_URL=https://minio.${DOMAIN}
+      # MINIO_SERVER_URL points to the S3 API port (9000) routed via Traefik as s3.DOMAIN.
+      # The console (port 9001) handles the OAuth callback but calls STS on MINIO_SERVER_URL.
+      # Without this, the browser's AssumeRoleWithWebIdentity call hits the console (port 9001)
+      # which returns HTML instead of the expected STS XML response.
+      - MINIO_SERVER_URL=https://s3.${DOMAIN}
       - MINIO_BROWSER_REDIRECT_URL=https://minio.${DOMAIN}
       - MINIO_UPDATE=off
       - MINIO_PROMETHEUS_AUTH_TYPE=public
@@ -54,12 +58,21 @@ services:
       - "kanidm.oidc.client_id=minio"
       - "kanidm.oidc.redirect_path=/oauth_callback"
       - "traefik.enable=true"
+      # Console route: minio.DOMAIN → port 9001
       - "traefik.http.routers.minio-console.rule=Host(`minio.${DOMAIN}`)"
       - "traefik.http.routers.minio-console.entrypoints=websecure"
       - "traefik.http.routers.minio-console.tls=true"
       - "traefik.http.routers.minio-console.tls.certresolver=stepca"
       - "traefik.http.routers.minio-console.middlewares=security-headers@file"
       - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+      # S3 API route: s3.DOMAIN → port 9000 (STS + S3 API)
+      # Required so the browser's AssumeRoleWithWebIdentity call reaches the API, not the console.
+      - "traefik.http.routers.minio-api.rule=Host(`s3.${DOMAIN}`)"
+      - "traefik.http.routers.minio-api.entrypoints=websecure"
+      - "traefik.http.routers.minio-api.tls=true"
+      - "traefik.http.routers.minio-api.tls.certresolver=stepca"
+      - "traefik.http.routers.minio-api.middlewares=security-headers@file"
+      - "traefik.http.services.minio-api.loadbalancer.server.port=9000"
       - "traefik.docker.network=proxy-net"
       - "security.stig.compliance=true"
       - "security.stig.role=storage"

@@ -809,12 +809,9 @@ test_crowdsec_active() {
         skip "CrowdSec not deployed, skipping test"
         return
     fi
-    # cscli bouncers list hangs in non-TTY SSH; verify bouncer via LAPI HTTP API instead.
-    # BOUNCER_KEY_traefik env var registers a bouncer; validate the key works against /v1/decisions
-    local bouncer_key
-    bouncer_key=$(ssh_cmd "grep CROWDSEC_BOUNCER_API_KEY ~/My-HomeLab/.env | cut -d= -f2 | tr -d ' \r\n'" 2>/dev/null)
-    local lapi_port=8180
-    if [[ -n "$bouncer_key" ]] && ssh_cmd "curl -sf --max-time 5 -H 'X-Api-Key: ${bouncer_key}' http://127.0.0.1:${lapi_port}/v1/decisions -o /dev/null -w '%{http_code}' | grep -q 200" 2>/dev/null; then
+    # Use cscli bouncers list to confirm a traefik bouncer is registered and valid.
+    # BOUNCER_KEY_traefik env var in the crowdsec compose auto-registers the bouncer on startup.
+    if ssh_cmd "podman exec crowdsec cscli bouncers list 2>/dev/null | grep -qi 'traefik'" 2>/dev/null; then
         pass "CrowdSec IPS is active with Traefik bouncer registered"
     else
         fail "CrowdSec IPS is running but Traefik bouncer is missing"

@@ -91,10 +91,10 @@ for APP_INFO in \$EXPECTED_APPS; do
         kanidm system oauth2 add-redirect-url "\$APP" "https://${DOMAIN}/admin-oauth2/callback" -C /tmp/ca.crt >/dev/null 2>&1 || true
     fi
 
-    if [ "\$APP" = "quay" ]; then
-        kanidm system oauth2 warning-enable-legacy-crypto "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
-        kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
-    fi
+    # Enable RS256 (legacy crypto) for all clients for maximum JWT compatibility.
+    # Kanidm defaults to ES256-only; RS256 is needed by Quay and improves compat
+    # with Python/PHP OIDC libraries that may not support EC keys.
+    kanidm system oauth2 warning-enable-legacy-crypto "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
     kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
     
     kanidm system oauth2 delete-scope-map "\$APP" idm_all_persons -C /tmp/ca.crt >/dev/null 2>&1 || true

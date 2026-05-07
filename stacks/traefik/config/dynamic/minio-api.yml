@@ -1,0 +1,21 @@
+# Static Traefik config for MinIO S3 API endpoint.
+# The generator (deploy.sh) only handles one router per service.
+# The console route (minio.DOMAIN → 9001) is handled by gen_minio_minio.yml.
+# This file adds the S3 API route (s3.DOMAIN → 9000) required for OIDC STS
+# (AssumeRoleWithWebIdentity) to work correctly without returning HTML.
+http:
+  routers:
+    minio-api:
+      rule: "Host(`s3.brain.home.lan`)"
+      entryPoints:
+        - websecure
+      service: minio-api
+      tls:
+        certResolver: stepca
+      middlewares:
+        - security-headers@file
+  services:
+    minio-api:
+      loadBalancer:
+        servers:
+          - url: "http://minio:9000"
