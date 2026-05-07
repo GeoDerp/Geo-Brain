@@ -26,7 +26,7 @@ services:
       - GITEA__server__SSH_DOMAIN=gitea.${DOMAIN}
       - GITEA__server__SSH_PORT=2222
       - GITEA__server__SSH_LISTEN_PORT=2222
-      - GITEA__service__DISABLE_REGISTRATION=true
+      - GITEA__service__DISABLE_REGISTRATION=false
       - GITEA__service__ALLOW_ONLY_EXTERNAL_REGISTRATION=true
       - GITEA__service__REQUIRE_SIGNIN_VIEW=true
       - GITEA__oauth2__ENABLED=true
@@ -41,7 +41,6 @@ services:
       - GITEA__service__REVERSE_PROXY_AUTH_EMAIL=X-Auth-Request-Email
       - GITEA__security__REVERSE_PROXY_TRUSTED_PROXIES=${PODMAN_SUBNET:-10.89.0.0/16},127.0.0.1
       - GITEA__auth__DISABLE_REGULAR_ORG_CREATION=true
-      - GITEA__service__DISABLE_REGISTRATION=true
       - GITEA__service__ALLOW_ONLY_EXTERNAL_REGISTRATION=true
       - GITEA__service__SHOW_REGISTRATION_BUTTON=false
       - GITEA__security__LOGIN_REMEMBER_DAYS=7

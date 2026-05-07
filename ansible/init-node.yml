@@ -396,6 +396,18 @@
       when: "'Linger=yes' not in (linger_check.stdout | default(''))"
       changed_when: true
 
+    # =================================================================
+    #  10. Enable podman-restart (auto-start containers after reboot)
+    # =================================================================
+    - name: "[10/10] Enable podman-restart.service (containers survive reboot)"
+      ansible.builtin.systemd:
+        name: podman-restart.service
+        scope: user
+        enabled: true
+        state: started
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
+
     - name: "[11/11] Create persistent DATA_DIR (/var/My-HomeLab)"
       become: true
       ansible.builtin.file:

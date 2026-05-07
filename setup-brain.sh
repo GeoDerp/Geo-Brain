@@ -506,17 +506,20 @@ print('Token inserted')
 setup_crowdsec() {
   echo "--- 6) CrowdSec integration ---"
   if run_on_node "podman container exists crowdsec" 2>/dev/null; then
-    # Register a bouncer for the Traefik plugin if not already present
-    if ! run_on_node "podman exec crowdsec cscli bouncers list -o json" 2>/dev/null | grep -q "traefik-bouncer"; then
-      CROWDSEC_KEY=$(run_on_node "podman exec crowdsec cscli bouncers add traefik-bouncer -o raw" 2>/dev/null)
-      if [[ -n "$CROWDSEC_KEY" ]]; then
-        write_env_secret "CROWDSEC_BOUNCER_API_KEY" "$CROWDSEC_KEY"
-        echo "✅ Created CrowdSec Bouncer API Key for Traefik."
-        echo ">>> Redeploying Traefik to pick up bouncer key..."
-        ./deploy.sh traefik up
-      fi
+    # The bouncer name "traefik" matches the BOUNCER_KEY_traefik env var in docker-compose.
+    # The compose env var handles fresh installs; this function handles cases where the
+    # bouncer was dropped from the CrowdSec DB (e.g. data volume wiped).
+    local cs_key="${CROWDSEC_BOUNCER_API_KEY:-}"
+    if [[ -z "$cs_key" ]]; then
+      echo "⚠️ CROWDSEC_BOUNCER_API_KEY not set — skipping bouncer setup."
+      return 0
+    fi
+    if ! run_on_node "podman exec crowdsec cscli bouncers list -o json" 2>/dev/null | grep -q '"traefik"'; then
+      run_on_node "podman exec crowdsec cscli bouncers add traefik -k '${cs_key}'" 2>/dev/null && \
+        echo "✅ CrowdSec 'traefik' bouncer registered using existing CROWDSEC_BOUNCER_API_KEY." || \
+        echo "⚠️ CrowdSec bouncer registration failed (may already exist with this key)."
     else
-      echo "🔹 CrowdSec traefik-bouncer already registered."
+      echo "🔹 CrowdSec 'traefik' bouncer already registered."
     fi
   else
     echo "⚠️ CrowdSec container not found. Skipping bouncer setup."
