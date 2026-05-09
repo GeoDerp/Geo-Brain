@@ -1,37 +1,26 @@
 #!/bin/bash
 # docker-podman-shim.sh — Makes Dockge status detection work with Podman.
-#
-# Podman-compose containers carry the same com.docker.compose.* labels that
-# Docker Compose v2 expects, but "docker compose ls" still returns [] because
-# Docker Compose v2 does its own internal project tracking that is incompatible
-# with podman-compose.
-#
-# This shim intercepts "docker compose ls" and "docker compose ps" and queries
-# the Podman-compat API directly through the mounted socket, producing the
-# JSON that Dockge expects. All other commands pass through to /usr/bin/docker.
+# Refactored for robustness and to avoid shell syntax errors in heredocs.
 
 set -euo pipefail
 REAL_DOCKER=/usr/bin/docker
 SOCK=/var/run/docker.sock
 LOG=/tmp/docker-shim.log
 
-# ---- Debug logging (rotate at 100KB) -----------------------------------
 _log() { echo "[$(date -Iseconds)] $*" >> "$LOG" 2>/dev/null || true; }
 if [[ -f "$LOG" ]] && [[ "$(stat -c%s "$LOG" 2>/dev/null || echo 0)" -gt 102400 ]]; then
     mv "$LOG" "${LOG}.1" 2>/dev/null || true
 fi
 _log "CALLED: $0 $*"
 
-# ---- Detect subcommand -------------------------------------------------
-# Dockge always calls: docker compose <sub> [flags…]
 if [[ "${1:-}" == "compose" ]]; then
     SUB="${2:-}"
-    shift 2  # remaining args are flags like --all --format json
+    shift 2
     _log "COMPOSE SUB=$SUB ARGS=$*"
 
     case "$SUB" in
         ls)
-            exec /usr/local/bin/node -e '
+            cat <<'NODE_EOF' > /tmp/ls.js
 const http = require("http");
 const args = process.argv.slice(2);
 const wantJSON = args.includes("json");
@@ -49,20 +38,13 @@ const req = http.request(
                     let project = (c.Labels || {})["com.docker.compose.project"];
                     if (!project) continue;
                     
-                    // Podman-compose might strip the "user/" prefix if it was deployed from that dir.
-                    // Dockge expects the Name to match the relative path from DOCKGE_STACKS_DIR.
-                    // We check if "user/" + project exists in projects or if the project name 
-                    // matches known user stacks.
-                    // BUT: the labels from podman-compose for moodle is just "moodle".
-                    // Let's use the working directory label if available.
                     const projectDir = (c.Labels || {})["com.docker.compose.project.working_dir"];
                     if (projectDir && projectDir.includes("/user/")) {
                         project = "user/" + project;
                     }
 
                     if (!projects[project]) {
-                        const cfg =
-                            (c.Labels || {})["com.docker.compose.project.config_files"] || "";
+                        const cfg = (c.Labels || {})["com.docker.compose.project.config_files"] || "";
                         projects[project] = { Name: project, ConfigFiles: cfg, running: 0, exited: 0, created: 0 };
                     }
                     const st = (c.State || "").toLowerCase();
@@ -72,16 +54,16 @@ const req = http.request(
                 }
                 const result = Object.values(projects).map((p) => {
                     const parts = [];
-                    if (p.running > 0) parts.push("running(" + p.running + ")");
-                    if (p.exited > 0) parts.push("exited(" + p.exited + ")");
-                    if (p.created > 0) parts.push("created(" + p.created + ")");
+                    if (p.running > 0) parts.push(`running(${p.running})`);
+                    if (p.exited > 0) parts.push(`exited(${p.exited})`);
+                    if (p.created > 0) parts.push(`created(${p.created})`);
                     return { Name: p.Name, Status: parts.join(", ") || "unknown", ConfigFiles: p.ConfigFiles };
                 });
                 if (wantJSON) {
                     process.stdout.write(JSON.stringify(result) + "\n");
                 } else {
                     console.log("NAME\tSTATUS\tCONFIG FILES");
-                    for (const r of result) console.log(r.Name + "\t" + r.Status + "\t" + r.ConfigFiles);
+                    for (const r of result) console.log(`${r.Name}\t${r.Status}\t${r.ConfigFiles}`);
                 }
             } catch (e) {
                 process.stdout.write("[]\n");
@@ -91,21 +73,16 @@ const req = http.request(
 );
 req.on("error", () => { process.stdout.write("[]\n"); });
 req.end();
-' -- "$@"
+NODE_EOF
+            /usr/local/bin/node /tmp/ls.js "$@"
+            exit 0
             ;;
 
         ps)
-            # Dockge sets cwd to the stack path; project = basename of cwd
-            # BUT if it is a nested stack, Dockge might provide the relative path.
-            # We need to strip "user/" for the label filter if it was added.
             FULL_PROJECT="$(basename "$PWD")"
-            # If we are in user/moodle, basename is moodle.
-            # Dockge logic for PS is usually call from the specific directory.
-            
-            exec /usr/local/bin/node -e '
+            cat <<'NODE_EOF' > /tmp/ps.js
 const http = require("http");
-const project = process.argv[1];
-// Search for containers where label matches project name
+const project = process.argv[2];
 const filter = encodeURIComponent(JSON.stringify({ label: ["com.docker.compose.project=" + project] }));
 
 const req = http.request(
@@ -116,7 +93,6 @@ const req = http.request(
         res.on("end", () => {
             try {
                 const containers = JSON.parse(data);
-                // Dockge parses one JSON object per line
                 for (const c of containers) {
                     const name = ((c.Names || [])[0] || "").replace(/^\//, "");
                     const service = (c.Labels || {})["com.docker.compose.service"] || name;
@@ -134,25 +110,23 @@ const req = http.request(
                     };
                     process.stdout.write(JSON.stringify(obj) + "\n");
                 }
-            } catch (e) {
-                // empty output on error
-            }
+            } catch (e) {}
         });
     }
 );
 req.on("error", () => {});
 req.end();
-' -- "$PROJECT" "$@"
+NODE_EOF
+            /usr/local/bin/node /tmp/ps.js "$FULL_PROJECT" "$@"
+            exit 0
             ;;
 
         *)
-            # All management commands (up, down, stop, restart, pull, logs, exec, …)
             _log "PASSTHROUGH: compose $SUB $*"
             exec "$REAL_DOCKER" compose "$SUB" "$@"
             ;;
     esac
 else
-    # Non-compose docker commands (ps, inspect, version, …)
     _log "PASSTHROUGH: $*"
     exec "$REAL_DOCKER" "$@"
 fi

@@ -31,6 +31,8 @@ services:
       - GITEA__service__REQUIRE_SIGNIN_VIEW=true
       - GITEA__oauth2__ENABLED=true
       - GITEA__openid__ENABLE_OPENID_SIGNIN=false
+      - GITEA__oauth2_client__ENABLE_AUTO_REGISTRATION=true
+      - GITEA__oauth2_client__ACCOUNT_LINKING=auto
       # Note: GITEA__service.oauth2__* would map to [service.oauth2] INI section which
       # does not exist in Gitea. OIDC auth source is managed by setup_gitea() in setup-brain.sh
       # via `gitea admin auth add-oauth --name kanidm` (callback: /user/oauth2/kanidm/callback).

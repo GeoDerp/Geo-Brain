@@ -10,13 +10,13 @@
       "name": "DS_OPENSEARCH",
       "label": "Wazuh Indexer",
       "type": "datasource",
-      "pluginId": "opensearch"
+      "pluginId": "grafana-opensearch-datasource"
     }
   ],
   "__requires": [
     { "type": "grafana", "id": "grafana", "version": "10.0.0" },
     { "type": "datasource", "id": "prometheus", "version": "1.0.0" },
-    { "type": "datasource", "id": "opensearch", "version": "1.0.0" }
+    { "type": "datasource", "id": "grafana-opensearch-datasource", "version": "1.0.0" }
   ],
   "annotations": { "list": [ { "builtIn": 1, "datasource": { "type": "grafana", "uid": "-- Grafana --" }, "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "target": { "limit": 100, "matchAny": false, "tags": [], "type": "dashboard" }, "type": "dashboard" } ] },
   "editable": true,
@@ -28,17 +28,17 @@
     {
       "title": "Wazuh Alerts by Level",
       "type": "timeseries",
-      "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "${DS_OPENSEARCH}" },
       "targets": [
         {
-          "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${DS_OPENSEARCH}" },
           "query": "rule.level:>=8",
           "refId": "High",
           "metrics": [{ "type": "count", "id": "1" }],
           "bucketAggs": [{ "type": "date_histogram", "field": "@timestamp", "settings": { "interval": "auto" }, "id": "2" }]
         },
         {
-          "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "${DS_OPENSEARCH}" },
           "query": "rule.level:>=5 AND rule.level:<8",
           "refId": "Medium",
           "metrics": [{ "type": "count", "id": "1" }],
@@ -49,7 +49,7 @@
     {
         "title": "Top 10 Wazuh Rules Triggered",
         "type": "barchart",
-        "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+        "datasource": { "type": "grafana-opensearch-datasource", "uid": "${DS_OPENSEARCH}" },
         "targets": [
           {
             "query": "*",
@@ -85,7 +85,7 @@
     {
         "title": "Latest High-Severity Wazuh Alerts",
         "type": "table",
-        "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+        "datasource": { "type": "grafana-opensearch-datasource", "uid": "${DS_OPENSEARCH}" },
         "targets": [
             {
                 "query": "rule.level:>=10",

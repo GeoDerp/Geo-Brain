@@ -21,3 +21,4 @@ datasources:
       database: "wazuh-alerts-*"
       flavor: opensearch
       version: "2.x"
+      timeField: "@timestamp"

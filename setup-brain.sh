@@ -336,44 +336,31 @@ setup_storage() {
   fi
 }
 
-# --- 4b) MinIO Bucket Provisioning ---
-setup_minio() {
-  echo "--- 4b) MinIO Bucket Provisioning ---"
-  wait_for_service "MinIO" "run_on_node 'curl -m 5 -sf http://localhost:9000/minio/health/live'" || { echo "⚠️ MinIO not reachable, skipping bucket setup."; return 0; }
+# --- 4b) Storage Bucket Provisioning (SeaweedFS S3) ---
+setup_storage_buckets() {
+  echo "--- 4b) Storage Bucket Provisioning ---"
+  # SeaweedFS S3 gateway is on port 8333 (internal) or s3.DOMAIN (external)
+  wait_for_service "SeaweedFS S3" "run_on_node 'curl -m 5 -sf http://localhost:8333/'" || { echo "⚠️ SeaweedFS S3 not reachable, skipping bucket setup."; return 0; }
 
-  local MINIO_CONSOLE="http://localhost:9001"
-  local MINIO_USER="${MINIO_ROOT_USER:-minioadmin}"
-  local MINIO_PASS="${MINIO_ROOT_PASSWORD}"
-  local COOKIE_JAR="/tmp/.minio-cookies-$$"
+  local S3_GATEWAY="http://localhost:8333"
   local REQUIRED_BUCKETS=("loki-data")
 
-  # Login to MinIO Console API
-  local login_code
-  login_code=$(run_on_node "curl -s -m 10 -o /dev/null -w '%{http_code}' -c '${COOKIE_JAR}' -X POST '${MINIO_CONSOLE}/api/v1/login' -H 'Content-Type: application/json' -d '{\"accessKey\":\"${MINIO_USER}\",\"secretKey\":\"${MINIO_PASS}\"}'")
-  if [[ "$login_code" != "204" ]]; then
-    echo "⚠️ MinIO Console login failed (HTTP ${login_code}). Skipping bucket setup."
-    run_on_node "rm -f '${COOKIE_JAR}'" 2>/dev/null
-    return 0
-  fi
-
   for bucket in "${REQUIRED_BUCKETS[@]}"; do
-    # Check if bucket exists
-    local exists
-    exists=$(run_on_node "curl -s -m 10 -b '${COOKIE_JAR}' '${MINIO_CONSOLE}/api/v1/buckets' 2>/dev/null" | grep -c "\"name\":\"${bucket}\"" || true)
-    if [[ "$exists" -gt 0 ]]; then
-      echo "🔹 MinIO bucket '${bucket}' already exists."
+    # Check if bucket exists (GET /bucketname returns 200/404)
+    local check_code
+    check_code=$(run_on_node "curl -s -m 10 -o /dev/null -w '%{http_code}' '${S3_GATEWAY}/${bucket}/'")
+    if [[ "$check_code" == "200" || "$check_code" == "403" ]]; then
+      echo "🔹 Storage bucket '${bucket}' already exists."
     else
       local create_code
-      create_code=$(run_on_node "curl -s -m 10 -o /dev/null -w '%{http_code}' -b '${COOKIE_JAR}' -X POST '${MINIO_CONSOLE}/api/v1/buckets' -H 'Content-Type: application/json' -d '{\"name\":\"${bucket}\"}'")
+      create_code=$(run_on_node "curl -s -m 10 -o /dev/null -w '%{http_code}' -X PUT '${S3_GATEWAY}/${bucket}/'")
       if [[ "$create_code" == "200" || "$create_code" == "201" ]]; then
-        echo "✅ Created MinIO bucket: ${bucket}"
+        echo "✅ Created storage bucket: ${bucket}"
       else
-        echo "⚠️ Failed to create MinIO bucket '${bucket}' (HTTP ${create_code})."
+        echo "⚠️ Failed to create storage bucket '${bucket}' (HTTP ${create_code})."
       fi
     fi
   done
-
-  run_on_node "rm -f '${COOKIE_JAR}'" 2>/dev/null
 }
 
 # --- 5) SOC (Wazuh & DefectDojo) ---
@@ -445,7 +432,9 @@ setup_gitea() {
       --key gitea \
       --secret '${GITEA_SECRET}' \
       --auto-discover-url 'https://kanidm.${DOMAIN}/oauth2/openid/gitea/.well-known/openid-configuration' \
-      --scopes 'profile email groups'" 2>/dev/null; then
+      --scopes 'profile email groups' \
+      --auto-create-users \
+      --user-id-claim preferred_username" 2>/dev/null; then
       echo "✅ Gitea OIDC auth source configured for Kanidm (name=kanidm, callback=/user/oauth2/kanidm/callback)."
     else
       echo "⚠️ Failed to add Gitea OIDC auth source. Configure manually at https://gitea.${DOMAIN}/-/admin/auths/new"
@@ -458,9 +447,9 @@ setup_gitea() {
   # In action_runner_token: is_active=1 = valid/usable; is_active=0 = invalidated.
   echo "Ensuring Gitea runner registration token exists..."
   local current_token
-  current_token=$(run_on_node "python3 -c \"
+  current_token=$(run_on_node "XDG_RUNTIME_DIR=/run/user/1000 podman unshare python3 -c \"
 import sqlite3
-DB='${DATA_DIR}/gitea/data/gitea/gitea.db'
+DB='/home/geo/My-HomeLab-Data/gitea/data/gitea/gitea.db'
 try:
     conn = sqlite3.connect(DB)
     row = conn.execute('SELECT token FROM action_runner_token WHERE is_active=1 AND (deleted IS NULL OR deleted=0) AND owner_id=0 AND repo_id=0 ORDER BY id DESC LIMIT 1').fetchone()
@@ -554,8 +543,8 @@ main() {
     setup_storage
   fi
   if [[ "$section" == "all" || "$section" == "storage" ]]; then
-    echo ">>> [main] calling setup_minio"
-    setup_minio
+    echo ">>> [main] calling setup_storage_buckets"
+    setup_storage_buckets
   fi
   if [[ "$section" == "all" || "$section" == "identity" ]]; then
     echo ">>> [main] calling setup_identity"
@@ -588,11 +577,15 @@ main() {
   echo "🔐 BREAKGLASS & SSO SUMMARY"
   echo "================================================="
   echo "1. Kanidm: https://kanidm.${DOMAIN} | idm_admin recovery password captured (use ./scripts/create-kanidm-user.sh to create users)"
+  echo "1. Kanidm: https://kanidm.${DOMAIN} | idm_admin recovery password captured (use ./scripts/create-kanidm-user.sh to create users)"
   echo "   ➡️  Create a UI login: ./scripts/create-kanidm-user.sh --role admin myadmin \"Global Admin\""
-  echo "2. MinIO: https://minio.${DOMAIN} | Credentials in .env (MINIO_ROOT_USER / MINIO_ROOT_PASSWORD)"
+  echo "2. Storage: https://storage.${DOMAIN} | S3 API: https://s3.${DOMAIN}"
   echo "3. Quay: https://quay.${DOMAIN} | OIDC SSO Ready"
   echo "4. Wazuh: https://wazuh.${DOMAIN} | SSO via OAuth2 Proxy"
   echo "================================================="
 }
+
+main "$@"
+
 
 main "$@"

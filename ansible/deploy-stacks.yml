@@ -20,7 +20,7 @@
       - pangolin
       - kanidm
       - oauth2-proxy
-      - minio
+      - seaweedfs
       - loki
       - vector
       - prometheus
@@ -117,8 +117,8 @@
         set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
         command -v envsubst &>/dev/null || exit 0
         # Build a list of all exported variables for substitution
-        VARS=$(env | grep -E '^(DOMAIN|DATA_DIR|KANIDM|OAUTH2|MINIO|QUAY|CLAIR|DEFECTDOJO|WAZUH|DOJO|GITEA|MOODLE|N8N|CROWDSEC|PUID|PGID)' | cut -d= -f1 | sed 's/^/$/' | tr '\n' ',' | sed 's/,$//')
-        find "$STACKDIR" -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
+        VARS=$(env | grep -E '^(DOMAIN|DATA_DIR|KANIDM|OAUTH2|MINIO|QUAY|CLAIR|DEFECTDOJO|WAZUH|DOJO|GITEA|MOODLE|N8N|CROWDSEC|PUID|PGID|DS_)' | cut -d= -f1 | sed 's/^/$/' | tr '\n' ',' | sed 's/,$//')
+        find "$STACKDIR" -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' -o -name '*.json' \) 2>/dev/null | while IFS= read -r f; do
             envsubst "$VARS" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
         done
       args:

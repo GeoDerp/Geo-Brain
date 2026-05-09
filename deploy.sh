@@ -169,7 +169,7 @@ get_base_stacks() {
         "pangolin"
         "kanidm"
         "oauth2-proxy"
-        "minio"
+        "seaweedfs"
         "loki"
         "vector"
         "prometheus"
