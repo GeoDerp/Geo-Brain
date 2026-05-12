@@ -27,7 +27,7 @@ services:
       - OAUTH2_PROXY_COOKIE_NAME=_oauth2_proxy_main
       - OAUTH2_PROXY_COOKIE_PATH=/
       - OAUTH2_PROXY_EMAIL_DOMAINS=*
-      - OAUTH2_PROXY_OIDC_EMAIL_CLAIM=preferred_username
+      - OAUTH2_PROXY_OIDC_EMAIL_CLAIM=email
       - OAUTH2_PROXY_OIDC_GROUPS_CLAIM=groups
       - OAUTH2_PROXY_SCOPE=openid profile email groups
       - OAUTH2_PROXY_ALLOWED_GROUPS=stig_admins@${DOMAIN},stig_users@${DOMAIN}
@@ -102,7 +102,7 @@ services:
       - OAUTH2_PROXY_COOKIE_NAME=_oauth2_proxy_admin
       - OAUTH2_PROXY_COOKIE_PATH=/
       - OAUTH2_PROXY_EMAIL_DOMAINS=*
-      - OAUTH2_PROXY_OIDC_EMAIL_CLAIM=preferred_username
+      - OAUTH2_PROXY_OIDC_EMAIL_CLAIM=email
       - OAUTH2_PROXY_OIDC_GROUPS_CLAIM=groups
       - OAUTH2_PROXY_SCOPE=openid profile email groups
       - OAUTH2_PROXY_ALLOWED_GROUPS=stig_admins@${DOMAIN}

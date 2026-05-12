@@ -34,15 +34,15 @@ http:
           crowdsecLapiHost: "crowdsec:8080"
           crowdsecLapiKey: '${CROWDSEC_BOUNCER_API_KEY}'
 
-    # Security headers
+    # Security headers — STIG-aligned; HSTS enforced for HTTPS-only homelab
     security-headers:
       headers:
         browserXssFilter: true
         contentTypeNosniff: true
         frameDeny: true
-        stsIncludeSubdomains: false
+        stsIncludeSubdomains: true
         stsPreload: false
-        stsSeconds: 0
+        stsSeconds: 31536000
         customFrameOptionsValue: "SAMEORIGIN"
         referrerPolicy: "strict-origin-when-cross-origin"
 

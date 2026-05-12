@@ -36,3 +36,6 @@ stacks/traefik/config/dynamic/tls.yml
 /certs/
 .aider*
 cookies.txt
+
+# Test credentials (generated at runtime by create-temp-tester.sh)
+tests/.test_creds

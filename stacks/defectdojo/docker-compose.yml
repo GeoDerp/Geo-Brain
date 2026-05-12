@@ -17,6 +17,7 @@ services:
       - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
       - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
       - DD_SOCIAL_AUTH_OIDC_ENABLED=True
+      - DD_SOCIAL_AUTH_ENABLED=True
       - DD_SOCIAL_AUTH_OIDC_AUTH_ENABLED=True
       - DD_SOCIAL_AUTH_OIDC_USERNAME_KEY=preferred_username
       - DD_SOCIAL_AUTH_REDIRECT_IS_HTTPS=True

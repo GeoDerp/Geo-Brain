@@ -44,7 +44,7 @@ for app_info in "${DISCOVERY_APPS[@]}"; do
     url="${app_info#*:}"
     
     echo "Testing discovery for $app..."
-    resp=$(curl -s -k -f "$url" || echo "FAILED")
+    resp=$(curl -s --cacert "$CA_CERT" -f "$url" || echo "FAILED")
     if [[ "$resp" == "FAILED" ]]; then
         fail "[$app] Discovery endpoint unreachable: $url"
     elif ! echo "$resp" | grep -q '"issuer"'; then
@@ -87,7 +87,7 @@ for test_case in "${TEST_CASES[@]}"; do
     
     echo "Testing redirection for $app at $url..."
     # Get the final location after all redirects
-    location=$(curl -s -k -L -o /dev/null -w "%{url_effective}" "$url")
+    location=$(curl -s --cacert "$CA_CERT" -L -o /dev/null -w "%{url_effective}" "$url")
     
     if [[ "$location" != *"kanidm.${DOMAIN}"* ]]; then
         fail "[$app] No redirect to Kanidm received from $url (Landed at: $location)"

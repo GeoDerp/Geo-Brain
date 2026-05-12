@@ -1,17 +1,23 @@
 import requests
-import urllib3
 import sys
 import os
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 domain = os.environ.get("DOMAIN", "example.local")
+# Use the homelab CA bundle if available; fall back to system trust store.
+_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ca_bundle = (
+    os.environ.get("CA_CERT")
+    or os.path.join(_repo_root, "stacks", "traefik", "config", "certs", "ca-bundle.crt")
+    or os.path.join(_repo_root, "stacks", "traefik", "config", "certs", "root_ca.crt")
+)
+verify = ca_bundle if os.path.isfile(ca_bundle) else True
+
 clients = {
     "grafana": f"https://grafana.{domain}/login/generic_oauth",
-    "gitea": f"https://gitea.{domain}/user/oauth2/Kanidm",
+    "gitea": f"https://gitea.{domain}/user/oauth2/kanidm",
     "quay": f"https://quay.{domain}/signin",
     "defectdojo": f"https://defectdojo.{domain}/login/oidc/",
-    "minio": f"https://minio.{domain}/",
+    "seaweedfs": f"https://storage.{domain}/",
     "moodle": f"https://moodle.{domain}/auth/oauth2/login.php?id=1",
     "oauth2-proxy": f"https://{domain}"
 }
@@ -28,7 +34,7 @@ for name, url in clients.items():
     
     discovery_ok = False
     try:
-        r = requests.get(discovery_url, verify=False, timeout=5)
+        r = requests.get(discovery_url, verify=verify, timeout=5)
         if r.status_code == 200:
             discovery_ok = True
     except:
@@ -37,7 +43,7 @@ for name, url in clients.items():
     # 2. Check Integration
     status = "FAIL"
     try:
-        r = requests.get(url, verify=False, timeout=5, allow_redirects=False)
+        r = requests.get(url, verify=verify, timeout=5, allow_redirects=False)
         
         location = r.headers.get("Location", "")
         
@@ -45,11 +51,11 @@ for name, url in clients.items():
         if r.status_code in [301, 302, 303, 307, 308] and "kanidm" in location.lower():
             status = "✅ 302 Redirect"
         
-        # UI with OIDC Button (200) or MinIO SPA
+        # UI with OIDC Button (200) or SeaweedFS SPA
         elif r.status_code == 200:
             body = r.text.lower()
-            if name == "minio" and "minio console" in body:
-                status = "✅ OIDC UI (SPA)"
+            if name == "seaweedfs" and ("seaweedfs" in body or "filer" in body or "s3" in body):
+                status = "✅ Storage UI (SPA)"
             elif "kanidm" in body or "oidc" in body or "openid" in body:
                 status = "✅ OIDC UI Button"
             else:

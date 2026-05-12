@@ -120,7 +120,7 @@ done
 INNEREOF
 )
 
-setup_output=$(echo "$payload" | DBUS_SESSION_BUS_ADDRESS="" XDG_RUNTIME_DIR=/run/user/1000 podman run -i --rm --network host --env KANIDM_PASSWORD="${KANIDM_ADMIN_PASSWORD}" docker.io/kanidm/tools:1.9.2 sh 2>&1) || true
+setup_output=$(echo "$payload" | DBUS_SESSION_BUS_ADDRESS="" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" podman run -i --rm --network host --env KANIDM_PASSWORD="${KANIDM_ADMIN_PASSWORD}" docker.io/kanidm/tools:1.9.2 sh 2>&1) || true
 
 UPDATED_ENV=false
 

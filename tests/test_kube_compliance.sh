@@ -5,9 +5,19 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Ensure kompose is available for the conversion
+KOMPOSE_VERSION="v1.35.0"
+KOMPOSE_SHA256="d7de6c93ef083b668cdcf11bb7ebf739f853952ad229c4afcbbda5af7a480672"
 if [ ! -x /tmp/kompose ]; then
-    echo ">>> Downloading kompose..."
-    curl -sL https://github.com/kubernetes/kompose/releases/download/v1.35.0/kompose-linux-amd64 -o /tmp/kompose
+    echo ">>> Downloading kompose ${KOMPOSE_VERSION}..."
+    curl -sL "https://github.com/kubernetes/kompose/releases/download/${KOMPOSE_VERSION}/kompose-linux-amd64" -o /tmp/kompose
+    # Verify checksum to prevent supply-chain attacks
+    actual_sha=$(sha256sum /tmp/kompose | awk '{print $1}')
+    if [[ "$actual_sha" != "$KOMPOSE_SHA256" ]]; then
+        echo "ERROR: kompose checksum mismatch! Expected: $KOMPOSE_SHA256, Got: $actual_sha"
+        echo "Remove /tmp/kompose and update the expected checksum in this script if the version changed."
+        rm -f /tmp/kompose
+        exit 1
+    fi
     chmod +x /tmp/kompose
 fi
 

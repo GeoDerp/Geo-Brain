@@ -20,6 +20,14 @@
 
 set -euo pipefail
 
+# Check for required dependencies
+for dep in curl jq; do
+    if ! command -v "$dep" &>/dev/null; then
+        echo "ERROR: '$dep' is required but not installed. Please install it and retry." >&2
+        exit 1
+    fi
+done
+
 : "${GITEA_URL:?GITEA_URL must be set (e.g. https://gitea.your-domain.local)}"
 : "${GITEA_TOKEN:?GITEA_TOKEN must be set (Gitea API token)}"
 : "${GITEA_ORG:?GITEA_ORG must be set (Gitea org or username)}"

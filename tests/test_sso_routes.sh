@@ -81,11 +81,11 @@ check_redirect() {
 
     # Capture first redirect only — stops at first 3xx, avoids false-passes
     # from an active browser session that would follow all redirects to the app.
-    http_response=$(curl -k --cacert "$CA_CERT" -s -i --max-redirs 0 --max-time 15 "$url" 2>&1 || true)
+    http_response=$(curl --cacert "$CA_CERT" -s -i --max-redirs 0 --max-time 15 "$url" 2>&1 || true)
     http_code=$(echo "$http_response" | grep -m1 "^HTTP/" | awk '{print $2}')
     location=$(echo "$http_response" | grep -i "^Location:" | sed 's/^[Ll]ocation: //I' | tr -d '\r')
 
-    if [[ "$http_code" != "30"* ]]; then
+    if [[ "$http_code" != 30* ]]; then
         fail "Expected 3xx redirect from ForwardAuth, got HTTP $http_code"
         return
     fi
@@ -120,7 +120,7 @@ check_200() {
     info "Testing ${service_name} at ${url}"
 
     # Expect a 200 OK because the app serves its own login page with an SSO button
-    http_code=$(curl -k --cacert "$CA_CERT" -s -o /dev/null -w "%{http_code}" --max-time 15 "$url")
+    http_code=$(curl --cacert "$CA_CERT" -s -o /dev/null -w "%{http_code}" --max-time 15 "$url")
 
     if [[ "$http_code" == "200" || "$http_code" == "302" ]]; then
         # 302 is acceptable if it redirects to a local /login path

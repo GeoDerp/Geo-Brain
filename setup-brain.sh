@@ -447,9 +447,9 @@ setup_gitea() {
   # In action_runner_token: is_active=1 = valid/usable; is_active=0 = invalidated.
   echo "Ensuring Gitea runner registration token exists..."
   local current_token
-  current_token=$(run_on_node "XDG_RUNTIME_DIR=/run/user/1000 podman unshare python3 -c \"
+  current_token=$(run_on_node "XDG_RUNTIME_DIR=/run/user/\$(id -u) podman unshare python3 -c \"
 import sqlite3
-DB='/home/geo/My-HomeLab-Data/gitea/data/gitea/gitea.db'
+DB='${DATA_DIR}/gitea/data/gitea/gitea.db'
 try:
     conn = sqlite3.connect(DB)
     row = conn.execute('SELECT token FROM action_runner_token WHERE is_active=1 AND (deleted IS NULL OR deleted=0) AND owner_id=0 AND repo_id=0 ORDER BY id DESC LIMIT 1').fetchone()
@@ -464,7 +464,7 @@ except Exception as e:
     # No valid token exists — generate and insert one
     local new_token
     new_token=$(python3 -c "import secrets; print(secrets.token_hex(20))" 2>/dev/null)
-    run_on_node "XDG_RUNTIME_DIR=/run/user/1000 podman unshare python3 -c \"
+    run_on_node "XDG_RUNTIME_DIR=/run/user/\$(id -u) podman unshare python3 -c \"
 import sqlite3, time
 DB='${DATA_DIR}/gitea/data/gitea/gitea.db'
 conn = sqlite3.connect(DB)
