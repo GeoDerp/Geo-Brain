@@ -9,7 +9,11 @@ KOMPOSE_VERSION="v1.35.0"
 KOMPOSE_SHA256="d7de6c93ef083b668cdcf11bb7ebf739f853952ad229c4afcbbda5af7a480672"
 if [ ! -x /tmp/kompose ]; then
     echo ">>> Downloading kompose ${KOMPOSE_VERSION}..."
-    curl -sL "https://github.com/kubernetes/kompose/releases/download/${KOMPOSE_VERSION}/kompose-linux-amd64" -o /tmp/kompose
+    if ! curl -sL --fail "https://github.com/kubernetes/kompose/releases/download/${KOMPOSE_VERSION}/kompose-linux-amd64" -o /tmp/kompose; then
+        echo "ERROR: Failed to download kompose ${KOMPOSE_VERSION}"
+        rm -f /tmp/kompose
+        exit 1
+    fi
     # Verify checksum to prevent supply-chain attacks
     actual_sha=$(sha256sum /tmp/kompose | awk '{print $1}')
     if [[ "$actual_sha" != "$KOMPOSE_SHA256" ]]; then
