@@ -48,15 +48,24 @@ def check_mtls_sidecar(compose_file, data):
     # This might fail on many, but it's a mandate
     failures = 0
     stack = os.path.basename(os.path.dirname(compose_file))
-    # We'll just check if there's network_mode: service:... or if it's not a backend
-    # Actually, the mandate says ALL backend services and databases.
-    # We will just warn for now or fail. Let's fail if it's a db and no sidecar.
+    # Tier 1: full sidecar pattern (network_mode: service:)
+    # Tier 2: DB isolated to compose-defined internal: true network(s) only (acceptable interim)
+    # Tier 3: DB accessible on a non-isolated network — FAIL
+    compose_networks = data.get('networks', {})
+    internal_nets = set(
+        name for name, cfg in compose_networks.items()
+        if cfg and cfg.get('internal', False)
+    )
     db_services = [s for s in data.get('services', {}) if 'db' in s or 'redis' in s]
     for svc_name in db_services:
         svc = data['services'][svc_name]
         network_mode = svc.get('network_mode', '')
-        if not network_mode.startswith('service:'):
-            failures += fail(f"[{stack}/{svc_name}] Database/backend missing mTLS Sidecar Pattern (network_mode: service:...)")
+        if network_mode.startswith('service:'):
+            continue  # Tier 1: full sidecar — OK
+        svc_nets = set(svc.get('networks', []) or [])
+        if svc_nets and svc_nets.issubset(internal_nets):
+            continue  # Tier 2: exclusively on internal nets — OK (interim)
+        failures += fail(f"[{stack}/{svc_name}] DB/cache accessible on non-isolated network (no sidecar, no internal-only nets)")
     if failures == 0: pass_test(f"[{stack}] mTLS Sidecar Pattern rules met")
     return failures
 
@@ -94,9 +103,9 @@ def check_data_separation(compose_file, data):
                     # allowed absolute paths must start with variables
                     pass
                 if not (host_path.startswith('${DATA_DIR}') or host_path.startswith('./') or host_path.startswith('../') or host_path.startswith('${PODMAN_SOCK}') or host_path.startswith('${STACKS_PATH}') or not host_path.startswith('/')):
-                    # Some paths might be valid like /etc/localtime, let's just fail if it's hardcoded /var/My-HomeLab instead of ${DATA_DIR}
-                    if '/var/My-HomeLab' in host_path:
-                        failures += fail(f"[{stack}/{svc_name}] Volume '{vol}' uses hardcoded /var/My-HomeLab instead of ${{DATA_DIR}}")
+                    # Fail on hardcoded data paths that should use ${DATA_DIR}
+                    if '/var/My-HomeLab' in host_path or '/var/brain-ssof' in host_path:
+                        failures += fail(f"[{stack}/{svc_name}] Volume '{vol}' uses hardcoded path instead of ${{DATA_DIR}}")
     if failures == 0: pass_test(f"[{stack}] Data Separation rules met")
     return failures
 

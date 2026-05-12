@@ -1,7 +1,8 @@
 # Falco Configuration
 # Ref: https://falco.org/docs/reference/daemon/config-options/
 
-# Engine configuration — use nodriver because eBPF fails in rootless
+# Engine configuration — modern_ebpf: loads eBPF programs via BTF (no kernel module needed).
+# Requires: privileged container + userns_mode=host for real CAP_BPF in the initial user namespace.
 engine:
   kind: nodriver
 

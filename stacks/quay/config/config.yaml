@@ -49,7 +49,7 @@ FEATURE_SECURITY_SCANNER: false
 SECURITY_SCANNER_V4_ENDPOINT: "http://clair:8080"
 
 # Pull-Through Proxy Cache (mirror docker.io, ghcr.io, quay.io)
-FEATURE_PROXY_CACHE: false
+FEATURE_PROXY_CACHE: true
 
 # DISA STIG / Privacy
 FEATURE_TELEMETRY_LOGGING: false

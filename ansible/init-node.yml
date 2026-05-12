@@ -379,6 +379,70 @@
         reload: true
         state: present
 
+    - name: "[8/10] Set kernel.unprivileged_bpf_disabled=2 (DISA STIG RHEL-08-040286 / RHEL-09-213065)"
+      become: true
+      ansible.posix.sysctl:
+        name: kernel.unprivileged_bpf_disabled
+        value: "2"
+        sysctl_file: /etc/sysctl.d/99-stig.conf
+        reload: true
+        state: present
+
+    # =================================================================
+    #  8b. gVisor OCI Runtime (DISA STIG APSC-DV-002290 Container Sandbox)
+    # =================================================================
+    - name: Check if gVisor runsc is already installed
+      ansible.builtin.stat:
+        path: /var/opt/gvisor/runsc
+      register: runsc_stat
+
+    - name: "[8b/10] Create gVisor directory (/var/opt/gvisor — writable on MicroOS immutable rootfs)"
+      become: true
+      ansible.builtin.file:
+        path: /var/opt/gvisor
+        state: directory
+        mode: "0755"
+        owner: root
+        group: root
+      when: not runsc_stat.stat.exists
+
+    - name: "[8b/10] Download gVisor runsc binary + verify SHA512 (DISA STIG APSC-DV-002290)"
+      become: true
+      ansible.builtin.shell: |
+        set -e
+        cd /var/opt/gvisor
+        curl -fsSL \
+          https://storage.googleapis.com/gvisor/releases/release/latest/x86_64/runsc \
+          -o runsc
+        curl -fsSL \
+          https://storage.googleapis.com/gvisor/releases/release/latest/x86_64/runsc.sha512 \
+          -o /tmp/runsc.sha512
+        sha512sum -c /tmp/runsc.sha512
+        chmod 0755 runsc
+      args:
+        executable: /bin/bash
+      when: not runsc_stat.stat.exists
+      changed_when: true
+
+    - name: "[8b/10] Create /etc/containers/containers.conf.d drop-in directory"
+      become: true
+      ansible.builtin.file:
+        path: /etc/containers/containers.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: "[8b/10] Register gVisor as Podman OCI runtime (DISA STIG APSC-DV-002290)"
+      become: true
+      ansible.builtin.copy:
+        dest: /etc/containers/containers.conf.d/99-gvisor.conf
+        mode: "0644"
+        content: |
+          # gVisor (runsc) OCI runtime — DISA STIG APSC-DV-002290 / Container Platform SRG
+          # Installed to /var/opt/gvisor/runsc (writable on MicroOS immutable rootfs, persists across reboots)
+          # Usage: podman run --runtime runsc <image>
+          [engine.runtimes]
+            runsc = ["/var/opt/gvisor/runsc"]
+
     # =================================================================
     #  9. Enable Login Linger
     # =================================================================

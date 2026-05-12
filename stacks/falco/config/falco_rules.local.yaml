@@ -1,13 +1,34 @@
-- rule: Inter-Container Network Bypass Detected
-  desc: Detects when an internal application container attempts to establish a direct network connection bypassing the local mTLS Caddy sidecar proxy.
+# nodriver engine: no syscall-level visibility (rootless Podman lacks initial-namespace CAP_BPF).
+# Container metadata enrichment is provided by the container plugin.
+# Rules use container.* fields only (container.name, container.image.repository, container.privileged).
+# To enable modern_ebpf: run Falco as rootful systemd service or reboot + set unprivileged_bpf_disabled=0.
+
+- rule: Unapproved Privileged Container Started
+  desc: >
+    A container was started with privileged=true without an approved STIG exception.
+    Per GEMINI.md, only falco and wazuh-* containers are approved privileged workloads.
   condition: >
-    outbound and container 
-    and not fd.sip="127.0.0.1" 
-    and not fd.cip="127.0.0.1"
-    and not proc.name in ("caddy", "envoy")
-    and container.network_mode != "host"
+    container.privileged = true
+    and not container.name in (falco, wazuh-manager, wazuh-indexer, wazuh-dashboard)
   output: >
-    Direct inter-container connection attempt bypassed mTLS sidecar 
-    (user=%user.name container_id=%container.id command=%proc.cmdline sip=%fd.sip dip=%fd.dip dport=%fd.dport)
-  priority: WARNING
-  tags: [network, mitre_defense_evasion, stig_bypass, zero_trust_violation]
+    Unapproved privileged container started
+    (container=%container.name image=%container.image.repository:%container.image.tag)
+  priority: CRITICAL
+  tags: [container, stig_violation, privilege_escalation, gemini_mandate]
+
+- rule: Container From External Registry Advisory
+  desc: >
+    A container was started from an external image registry.
+    Per GEMINI.md, all production images should be mirrored via the internal Quay.
+    This rule is NOTICE (advisory) until the image migration to internal Quay is complete.
+  condition: >
+    container.image.repository != ""
+    and not container.image.repository contains "brain.home.lan"
+    and not container.image.repository startswith "localhost/"
+    and not container.image.repository contains "projectquay"
+    and not container.image.repository startswith "docker.io/falcosecurity"
+  output: >
+    Container started from external registry (image migration to internal Quay pending)
+    (container=%container.name image=%container.image.repository:%container.image.tag)
+  priority: NOTICE
+  tags: [container, air_gap_advisory, supply_chain, gemini_mandate]

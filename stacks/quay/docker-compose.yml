@@ -63,7 +63,7 @@ services:
       - POSTGRES_PASSWORD=${CLAIR_DB_PASSWORD}
       - POSTGRES_DB=${CLAIR_DB_NAME}
     volumes:
-      - /var/brain-ssof/clair-db:/var/lib/postgresql/data:Z,U
+      - ${DATA_DIR}/clair-db:/var/lib/postgresql/data:Z,U
       - ./db-init:/docker-entrypoint-initdb.d:ro,z
     networks:
       - quay-net

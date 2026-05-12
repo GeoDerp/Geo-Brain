@@ -6,8 +6,6 @@ services:
     security_opt:
       - no-new-privileges:true
     privileged: true
-    # eBPF/modern_ebpf fails in rootless due to kernel.unprivileged_bpf_disabled=2
-    # Falling back to nodriver so Falco can run and monitor container metadata.
     volumes:
       - /dev:/host/dev:ro
       - /proc:/host/proc:ro
@@ -36,7 +34,7 @@ services:
       - "homepage.group=SOC"
       - "homepage.name=Falco"
       - "homepage.icon=falco.png"
-      - "homepage.description=Runtime Security (nodriver)"
+      - "homepage.description=Runtime Security (nodriver+container-plugin)"
 
 networks:
   security-net:

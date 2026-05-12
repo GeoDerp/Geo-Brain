@@ -42,6 +42,7 @@ services:
       - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/etc/extra-ca/ca-bundle.crt:ro,z
       - defectdojo-static:/app/static
     networks:
+      - defectdojo-backend
       - vulnerability-net
       - proxy-net
     deploy:
@@ -97,7 +98,7 @@ services:
     volumes:
       - ${DATA_DIR}/defectdojo/database:/var/lib/postgresql/data:Z,U
     networks:
-      - vulnerability-net
+      - defectdojo-backend
     deploy:
       resources:
         limits:
@@ -131,7 +132,7 @@ services:
       - /run
       - /data
     networks:
-      - vulnerability-net
+      - defectdojo-backend
     deploy:
       resources:
         limits:
@@ -151,6 +152,11 @@ volumes:
   defectdojo-static:
 
 networks:
+  defectdojo-backend:
+    internal: true
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=backend-db-net"
   vulnerability-net:
     external: true
   proxy-net:
