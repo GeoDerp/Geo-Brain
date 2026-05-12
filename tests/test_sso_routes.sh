@@ -15,10 +15,17 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
 fi
 
 DOMAIN="${DOMAIN:-example.local}"
-CA_CERT="$REPO_ROOT/stacks/traefik/config/certs/root_ca.crt"
+# Prefer the combined CA bundle (self-signed + Step-CA); fall back to self-signed CA
+if [[ -f "$REPO_ROOT/stacks/traefik/config/certs/ca-bundle.crt" ]]; then
+    CA_CERT="$REPO_ROOT/stacks/traefik/config/certs/ca-bundle.crt"
+elif [[ -f "$REPO_ROOT/certs/ca.crt" ]]; then
+    CA_CERT="$REPO_ROOT/certs/ca.crt"
+else
+    CA_CERT="$REPO_ROOT/stacks/traefik/config/certs/root_ca.crt"
+fi
 
 if [[ ! -f "$CA_CERT" ]]; then
-    echo "CA root not found at $CA_CERT"
+    echo "CA root not found (tried ca-bundle.crt, certs/ca.crt, root_ca.crt)"
     exit 1
 fi
 

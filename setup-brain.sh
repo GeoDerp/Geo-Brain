@@ -432,9 +432,7 @@ setup_gitea() {
       --key gitea \
       --secret '${GITEA_SECRET}' \
       --auto-discover-url 'https://kanidm.${DOMAIN}/oauth2/openid/gitea/.well-known/openid-configuration' \
-      --scopes 'profile email groups' \
-      --auto-create-users \
-      --user-id-claim preferred_username" 2>/dev/null; then
+      --scopes 'profile email groups'" 2>/dev/null; then
       echo "✅ Gitea OIDC auth source configured for Kanidm (name=kanidm, callback=/user/oauth2/kanidm/callback)."
     else
       echo "⚠️ Failed to add Gitea OIDC auth source. Configure manually at https://gitea.${DOMAIN}/-/admin/auths/new"

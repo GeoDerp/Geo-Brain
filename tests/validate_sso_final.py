@@ -2,12 +2,32 @@ import requests
 import sys
 import os
 
+_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Auto-load .env if DOMAIN is not already in the environment
+def _load_env(env_path):
+    if not os.path.isfile(env_path):
+        return
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, _, val = line.partition('=')
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = val
+
+if not os.environ.get("DOMAIN"):
+    _load_env(os.path.join(_repo_root, ".env"))
+
 domain = os.environ.get("DOMAIN", "example.local")
 # Use the homelab CA bundle if available; fall back to system trust store.
-_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _ca_candidates = [
     os.environ.get("CA_CERT"),
     os.path.join(_repo_root, "stacks", "traefik", "config", "certs", "ca-bundle.crt"),
+    os.path.join(_repo_root, "certs", "ca.crt"),
     os.path.join(_repo_root, "stacks", "traefik", "config", "certs", "root_ca.crt"),
 ]
 verify = next((p for p in _ca_candidates if p and os.path.isfile(p)), True)
@@ -17,7 +37,6 @@ clients = {
     "gitea": f"https://gitea.{domain}/user/oauth2/kanidm",
     "quay": f"https://quay.{domain}/signin",
     "defectdojo": f"https://defectdojo.{domain}/login/oidc/",
-    "seaweedfs": f"https://storage.{domain}/",
     "moodle": f"https://moodle.{domain}/auth/oauth2/login.php?id=1",
     "oauth2-proxy": f"https://{domain}"
 }
