@@ -125,7 +125,7 @@ NODE_EOF
             # Block all mutating compose subcommands — Dockge is read-only (status view only).
             # Start/stop/restart/pull operations must be performed via deploy.sh on the host.
             case "$SUB" in
-                up|down|start|stop|restart|pull|create|rm|kill|run|exec|cp|copy)
+                up|down|start|stop|restart|pull|create|rm|kill|run|exec|cp)
                     _log "BLOCKED WRITE: compose $SUB $*"
                     echo "Dockge is running in read-only mode. Stack management via Dockge is disabled. Use deploy.sh on the host." >&2
                     exit 1

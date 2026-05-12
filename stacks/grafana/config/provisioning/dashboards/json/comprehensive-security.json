@@ -49,7 +49,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum(cs_lapi_decisions) by (origin, action)",
+          "expr": "sum(cs_lapi_decisions) by (origin, action) or vector(0)",
           "legendFormat": "{{action}} by {{origin}}",
           "refId": "A"
         }

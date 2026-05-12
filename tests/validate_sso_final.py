@@ -5,12 +5,12 @@ import os
 domain = os.environ.get("DOMAIN", "example.local")
 # Use the homelab CA bundle if available; fall back to system trust store.
 _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ca_bundle = (
-    os.environ.get("CA_CERT")
-    or os.path.join(_repo_root, "stacks", "traefik", "config", "certs", "ca-bundle.crt")
-    or os.path.join(_repo_root, "stacks", "traefik", "config", "certs", "root_ca.crt")
-)
-verify = ca_bundle if os.path.isfile(ca_bundle) else True
+_ca_candidates = [
+    os.environ.get("CA_CERT"),
+    os.path.join(_repo_root, "stacks", "traefik", "config", "certs", "ca-bundle.crt"),
+    os.path.join(_repo_root, "stacks", "traefik", "config", "certs", "root_ca.crt"),
+]
+verify = next((p for p in _ca_candidates if p and os.path.isfile(p)), True)
 
 clients = {
     "grafana": f"https://grafana.{domain}/login/generic_oauth",

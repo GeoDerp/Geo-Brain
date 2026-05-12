@@ -14,7 +14,7 @@ if [ ! -x /tmp/kompose ]; then
     actual_sha=$(sha256sum /tmp/kompose | awk '{print $1}')
     if [[ "$actual_sha" != "$KOMPOSE_SHA256" ]]; then
         echo "ERROR: kompose checksum mismatch! Expected: $KOMPOSE_SHA256, Got: $actual_sha"
-        echo "Remove /tmp/kompose and update the expected checksum in this script if the version changed."
+        echo "Update the KOMPOSE_SHA256 variable in this script if the version has changed."
         rm -f /tmp/kompose
         exit 1
     fi
