@@ -431,7 +431,7 @@
         state: directory
         mode: "0755"
 
-    - name: "[8b/10] Register gVisor as Podman OCI runtime (DISA STIG APSC-DV-002290)"
+    - name: "[8b/10] Register gVisor as Podman OCI runtime — system drop-in (DISA STIG APSC-DV-002290)"
       become: true
       ansible.builtin.copy:
         dest: /etc/containers/containers.conf.d/99-gvisor.conf
@@ -439,9 +439,65 @@
         content: |
           # gVisor (runsc) OCI runtime — DISA STIG APSC-DV-002290 / Container Platform SRG
           # Installed to /var/opt/gvisor/runsc (writable on MicroOS immutable rootfs, persists across reboots)
+          # -ignore-cgroups: required on rootless Podman with systemd cgroup manager.
+          #   The OCI spec cgroupsPath uses systemd slice format; without this flag, gVisor
+          #   attempts DBus polkit auth which fails non-interactively.
+          #   Cgroup resource limits are enforced by Podman's own systemd scope unit.
+          #   For user geo, this is overridden by ~/.config/containers/containers.conf.
           # Usage: podman run --runtime runsc <image>
           [engine.runtimes]
-            runsc = ["/var/opt/gvisor/runsc"]
+            runsc = ["/var/opt/gvisor/runsc", "-ignore-cgroups"]
+
+    - name: "[8b/10] Ensure user-level ~/.local/bin directory exists"
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.local/bin"
+        state: directory
+        mode: "0755"
+
+    - name: "[8b/10] Write gVisor wrapper script ~/.local/bin/runsc-cgroupfs"
+      ansible.builtin.copy:
+        dest: "{{ ansible_env.HOME }}/.local/bin/runsc-cgroupfs"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          # gVisor runsc wrapper for rootless Podman on openSUSE MicroOS (cgroupv2/systemd)
+          # DISA STIG APSC-DV-002290 — container isolation via gVisor kernel sandbox
+          #
+          # -ignore-cgroups: skip cgroup configuration entirely.
+          #   Rootless Podman with systemd cgroup manager sets cgroupsPath in the OCI spec
+          #   to a systemd slice format. gVisor detects this and tries DBus polkit auth,
+          #   which fails in non-interactive (SSH/automation) sessions.
+          #   Cgroup resource limits are enforced by Podman's own systemd scope unit.
+          #   gVisor's separate kernel provides stronger isolation than cgroups alone.
+          exec /var/opt/gvisor/runsc -ignore-cgroups "$@"
+
+    - name: "[8b/10] Ensure user-level containers config directory exists"
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.config/containers"
+        state: directory
+        mode: "0700"
+
+    - name: "[8b/10] Write user containers.conf (SELinux label=false + runsc wrapper)"
+      ansible.builtin.copy:
+        dest: "{{ ansible_env.HOME }}/.config/containers/containers.conf"
+        mode: "0600"
+        content: |
+          # User-level Podman configuration — brain.home.lan
+          #
+          # label = false: gVisor has no runsc_t SELinux policy on openSUSE MicroOS.
+          #   Disable SELinux label generation at the user container level.
+          #   Rationale (DISA STIG APSC-DV-002290): gVisor's separate kernel
+          #   implementation provides stronger isolation than SELinux MAC labels.
+          #   The host SELinux policy remains enforcing and protects the sandbox boundary.
+          [containers]
+            label = false
+
+          # runsc-cgroupfs wrapper: invokes gVisor with -ignore-cgroups flag.
+          #   Required on cgroupv2/systemd hosts where rootless Podman sets cgroupsPath
+          #   in systemd slice format, causing gVisor to attempt DBus polkit auth (fails
+          #   non-interactively). Cgroup limits enforced by Podman's systemd scope unit.
+          [engine.runtimes]
+            runsc = ["/home/{{ ansible_user_id }}/.local/bin/runsc-cgroupfs"]
 
     # =================================================================
     #  9. Enable Login Linger
