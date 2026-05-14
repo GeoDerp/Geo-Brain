@@ -17,8 +17,8 @@ fi
 DOMAIN="${DOMAIN:-example.local}"
 REMOTE_HOST="${REMOTE_HOST:-192.168.1.45}"
 REMOTE_USER="${REMOTE_USER:-geo}"
+SSH_KEY="${SSH_KEY:-~/.ssh/id_debug}"
 SSH_KEY_PATH="${SSH_KEY/#\~/$HOME}"
-SSH_KEY_PATH="${SSH_KEY_PATH:-$HOME/.ssh/id_debug}"
 WAF_HOST="waf.${DOMAIN}"
 # Rootless Podman binds port 8081 only to the host's local stack.
 # Tests run via SSH so curl runs on the remote node where localhost:8081 is accessible.

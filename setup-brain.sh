@@ -575,15 +575,11 @@ main() {
   echo "🔐 BREAKGLASS & SSO SUMMARY"
   echo "================================================="
   echo "1. Kanidm: https://kanidm.${DOMAIN} | idm_admin recovery password captured (use ./scripts/create-kanidm-user.sh to create users)"
-  echo "1. Kanidm: https://kanidm.${DOMAIN} | idm_admin recovery password captured (use ./scripts/create-kanidm-user.sh to create users)"
   echo "   ➡️  Create a UI login: ./scripts/create-kanidm-user.sh --role admin myadmin \"Global Admin\""
   echo "2. Storage: https://storage.${DOMAIN} | S3 API: https://s3.${DOMAIN}"
   echo "3. Quay: https://quay.${DOMAIN} | OIDC SSO Ready"
   echo "4. Wazuh: https://wazuh.${DOMAIN} | SSO via OAuth2 Proxy"
   echo "================================================="
 }
-
-main "$@"
-
 
 main "$@"

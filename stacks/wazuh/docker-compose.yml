@@ -112,8 +112,8 @@ services:
       - wazuh-indexer
       - wazuh-manager
     environment:
-      - WAZUH_MANAGER_URL=https://wazuh-manager
-      - INDEXER_URL=https://wazuh-indexer:9200
+      - WAZUH_MANAGER_URL=http://wazuh-manager
+      - INDEXER_URL=http://wazuh-indexer:9200
       - WAZUH_API_PASSWORD=${WAZUH_API_PASSWORD}
     networks:
       - wazuh-net

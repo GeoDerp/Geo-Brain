@@ -56,8 +56,8 @@ for name, url in clients.items():
         r = requests.get(discovery_url, verify=verify, timeout=5)
         if r.status_code == 200:
             discovery_ok = True
-    except:
-        pass
+    except requests.RequestException as e:
+        print(f"  [WARN] Discovery request failed for {name}: {e}")
 
     # 2. Check Integration
     status = "FAIL"
@@ -70,12 +70,10 @@ for name, url in clients.items():
         if r.status_code in [301, 302, 303, 307, 308] and "kanidm" in location.lower():
             status = "✅ 302 Redirect"
         
-        # UI with OIDC Button (200) or SeaweedFS SPA
+        # UI with OIDC Button (200)
         elif r.status_code == 200:
             body = r.text.lower()
-            if name == "seaweedfs" and ("seaweedfs" in body or "filer" in body or "s3" in body):
-                status = "✅ Storage UI (SPA)"
-            elif "kanidm" in body or "oidc" in body or "openid" in body:
+            if "kanidm" in body or "oidc" in body or "openid" in body:
                 status = "✅ OIDC UI Button"
             else:
                 status = "❌ No OIDC UI"

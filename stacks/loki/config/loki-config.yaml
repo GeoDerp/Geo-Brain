@@ -6,8 +6,10 @@ server:
 common:
   path_prefix: /loki
   storage:
+    # SeaweedFS replaced MinIO as the S3-compatible storage backend (see deploy.sh get_base_stacks).
+    # SeaweedFS S3 gateway runs on port 8333 inside the 'seaweedfs' container.
     s3:
-      endpoint: minio:9000
+      endpoint: seaweedfs:8333
       insecure: true
       bucketnames: loki-data
       access_key_id: ${MINIO_ROOT_USER:-minioadmin}

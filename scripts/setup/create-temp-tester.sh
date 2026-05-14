@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 if [ -f "$REPO_ROOT/.env" ]; then
   set -a; source "$REPO_ROOT/.env"; set +a
@@ -17,6 +17,7 @@ ADMIN_PASS="${KANIDM_ADMIN_PASSWORD:?KANIDM_ADMIN_PASSWORD must be set in .env}"
 
 SSH_KEY="${SSH_KEY:-~/.ssh/id_ed25519}"
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
+REMOTE_USER="${REMOTE_USER:-$USER}"
 
 if [[ -n "${REMOTE_HOST:-}" ]]; then
     REMOTE_CMD=(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -i "${SSH_KEY}" -p "${SSH_PORT:-22}" "${REMOTE_USER}@${REMOTE_HOST}")

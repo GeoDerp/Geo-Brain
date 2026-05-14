@@ -135,7 +135,7 @@ services:
       start_period: 10s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.oauth2-proxy-admin.rule=PathPrefix(`/admin-oauth2/`)"
+      - "traefik.http.routers.oauth2-proxy-admin.rule=(Host(`auth.${DOMAIN}`) || Host(`${DOMAIN}`)) && PathPrefix(`/admin-oauth2/`)"
       - "traefik.http.routers.oauth2-proxy-admin.priority=10001"
       - "traefik.http.routers.oauth2-proxy-admin.entrypoints=websecure"
       - "traefik.http.routers.oauth2-proxy-admin.tls=true"

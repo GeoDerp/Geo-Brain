@@ -3,6 +3,11 @@
 # Rules use container.* fields only (container.name, container.image.repository, container.privileged).
 # To enable modern_ebpf: run Falco as rootful systemd service or reboot + set unprivileged_bpf_disabled=0.
 
+# Internal OCI registry hostnames considered trusted.
+# Update this list to match your deployed Quay registry hostname (typically quay.${DOMAIN}).
+- list: internal_registry_hosts
+  items: ["quay.example.local"]
+
 - rule: Unapproved Privileged Container Started
   desc: >
     A container was started with privileged=true without an approved STIG exception.
@@ -23,7 +28,7 @@
     This rule is NOTICE (advisory) until the image migration to internal Quay is complete.
   condition: >
     container.image.repository != ""
-    and not container.image.repository contains "brain.home.lan"
+    and not container.image.repository in (internal_registry_hosts)
     and not container.image.repository startswith "localhost/"
     and not container.image.repository contains "projectquay"
     and not container.image.repository startswith "docker.io/falcosecurity"
