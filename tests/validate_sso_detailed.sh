@@ -10,7 +10,14 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
 fi
 
 DOMAIN="${DOMAIN:-example.local}"
-CA_CERT="$REPO_ROOT/stacks/traefik/config/certs/root_ca.crt"
+# Prefer the full CA bundle (root + intermediate) as test_sso_routes.sh does
+if [[ -f "$REPO_ROOT/stacks/traefik/config/certs/ca-bundle.crt" ]]; then
+    CA_CERT="$REPO_ROOT/stacks/traefik/config/certs/ca-bundle.crt"
+elif [[ -f "$REPO_ROOT/certs/ca.crt" ]]; then
+    CA_CERT="$REPO_ROOT/certs/ca.crt"
+else
+    CA_CERT="$REPO_ROOT/stacks/traefik/config/certs/root_ca.crt"
+fi
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
