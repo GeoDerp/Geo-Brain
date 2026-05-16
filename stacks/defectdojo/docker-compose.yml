@@ -18,6 +18,7 @@ services:
       - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
       - DD_SOCIAL_AUTH_OIDC_ENABLED=True
       - DD_SOCIAL_AUTH_ENABLED=True
+      - DD_SOCIAL_AUTH_OIDC_AUTH_ENABLED=True
       - DD_SOCIAL_AUTH_OIDC_USERNAME_KEY=preferred_username
       - DD_SOCIAL_AUTH_REDIRECT_IS_HTTPS=True
       # SSL_CERT_FILE: covers Python's native ssl module (supplements REQUESTS_CA_BUNDLE

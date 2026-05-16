@@ -112,6 +112,10 @@ for APP_INFO in \$EXPECTED_APPS; do
         kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
         # Retry once — first call may fail if the attribute was just set by a concurrent run
         kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    else
+        # Re-enable PKCE in case a previous buggy run disabled it.
+        # This is the default; clients that natively use PKCE (e.g. Gitea goth) require it.
+        kanidm system oauth2 enable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
     fi
     
     kanidm system oauth2 delete-scope-map "\$APP" idm_all_persons -C /tmp/ca.crt >/dev/null 2>&1 || true

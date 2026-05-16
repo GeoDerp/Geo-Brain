@@ -63,40 +63,16 @@ if (\$records) {
 " 2>/dev/null || echo "")
 
 if [[ -n "$EXISTING_ID" ]]; then
-  echo "[moodle-sso] Kanidm issuer (ID=${EXISTING_ID}) already exists — updating client secret..."
+  echo "[moodle-sso] Kanidm issuer (ID=${EXISTING_ID}) already exists — updating secret and baseurl..."
   php -r "
 define('CLI_SCRIPT', true);
 require_once('${MOODLE_ROOT}/config.php');
 \$DB->set_field('oauth2_issuer', 'clientsecret', '${MOODLE_OIDC_SECRET}', ['id' => ${EXISTING_ID}]);
-echo 'Secret updated.';
+\$DB->set_field('oauth2_issuer', 'baseurl', '${KANIDM_ISSUER}', ['id' => ${EXISTING_ID}]);
+echo 'Secret and baseurl updated.';
 " 2>/dev/null || true
 else
   echo "[moodle-sso] Creating Kanidm OIDC issuer..."
-  php -r "
-define('CLI_SCRIPT', true);
-require_once('${MOODLE_ROOT}/config.php');
-require_once('${MOODLE_ROOT}/lib/oauthlib.php');
-\$issuer = new \core\oauth2\issuer(0, (object)[
-  'name'               => 'kanidm',
-  'image'              => '',
-  'baseurl'            => '',
-  'clientid'           => 'moodle',
-  'clientsecret'       => '${MOODLE_OIDC_SECRET}',
-  'loginscopes'        => 'openid profile email',
-  'loginscopesoffline' => 'openid profile email',
-  'loginparams'        => '',
-  'loginparamsoffline' => '',
-  'alloweddomains'     => '',
-  'requireconfirmation'=> 0,
-  'showonloginpage'    => 1,
-  'enabled'            => 1,
-  'sortorder'          => 0,
-  'servicetype'        => 'custom',
-]);
-\$id = \$issuer->save();
-echo \"Issuer created with ID={\$id}\n\";
-" 2>/dev/null || {
-  echo "[moodle-sso] PHP API failed — using direct DB insert..."
   php -r "
 define('CLI_SCRIPT', true);
 require_once('${MOODLE_ROOT}/config.php');
@@ -104,7 +80,7 @@ require_once('${MOODLE_ROOT}/config.php');
 \$id = \$DB->insert_record('oauth2_issuer', (object)[
   'name'               => 'kanidm',
   'image'              => '',
-  'baseurl'            => '',
+  'baseurl'            => '${KANIDM_ISSUER}',
   'clientid'           => 'moodle',
   'clientsecret'       => '${MOODLE_OIDC_SECRET}',
   'loginscopes'        => 'openid profile email',
@@ -121,9 +97,8 @@ require_once('${MOODLE_ROOT}/config.php');
   'timemodified'       => \$now,
   'usermodified'       => 2,
 ]);
-echo \"Issuer inserted with ID={\$id}\n\";
+echo \"Issuer created with ID={\$id}\n\";
 " 2>/dev/null || echo "[moodle-sso] ⚠️ Could not create issuer — configure manually at ${MOODLE_WWWROOT}/admin/tool/oauth2/issuers.php"
-}
   EXISTING_ID=$(php -r "
 define('CLI_SCRIPT', true);
 require_once('${MOODLE_ROOT}/config.php');
@@ -134,14 +109,16 @@ fi
 
 if [[ -n "$EXISTING_ID" ]]; then
   echo "[moodle-sso] Configuring OIDC endpoints for issuer ID=${EXISTING_ID}..."
+  # Use correct Kanidm endpoint URLs from OIDC discovery.
+  # authorization_endpoint is Kanidm's UI, NOT ${KANIDM_ISSUER}/authorize.
   php -r "
 define('CLI_SCRIPT', true);
 require_once('${MOODLE_ROOT}/config.php');
 \$endpoints = [
-  'authorization_endpoint' => '${KANIDM_ISSUER}/authorize',
-  'token_endpoint'         => '${KANIDM_ISSUER}/token',
+  'authorization_endpoint' => 'https://kanidm.${DOMAIN}/ui/oauth2',
+  'token_endpoint'         => 'https://kanidm.${DOMAIN}/oauth2/token',
   'userinfo_endpoint'      => '${KANIDM_ISSUER}/userinfo',
-  'jwks_uri'               => 'https://kanidm.${DOMAIN}/oauth2/openid/moodle/public_key.jwk',
+  'jwks_uri'               => '${KANIDM_ISSUER}/public_key.jwk',
   'discovery_endpoint'     => '${KANIDM_ISSUER}/.well-known/openid-configuration',
 ];
 foreach (\$endpoints as \$name => \$url) {
@@ -154,7 +131,7 @@ foreach (\$endpoints as \$name => \$url) {
   }
 }
 echo 'Endpoints configured.';
-" 2>/dev/null || echo "[moodle-sso] ⚠️ Could not set endpoints — use discovery URL instead: ${KANIDM_ISSUER}/.well-known/openid-configuration"
+" 2>/dev/null || echo "[moodle-sso] ⚠️ Could not set endpoints — check Moodle DB connection."
 
   echo "[moodle-sso] Configuring field mappings..."
   php -r "
