@@ -158,7 +158,8 @@ fi
 for APP_INFO in $EXPECTED_APPS; do
    APP="${APP_INFO%%:*}"
    [[ "$APP" == "oauth2-proxy" ]] && continue
-   secret_val=$(echo "$setup_output" | grep -i "^${APP}_OIDC_SECRET_VALUE=" | cut -d'=' -f2- || true)   if [[ -n "$secret_val" ]] && [[ "$secret_val" != "No secret configured" ]]; then
+   secret_val=$(echo "$setup_output" | grep -i "^${APP}_OIDC_SECRET_VALUE=" | cut -d'=' -f2- || true)
+   if [[ -n "$secret_val" ]] && [[ "$secret_val" != "No secret configured" ]]; then
       var_name=$(echo "${APP}_OIDC_SECRET" | tr '[:lower:]-' '[:upper:]_')
       current_val=$(grep "^${var_name}=" "$ENVFILE" | cut -d'=' -f2- || true)
       if [[ "$current_val" != "$secret_val" ]]; then

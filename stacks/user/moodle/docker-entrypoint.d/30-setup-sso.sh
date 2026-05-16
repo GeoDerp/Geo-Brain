@@ -34,8 +34,8 @@ echo "[moodle-sso] Clearing email domain restriction (allowemailaddresses)..."
 # Kanidm issues emails like user@example.local which must be accepted.
 php admin/cli/cfg.php --name=allowemailaddresses --set=''
 
-echo "[moodle-sso] Setting site URL..."
-php admin/cli/cfg.php --name=wwwroot --set="${MOODLE_WWWROOT}"
+echo "[moodle-sso] Setting site URL (may be a no-op if set in config.php)..."
+php admin/cli/cfg.php --name=wwwroot --set="${MOODLE_WWWROOT}" 2>/dev/null || true
 
 echo "[moodle-sso] Enabling OAuth2 plugin..."
 php admin/cli/cfg.php --component=auth_oauth2 --name=field_map_email --set=email 2>/dev/null || true

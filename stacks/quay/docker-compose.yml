@@ -194,10 +194,11 @@ services:
           memory: 1G
           cpus: '0.5'
     healthcheck:
-      test: ["CMD-SHELL", "test -e /proc/1/status"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8089/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 2m
     command: ["-conf", "/config/clair-config.yaml"]
     networks:
       - quay-net

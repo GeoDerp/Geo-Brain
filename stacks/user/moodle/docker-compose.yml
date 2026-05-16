@@ -1,6 +1,9 @@
 services:
   moodle:
-    image: docker.io/moodlehq/moodle-php-apache:8.3
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: localhost/moodle-homelab:5.0-stable
     container_name: moodle
     restart: always
     security_opt:
@@ -15,7 +18,8 @@ services:
       - SETGID
       - NET_BIND_SERVICE
     depends_on:
-      - moodle-db
+      moodle-db:
+        condition: service_healthy
     environment:
       - MOODLE_DOCKER_DBTYPE=mariadb
       - MOODLE_DOCKER_DBNAME=moodle
@@ -27,12 +31,21 @@ services:
       - MOODLE_OIDC_SECRET=${MOODLE_OIDC_SECRET}
       - DOMAIN=${DOMAIN}
       - MOODLE_WWWROOT=https://moodle.${DOMAIN}
+      - APACHE_DOCUMENT_ROOT=/var/www/html
       - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+      # Names read directly by config.php and 20-moodle-install.sh
+      - MOODLE_DB_HOST=moodle-db
+      - MOODLE_DB_NAME=moodle
+      - MOODLE_DB_USER=${MOODLE_DB_USER:-moodle}
+      - MOODLE_DB_PASSWORD=${MOODLE_DB_PASSWORD}
+      - MOODLE_DB_PORT=3306
+      - MOODLE_SSLPROXY=true
+      - MOODLE_ADMIN_PASSWORD=${MOODLE_ADMIN_PASSWORD}
     volumes:
       - ${DATA_DIR}/moodle/data:/var/www/moodledata:Z,U
       - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/usr/local/share/ca-certificates/step-ca.crt:ro,z
       - ./docker-entrypoint.d/30-setup-sso.sh:/docker-entrypoint.d/30-setup-sso.sh:ro,z
-    entrypoint: ["/bin/bash", "-c", "update-ca-certificates 2>/dev/null || true && exec apache2-foreground"]
+    entrypoint: ["/bin/bash", "-c", "update-ca-certificates 2>/dev/null || true && for f in /docker-entrypoint.d/*.sh; do bash \"$$f\" || true; done && exec apache2-foreground"]
     networks:
       - moodle-db-net
       - proxy-net
@@ -42,11 +55,11 @@ services:
           memory: 1G
           cpus: '1.0'
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1/"]
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/"]
       interval: 60s
       timeout: 10s
       retries: 3
-      start_period: 3m
+      start_period: 10m
     labels:
       - "kanidm.oidc.client_id=moodle"
       - "kanidm.oidc.redirect_path=/admin/oauth2callback.php"
@@ -57,7 +70,7 @@ services:
       - "traefik.http.routers.moodle.tls=true"
       - "traefik.http.routers.moodle.tls.certresolver=stepca"
       - "traefik.http.routers.moodle.middlewares=security-headers@file"
-      - "traefik.http.services.moodle.loadbalancer.server.port=80"
+      - "traefik.http.services.moodle.loadbalancer.server.port=8080"
       - "traefik.docker.network=proxy-net"
       - "security.stig.compliance=true"
       - "security.stig.role=lms"

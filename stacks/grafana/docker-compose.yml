@@ -20,6 +20,7 @@ services:
       - GF_ANALYTICS_REPORTING_ENABLED=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - GF_SECURITY_DISABLE_GRAVATAR=true
+      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - GF_SERVER_ROOT_URL=https://grafana.${DOMAIN}/
       - GF_SERVER_INSTANCE_NAME=My-HomeLab
       - GF_USERS_ALLOW_SIGN_UP=true # OIDC users are created on first login

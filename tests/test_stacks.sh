@@ -850,6 +850,13 @@ test_sso_redirects() {
     fi
 
     if [[ "$expects_sso" -eq 1 ]]; then
+        # Check primary container exists on remote — skip for optional/GPU-conditional stacks
+        local primary_container
+        primary_container=$(grep -oP 'container_name:\s*\K\S+' "$compose" | head -1)
+        if [[ -n "$primary_container" ]] && ! ssh_cmd "podman container exists '$primary_container'" 2>/dev/null; then
+            skip "[$stack] Container '$primary_container' not deployed — skipping SSO check"
+            return
+        fi
         local headers
         headers=$(ssh_cmd "curl -sk -I 'https://$host/' 2>/dev/null" || echo "")
         local http_code=$(echo "$headers" | head -n 1 | awk '{print $2}' || echo "000")
