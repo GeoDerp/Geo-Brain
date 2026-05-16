@@ -158,6 +158,7 @@ services:
     labels:
       - "kanidm.oidc.client_id=quay"
       - "kanidm.oidc.redirect_path=/oauth2/kanidm/callback"
+      - "kanidm.oidc.no_pkce=true"
       - "security.stig.compliance=true"
       - "traefik.enable=true"
       - "traefik.http.routers.quay.rule=Host(`quay.${DOMAIN}`)"

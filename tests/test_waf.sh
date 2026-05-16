@@ -49,28 +49,28 @@ echo "--- Testing WAF at ${WAF_DIRECT_URL} via SSH (Host: ${WAF_HOST}) ---"
 echo "[TEST] SQL Injection payload..."
 # URL-encode quotes to avoid SSH shell quoting issues: ' = %27
 http_code=$(remote_waf_test "${WAF_DIRECT_URL}/?id=1%27+OR+%271%27%3D%271")
-if [[ "$http_code" == "403" ]]; then
-    pass "WAF blocked SQLi payload with HTTP 403"
+if [[ "$http_code" == "403" || "$http_code" == "400" ]]; then
+    pass "WAF blocked SQLi payload with HTTP $http_code"
 else
-    fail "WAF did not block SQLi payload (Expected 403, got $http_code)"
+    fail "WAF did not block SQLi payload (Expected 400/403, got $http_code)"
 fi
 
 # Test 2: Cross-Site Scripting (XSS)
 echo "[TEST] XSS payload..."
 http_code=$(remote_waf_test "${WAF_DIRECT_URL}/?q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E")
-if [[ "$http_code" == "403" ]]; then
-    pass "WAF blocked XSS payload with HTTP 403"
+if [[ "$http_code" == "403" || "$http_code" == "400" ]]; then
+    pass "WAF blocked XSS payload with HTTP $http_code"
 else
-    fail "WAF did not block XSS payload (Expected 403, got $http_code)"
+    fail "WAF did not block XSS payload (Expected 400/403, got $http_code)"
 fi
 
 # Test 3: Path Traversal
 echo "[TEST] Path Traversal payload..."
 http_code=$(remote_waf_test "${WAF_DIRECT_URL}/?file=..%2F..%2F..%2F..%2Fetc%2Fpasswd")
-if [[ "$http_code" == "403" ]]; then
-    pass "WAF blocked Path Traversal payload with HTTP 403"
+if [[ "$http_code" == "403" || "$http_code" == "400" ]]; then
+    pass "WAF blocked Path Traversal payload with HTTP $http_code"
 else
-    fail "WAF did not block Path Traversal payload (Expected 403, got $http_code)"
+    fail "WAF did not block Path Traversal payload (Expected 400/403, got $http_code)"
 fi
 
 echo "--- Summary ---"

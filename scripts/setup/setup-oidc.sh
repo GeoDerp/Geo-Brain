@@ -42,7 +42,14 @@ for compose in $RAW_APPS; do
                    redirect_path="${redirect_path:-/}"
                    ;;
            esac
-           EXPECTED_APPS="$EXPECTED_APPS ${app_id}:${subdomain}:${redirect_path}"
+           # Read no_pkce flag: kanidm.oidc.no_pkce=true disables PKCE for apps that
+           # don't send a code_challenge (e.g. Python/PHP OIDC libs, oauth2-proxy without
+           # OAUTH2_PROXY_CODE_CHALLENGE_METHOD set). Apps that DO use PKCE (e.g. Gitea's
+           # goth library) must NOT have this label — disabling PKCE causes Kanidm to
+           # ignore the stored code_challenge, making the subsequent code_verifier check
+           # fail with 401 Unauthorized.
+           no_pkce=$(grep -oP 'kanidm\.oidc\.no_pkce=\K[^"]+' "$compose" | head -n 1 || echo "false")
+           EXPECTED_APPS="$EXPECTED_APPS ${app_id}:${subdomain}:${redirect_path}:${no_pkce}"
        fi
    done
 done
@@ -70,8 +77,10 @@ for APP_INFO in \$EXPECTED_APPS; do
     APP="\${APP_INFO%%:*}"
     REST="\${APP_INFO#*:}"
     SUBDOMAIN="\${REST%%:*}"
-    REDIRECT_PATH="\${REST#*:}"
-    
+    REST2="\${REST#*:}"
+    REDIRECT_PATH="\${REST2%%:*}"
+    NO_PKCE="\${REST2#*:}"
+
     ORIGIN_URL="https://\${SUBDOMAIN}.${DOMAIN}"
     REDIRECT_URL="\${ORIGIN_URL}\${REDIRECT_PATH}"
 
@@ -95,7 +104,15 @@ for APP_INFO in \$EXPECTED_APPS; do
     # Kanidm defaults to ES256-only; RS256 is needed by Quay and improves compat
     # with Python/PHP OIDC libraries that may not support EC keys.
     kanidm system oauth2 warning-enable-legacy-crypto "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
-    kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    # Disable PKCE only for apps that declare kanidm.oidc.no_pkce=true in their compose
+    # labels. Apps that natively use PKCE (e.g. Gitea via goth/openidConnect) must NOT
+    # have PKCE disabled: Kanidm ignores the stored code_challenge when disable-pkce is
+    # set, causing the client's code_verifier check to fail with 401 Unauthorized.
+    if [ "\$NO_PKCE" = "true" ]; then
+        kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
+        # Retry once — first call may fail if the attribute was just set by a concurrent run
+        kanidm system oauth2 warning-insecure-client-disable-pkce "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    fi
     
     kanidm system oauth2 delete-scope-map "\$APP" idm_all_persons -C /tmp/ca.crt >/dev/null 2>&1 || true
     kanidm system oauth2 update-scope-map "\$APP" stig_admins openid profile email groups -C /tmp/ca.crt >/dev/null 2>&1 || true
@@ -141,8 +158,7 @@ fi
 for APP_INFO in $EXPECTED_APPS; do
    APP="${APP_INFO%%:*}"
    [[ "$APP" == "oauth2-proxy" ]] && continue
-   secret_val=$(echo "$setup_output" | grep -i "^${APP}_OIDC_SECRET_VALUE=" | cut -d'=' -f2- || true)
-   if [[ -n "$secret_val" ]] && [[ "$secret_val" != "No secret configured" ]]; then
+   secret_val=$(echo "$setup_output" | grep -i "^${APP}_OIDC_SECRET_VALUE=" | cut -d'=' -f2- || true)   if [[ -n "$secret_val" ]] && [[ "$secret_val" != "No secret configured" ]]; then
       var_name=$(echo "${APP}_OIDC_SECRET" | tr '[:lower:]-' '[:upper:]_')
       current_val=$(grep "^${var_name}=" "$ENVFILE" | cut -d'=' -f2- || true)
       if [[ "$current_val" != "$secret_val" ]]; then
@@ -155,6 +171,62 @@ for APP_INFO in $EXPECTED_APPS; do
       fi
    fi
 done
+
+# Post-sync: detect apps whose OIDC secret is still empty in .env and force-reset
+# them in Kanidm. Handles the false-"in-sync" case where Kanidm returned an empty
+# secret AND .env already had an empty value — so UPDATED_ENV was never set.
+NEEDS_RESET=""
+for APP_INFO in $EXPECTED_APPS; do
+    APP="${APP_INFO%%:*}"
+    [[ "$APP" == oauth2-proxy* ]] && continue
+    var_name=$(echo "${APP}_OIDC_SECRET" | tr '[:lower:]-' '[:upper:]_')
+    current_val=$(grep "^${var_name}=" "$ENVFILE" | cut -d'=' -f2- || true)
+    [[ -z "$current_val" ]] && NEEDS_RESET="$NEEDS_RESET $APP"
+done
+NEEDS_RESET="${NEEDS_RESET# }"
+
+if [[ -n "$NEEDS_RESET" ]]; then
+  echo "⚠️  Secrets still empty for: ${NEEDS_RESET} — force-resetting in Kanidm..." >&2
+  reset_payload=$(cat <<RESETEOF
+#!/bin/sh
+set -e
+export KANIDM_URL="https://kanidm.${DOMAIN}"
+export KANIDM_NAME="idm_admin"
+export KANIDM_PASSWORD="${KANIDM_ADMIN_PASSWORD}"
+cat << 'CAEOF' > /tmp/ca.crt
+${CA_CERT_CONTENT}
+CAEOF
+kanidm login -C /tmp/ca.crt >/dev/null 2>&1 || { echo 'KANIDM_LOGIN_FAILED'; exit 1; }
+for APP in ${NEEDS_RESET}; do
+    kanidm system oauth2 reset-basic-secret "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    SECRET=\$(kanidm system oauth2 show-basic-secret "\$APP" -C /tmp/ca.crt 2>/dev/null | tail -n 1)
+    echo "\${APP}_OIDC_RESET_VALUE=\${SECRET}"
+done
+RESETEOF
+  )
+
+  reset_output=$(echo "$reset_payload" | \
+    DBUS_SESSION_BUS_ADDRESS="" XDG_RUNTIME_DIR="/run/user/$(id -u)" \
+    podman run -i --rm --network host \
+    --env KANIDM_PASSWORD="${KANIDM_ADMIN_PASSWORD}" \
+    docker.io/kanidm/tools:1.9.2 sh 2>&1) || true
+
+  for _APP in $NEEDS_RESET; do
+    _secret=$(echo "$reset_output" | grep "^${_APP}_OIDC_RESET_VALUE=" | cut -d'=' -f2- || true)
+    _var=$(echo "${_APP}_OIDC_SECRET" | tr '[:lower:]-' '[:upper:]_')
+    if [[ -n "$_secret" && "$_secret" != "No secret configured" ]]; then
+      if grep -q "^${_var}=" "$ENVFILE"; then
+        sed -i "s|^${_var}=.*$|${_var}=${_secret}|g" "$ENVFILE"
+      else
+        echo "${_var}=${_secret}" >> "$ENVFILE"
+      fi
+      UPDATED_ENV=true
+      echo "✅ Force-reset ${_var} written to .env." >&2
+    else
+      echo "❌ Could not retrieve secret for ${_APP} after reset — check Kanidm is reachable." >&2
+    fi
+  done
+fi
 
 if [ "$UPDATED_ENV" = true ]; then
   echo "UPDATED_ENV"

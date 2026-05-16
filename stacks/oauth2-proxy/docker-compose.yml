@@ -67,6 +67,7 @@ services:
       - "traefik.http.routers.oauth2-proxy.middlewares=security-headers@file"
       - "traefik.http.services.oauth2-proxy.loadbalancer.server.port=4180"
       - "kanidm.oidc.client_id=oauth2-proxy"
+      - "kanidm.oidc.no_pkce=true"
       - "security.stig.compliance=true"
       - "security.stig.role=auth-proxy"
       - "homepage.group=Identity"
@@ -144,6 +145,7 @@ services:
       - "traefik.http.services.oauth2-proxy-admin.loadbalancer.server.port=4180"
       - "kanidm.oidc.client_id=oauth2-proxy-admin"
       - "kanidm.oidc.redirect_path=/admin-oauth2/callback"
+      - "kanidm.oidc.no_pkce=true"
       - "security.stig.compliance=true"
       - "security.stig.role=auth-proxy"
 

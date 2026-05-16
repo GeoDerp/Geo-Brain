@@ -64,7 +64,7 @@ done
 
 # --- 2. Validate Redirection & Client Parameters ---
 # We simulate a hit to the app and check how it sends the user to Kanidm.
-info "2. Validating Application Redirection Logic"
+info "2. Validating Application Redirection Logic (ForwardAuth)"
 
 # Core oauth2-proxy tests are always included
 TEST_CASES=(
@@ -115,6 +115,62 @@ for test_case in "${TEST_CASES[@]}"; do
         fail "[$app] Kanidm reported an unrecoverable error"
     fi
 done
+
+# --- 2b. Validate Native OIDC Service Initiation ---
+# Each native OIDC service must redirect to Kanidm when its OIDC initiation URL is hit.
+# A 200 or redirect-to-self means OIDC is not configured/active.
+info "2b. Validating Native OIDC Service Initiation"
+
+# Map client_id → OIDC initiation path (first-hop redirect must go to kanidm.${DOMAIN})
+declare -A NATIVE_OIDC_INIT_PATHS=(
+    [moodle]="/auth/oauth2/login.php?id=1"
+    [gitea]="/user/oauth2/kanidm"
+    [quay]="/oauth2/kanidm/initiate"
+    [defectdojo]="/login/oidc/"
+    [grafana]="/login/generic_oauth"
+)
+
+while IFS= read -r compose; do
+    while IFS= read -r client_id; do
+        [[ -z "$client_id" ]] && continue
+        # Skip ForwardAuth proxy clients — they're covered in Section 2
+        [[ "$client_id" == oauth2-proxy* ]] && continue
+
+        init_path="${NATIVE_OIDC_INIT_PATHS[$client_id]:-}"
+        if [[ -z "$init_path" ]]; then
+            warn "[$client_id] No known OIDC initiation path — skipping."
+            continue
+        fi
+
+        hostname=$(grep -oP 'traefik\.http\.routers\.[^.]+\.rule=Host\(`\K[^`]+' "$compose" | head -n1 || true)
+        hostname="${hostname/\$\{DOMAIN\}/$DOMAIN}"
+        [[ -z "$hostname" ]] && continue
+
+        url="https://${hostname}${init_path}"
+        echo "Testing native OIDC initiation for $client_id at $url..."
+
+        http_response=$(curl -s -i --cacert "$CA_CERT" --max-redirs 0 --max-time 15 "$url" 2>&1 || true)
+        http_code=$(echo "$http_response" | grep -m1 "^HTTP/" | awk '{print $2}')
+        location=$(echo "$http_response" | grep -i "^Location:" | sed 's/^[Ll]ocation: //I' | tr -d '\r')
+
+        if [[ "$http_code" != 30* ]]; then
+            fail "[$client_id] Expected 3xx redirect to Kanidm, got HTTP $http_code — OIDC not configured or secrets missing"
+            continue
+        fi
+
+        if echo "$location" | grep -qiE "kanidm\.${DOMAIN}|/oauth2/openid/"; then
+            pass "[$client_id] OIDC initiation → Kanidm (HTTP $http_code)"
+        else
+            fail "[$client_id] Redirect does not point to Kanidm: $location"
+        fi
+
+        if echo "$location" | grep -q "error=invalid_origin"; then
+            fail "[$client_id] Kanidm rejected redirect_uri (invalid_origin) — check registered redirect URIs"
+        elif echo "$location" | grep -q "unrecoverable_error"; then
+            fail "[$client_id] Kanidm reported an unrecoverable_error"
+        fi
+    done < <(grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' "$compose" 2>/dev/null || true)
+done < <(find "$REPO_ROOT/stacks" -not -path '*/_template/*' -type f -name "docker-compose.yml" | sort)
 
 # --- 3. Validate Kanidm Log Integrity (Optional/Remote) ---
 info "3. Final Integration Check"

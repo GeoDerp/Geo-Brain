@@ -59,6 +59,7 @@ services:
     labels:
       - "kanidm.oidc.client_id=grafana"
       - "kanidm.oidc.redirect_path=/login/generic_oauth"
+      - "kanidm.oidc.no_pkce=true"
       - "traefik.enable=true"
       - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
       - "traefik.http.routers.grafana.entrypoints=websecure"

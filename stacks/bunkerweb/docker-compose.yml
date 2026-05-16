@@ -94,7 +94,7 @@ services:
       - "traefik.http.routers.bunkerweb.tls=true"
       - "traefik.http.routers.bunkerweb.tls.certresolver=stepca"
       - "traefik.http.routers.bunkerweb.middlewares=oauth2-proxy-admin@file,security-headers@file"
-      - "traefik.http.services.bunkerweb.loadbalancer.server.port=8080"
+      - "traefik.http.services.bunkerweb.loadbalancer.server.port=7000"
       - "traefik.docker.network=proxy-net"
       - "security.stig.compliance=true"
       - "security.stig.bypass_privileged=true"

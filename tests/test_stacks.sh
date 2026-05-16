@@ -871,8 +871,12 @@ test_sso_redirects() {
                 fail "[$stack] SSO failed ($sso_type) -> Expected redirect to auth portal, got HTTP $http_code (Location: $location, Final: $final_url)"
             fi
         else
-            if [[ "$http_code" == "301" || "$http_code" == "302" || "$http_code" == "303" || "$http_code" == "200" || "$http_code" == "401" ]]; then
+            # Native OIDC: app serves its own login page; 200/302 are expected,
+            # 401 from the app itself means SSO middleware is broken (not a proxy 401).
+            if [[ "$http_code" == "301" || "$http_code" == "302" || "$http_code" == "303" || "$http_code" == "200" ]]; then
                 pass "[$stack] SSO active ($sso_type) -> Application answers HTTP $http_code"
+            elif [[ "$http_code" == "401" ]]; then
+                fail "[$stack] SSO broken ($sso_type) -> Application returned 401 (OIDC not configured or secrets missing)"
             else
                 fail "[$stack] SSO failed ($sso_type) -> Application returned HTTP $http_code"
             fi

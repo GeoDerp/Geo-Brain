@@ -33,11 +33,11 @@ _ca_candidates = [
 verify = next((p for p in _ca_candidates if p and os.path.isfile(p)), True)
 
 clients = {
-    "grafana": f"https://grafana.{domain}/login/generic_oauth",
-    "gitea": f"https://gitea.{domain}/user/oauth2/kanidm",
-    "quay": f"https://quay.{domain}/signin",
+    "grafana":    f"https://grafana.{domain}/login/generic_oauth",
+    "gitea":      f"https://gitea.{domain}/user/oauth2/kanidm",
+    "quay":       f"https://quay.{domain}/oauth2/kanidm/initiate",
     "defectdojo": f"https://defectdojo.{domain}/login/oidc/",
-    "moodle": f"https://moodle.{domain}/auth/oauth2/login.php?id=1",
+    "moodle":     f"https://moodle.{domain}/auth/oauth2/login.php?id=1",
     "oauth2-proxy": f"https://{domain}"
 }
 
@@ -66,31 +66,40 @@ for name, url in clients.items():
         
         location = r.headers.get("Location", "")
         
-        # Immediate 302 to Kanidm
-        if r.status_code in [301, 302, 303, 307, 308] and "kanidm" in location.lower():
-            status = "✅ 302 Redirect"
-        
-        # UI with OIDC Button (200)
+        # Immediate redirect to Kanidm — the only correct outcome for an OIDC initiation URL
+        if r.status_code in [301, 302, 303, 307, 308]:
+            if "kanidm" in location.lower():
+                # Surface Kanidm-level errors embedded in the redirect URL
+                if "error=invalid_origin" in location:
+                    status = "❌ Kanidm invalid_origin"
+                    all_passed = False
+                elif "unrecoverable_error" in location:
+                    status = "❌ Kanidm unrecoverable_error"
+                    all_passed = False
+                else:
+                    status = "✅ 302 → Kanidm"
+            else:
+                # Redirect somewhere other than Kanidm — OIDC not wired up
+                status = f"❌ 302 → wrong dest ({location[:60]})"
+                all_passed = False
+
+        # 200 on an OIDC initiation URL means the app did not redirect — OIDC broken
         elif r.status_code == 200:
             body = r.text.lower()
             if "kanidm" in body or "oidc" in body or "openid" in body:
                 status = "✅ OIDC UI Button"
             else:
-                status = "❌ No OIDC UI"
+                status = "❌ No OIDC UI (200)"
                 all_passed = False
-        
-        # OAuth2 Proxy (401 or 403 UI)
+
+        # OAuth2 Proxy ForwardAuth (401/403 with auth-proxy challenge)
         elif r.status_code in [401, 403]:
             body = r.text.lower()
-            if "kanidm" in location.lower() or "sign in with kanidm" in body:
+            if "kanidm" in location.lower() or "sign in with kanidm" in body or "oauth2-proxy" in body:
                 status = "✅ Auth Proxy UI"
             else:
-                status = "❌ Proxy No UI"
+                status = f"❌ {r.status_code} No proxy UI"
                 all_passed = False
-        
-        # Moodle Specific (Missing sesskey but OIDC configured)
-        elif name == "moodle" and "sesskey" in r.text:
-             status = "✅ OIDC Ready (Manual)"
 
         else:
             status = f"❌ Unexpected {r.status_code}"

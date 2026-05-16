@@ -320,6 +320,71 @@ setup_identity() {
   fi
 }
 
+# --- 3b) OIDC Client Registration (Kanidm OAuth2 clients + secret sync) ---
+# Calls setup-oidc.sh to idempotently create all OAuth2 clients in Kanidm,
+# read back the live secrets, and write them to .env. If any secret changed,
+# the affected stacks are force-redeployed so the running containers pick up
+# the new values.
+setup_oidc() {
+  # Pass 'force' as first arg to redeploy stacks even if secrets didn't change.
+  # This is needed when containers were started before secrets were written to .env.
+  local force_redeploy="${1:-false}"
+  echo "--- 3b) OIDC Client Registration ---"
+
+  local oidc_script
+  oidc_script="$(cd "$(dirname "$0")" && pwd)/scripts/setup/setup-oidc.sh"
+
+  if [[ ! -f "$oidc_script" ]]; then
+    echo "⚠️ scripts/setup/setup-oidc.sh not found. Skipping OIDC client registration."
+    return 0
+  fi
+
+  if [[ -z "${KANIDM_ADMIN_PASSWORD:-}" ]]; then
+    echo "⚠️ KANIDM_ADMIN_PASSWORD not set — run setup_identity first."
+    return 0
+  fi
+
+  echo "Registering/syncing Kanidm OAuth2 clients..."
+  local oidc_output
+  oidc_output=$(bash "$oidc_script" 2>&1) || true
+
+  local secrets_changed=false
+  if echo "$oidc_output" | grep -q "^UPDATED_ENV"; then
+    secrets_changed=true
+    echo "🔄 OIDC secrets changed — re-sourcing .env..."
+    set -a; source .env; set +a
+  else
+    echo "🔹 OIDC secrets already in sync with Kanidm."
+  fi
+
+  if [[ "$secrets_changed" == "true" || "$force_redeploy" == "force" ]]; then
+    [[ "$force_redeploy" == "force" ]] && echo "Force-redeploying OIDC stacks to pick up current .env values..."
+    [[ "$secrets_changed" == "true" ]] && echo "Redeploying stacks with updated OIDC secrets..."
+    # Dynamically discover all stacks (including user stacks) that have a Kanidm OIDC
+    # client label, so newly-added stacks are redeployed without editing this list.
+    local repo_root
+    repo_root="$(cd "$(dirname "$0")" && pwd)"
+    local -A seen_stacks=()
+    while IFS= read -r compose_file; do
+      if grep -q 'kanidm\.oidc\.client_id=' "$compose_file" 2>/dev/null; then
+        # Stack path relative to repo root (e.g. "stacks/quay" → "quay", "stacks/user/moodle" → "user/moodle")
+        local stack_dir
+        stack_dir=$(dirname "$compose_file")
+        local stack_rel
+        stack_rel="${stack_dir#"${repo_root}/stacks/"}"
+        [[ -n "$stack_rel" && -z "${seen_stacks[$stack_rel]+_}" ]] && seen_stacks["$stack_rel"]=1
+      fi
+    done < <(find "${repo_root}/stacks" -not -path '*/_template/*' -name "docker-compose.yml" 2>/dev/null)
+    for stack_rel in "${!seen_stacks[@]}"; do
+      echo "  Redeploying ${stack_rel}..."
+      ./deploy.sh "${stack_rel}" redeploy 2>/dev/null || echo "  ⚠️ ${stack_rel} redeploy failed (non-fatal)"
+    done
+    echo "✅ Affected stacks redeployed."
+  else
+    echo "🔹 Running containers already have current OIDC secrets — no redeployment needed."
+  fi
+}
+
 # --- 4) Storage & SOC Secrets ---
 setup_storage() {
   echo "--- 4) Secret Provisioning ---"
@@ -375,6 +440,16 @@ setup_soc() {
     if [[ -n "$DD_ADMIN_PASSWORD" && "$DD_ADMIN_PASSWORD" != "Already initialized" ]]; then
       write_env_secret "DEFECTDOJO_ADMIN_PASSWORD" "$DD_ADMIN_PASSWORD"
     fi
+
+    # Enable OAuth/SSO login button in DefectDojo.
+    # DD_SOCIAL_AUTH_OIDC_ENABLED configures the Django backend but the login page button
+    # is only shown when SystemSettings.enable_oauth is True in the database. These are
+    # independent settings — the DB flag must be set post-init.
+    echo "Enabling OAuth SSO button in DefectDojo SystemSettings..."
+    run_on_node "podman exec defectdojo-django python manage.py shell -c \
+      'from dojo.models import System_Settings; s=System_Settings.objects.first(); s.enable_oauth=True; s.save(); print(\"enable_oauth:\", s.enable_oauth)'" \
+      2>/dev/null && echo "✅ DefectDojo SystemSettings.enable_oauth enabled." || \
+      echo "⚠️ Could not set enable_oauth (container may still be initializing — re-run: ./setup-brain.sh soc)."
   else
     echo "⚠️ DefectDojo container not found."
   fi
@@ -409,34 +484,28 @@ setup_gitea() {
   local existing_source
   existing_source=$(run_on_node "podman exec --user git gitea gitea admin auth list" 2>/dev/null | grep -i "kanidm" || true)
   if [[ -n "$existing_source" ]]; then
-    # Source exists — update scopes. Gitea automatically prepends 'openid' to every
-    # OIDC request, so including it in --scopes causes a duplicate scope string
-    # (openid+profile+email+groups+openid) that Kanidm rejects with an error.
+    # Delete+re-add is necessary because `update-oauth --secret` does not reliably
+    # persist the client secret in Gitea 1.21.x's SQLite DB. A stale secret in the
+    # DB causes 401 on every token exchange even when Kanidm secrets are in sync.
     local auth_id
     auth_id=$(echo "$existing_source" | awk '{print $1}')
-    echo "🔹 Gitea OIDC auth source 'kanidm' (ID: ${auth_id}) exists — patching scopes and secret..."
-    run_on_node "podman exec --user git gitea gitea admin auth update-oauth \
-      --id '${auth_id}' \
-      --name kanidm \
-      --secret '${GITEA_SECRET}' \
-      --scopes 'profile email groups'" 2>/dev/null && \
-      echo "✅ Gitea auth source updated (name=kanidm, secret synced, scopes set)." || \
-      echo "⚠️ Failed to update Gitea auth source (non-fatal)."
+    echo "🔹 Gitea OIDC auth source 'kanidm' (ID: ${auth_id}) exists — recreating to ensure fresh secret..."
+    run_on_node "podman exec --user git gitea gitea admin auth delete --id '${auth_id}'" 2>/dev/null || true
+  fi
+  # Always add (fresh install or after delete above).
+  # NOTE: Do NOT include 'openid' in --scopes. Gitea appends it automatically to
+  # all OIDC requests. Passing it here causes duplicate scope → Kanidm rejects.
+  echo "Adding Kanidm OIDC auth source to Gitea..."
+  if run_on_node "podman exec --user git gitea gitea admin auth add-oauth \
+    --name kanidm \
+    --provider openidConnect \
+    --key gitea \
+    --secret '${GITEA_SECRET}' \
+    --auto-discover-url 'https://kanidm.${DOMAIN}/oauth2/openid/gitea/.well-known/openid-configuration' \
+    --scopes 'profile email groups'" 2>/dev/null; then
+    echo "✅ Gitea OIDC auth source configured (name=kanidm, secret fresh, scopes set)."
   else
-    echo "Adding Kanidm OIDC auth source to Gitea..."
-    # NOTE: Do NOT include 'openid' in --scopes. Gitea appends it automatically to
-    # all OIDC requests. Passing it here causes duplicate scope → Kanidm rejects.
-    if run_on_node "podman exec --user git gitea gitea admin auth add-oauth \
-      --name kanidm \
-      --provider openidConnect \
-      --key gitea \
-      --secret '${GITEA_SECRET}' \
-      --auto-discover-url 'https://kanidm.${DOMAIN}/oauth2/openid/gitea/.well-known/openid-configuration' \
-      --scopes 'profile email groups'" 2>/dev/null; then
-      echo "✅ Gitea OIDC auth source configured for Kanidm (name=kanidm, callback=/user/oauth2/kanidm/callback)."
-    else
-      echo "⚠️ Failed to add Gitea OIDC auth source. Configure manually at https://gitea.${DOMAIN}/-/admin/auths/new"
-    fi
+    echo "⚠️ Failed to add Gitea OIDC auth source. Configure manually at https://gitea.${DOMAIN}/-/admin/auths/new"
   fi
 
   # Fetch and persist the runner registration token (idempotent).
@@ -487,6 +556,31 @@ print('Token inserted')
   else
     echo "🔹 Gitea runner token already valid and in sync."
   fi
+}
+# --- 5c) Moodle OIDC SSO ---
+setup_moodle() {
+  echo "--- 5c) Moodle OIDC SSO ---"
+  if ! run_on_node "podman container exists moodle" 2>/dev/null; then
+    echo "⚠️ Moodle container not found. Skipping."
+    return 0
+  fi
+
+  local MOODLE_SECRET="${MOODLE_OIDC_SECRET:-}"
+  if [[ -z "$MOODLE_SECRET" ]]; then
+    echo "⚠️ MOODLE_OIDC_SECRET not set. Run setup_oidc first."
+    return 0
+  fi
+
+  wait_for_service "Moodle" "run_on_node 'curl -m 10 -s -k -o /dev/null -w \"%{http_code}\" https://moodle.${DOMAIN}/login/index.php | grep -qE \"^[23]\"'" || { echo "⚠️ Moodle not reachable, skipping SSO setup."; return 0; }
+
+  echo "Configuring Moodle OIDC SSO via exec..."
+  run_on_node "podman exec \
+    -e MOODLE_OIDC_SECRET='${MOODLE_SECRET}' \
+    -e DOMAIN='${DOMAIN}' \
+    -e MOODLE_WWWROOT='https://moodle.${DOMAIN}' \
+    moodle bash /docker-entrypoint.d/30-setup-sso.sh" && \
+    echo "✅ Moodle OIDC SSO configured." || \
+    echo "⚠️ Moodle SSO setup returned non-zero (check: podman logs moodle)."
 }
 
 # --- 6) CrowdSec integration ---
@@ -548,6 +642,16 @@ main() {
     echo ">>> [main] calling setup_identity"
     setup_identity
   fi
+  if [[ "$section" == "all" || "$section" == "oidc" ]]; then
+    echo ">>> [main] calling setup_oidc"
+    # When explicitly requested via 'oidc' section, force-redeploy so containers
+    # that were started before secrets were written to .env pick up the correct values.
+    if [[ "$section" == "oidc" ]]; then
+      setup_oidc force
+    else
+      setup_oidc
+    fi
+  fi
   if [[ "$section" == "all" ]]; then
     echo ">>> [main] calling wait_proxies"
     wait_proxies
@@ -555,12 +659,21 @@ main() {
     setup_soc
     echo ">>> [main] calling setup_gitea"
     setup_gitea
+    echo ">>> [main] calling setup_moodle"
+    setup_moodle
     echo ">>> [main] calling setup_crowdsec"
     setup_crowdsec
   fi
   if [[ "$section" == "gitea" ]]; then
     echo ">>> [main] calling setup_gitea"
     setup_gitea
+  fi
+  if [[ "$section" == "oidc" ]]; then
+    # OIDC section also syncs the Gitea auth source (secret lives in Gitea DB, not env var)
+    echo ">>> [main] calling setup_gitea (recreating Gitea auth source with fresh secret)"
+    setup_gitea
+    echo ">>> [main] calling setup_moodle (configuring Moodle OIDC SSO)"
+    setup_moodle
   fi
   if [[ "$section" == "soc" ]]; then
     echo ">>> [main] calling setup_soc"

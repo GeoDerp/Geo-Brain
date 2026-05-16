@@ -137,11 +137,65 @@ check_200() {
     fi
 }
 
+# Maps a Native OIDC client_id to the URL path that initiates the OIDC flow.
+# These paths should return HTTP 302 pointing to kanidm.${DOMAIN}.
+_oidc_initiation_path() {
+    local client_id="$1"
+    case "$client_id" in
+        moodle)     echo "/auth/oauth2/login.php?id=1" ;;
+        gitea)      echo "/user/oauth2/kanidm" ;;
+        quay)       echo "/oauth2/kanidm/initiate" ;;
+        defectdojo) echo "/login/oidc/" ;;
+        grafana)    echo "/login/generic_oauth" ;;
+        *)          echo "" ;;
+    esac
+}
+
+check_oidc_login() {
+    local hostname="$1"
+    local client_id="$2"
+
+    local init_path
+    init_path=$(_oidc_initiation_path "$client_id")
+
+    if [[ -z "$init_path" ]]; then
+        warn "[${client_id}] No known OIDC initiation path — skipping login flow check."
+        return
+    fi
+
+    local url="https://${hostname}${init_path}"
+    local http_response location http_code
+
+    # One redirect max: the first hop must be toward kanidm
+    http_response=$(curl --cacert "$CA_CERT" -s -i --max-redirs 0 --max-time 15 "$url" 2>&1 || true)
+    http_code=$(echo "$http_response" | grep -m1 "^HTTP/" | awk '{print $2}')
+    location=$(echo "$http_response" | grep -i "^Location:" | sed 's/^[Ll]ocation: //I' | tr -d '\r')
+
+    if [[ "$http_code" != 30* ]]; then
+        fail "[${client_id}] OIDC initiation at ${init_path} returned HTTP ${http_code} (expected 3xx redirect to Kanidm)"
+        return
+    fi
+
+    if echo "$location" | grep -qiE "kanidm\.${DOMAIN}|/oauth2/openid/"; then
+        pass "[${client_id}] OIDC initiation → Kanidm redirect OK (HTTP ${http_code}, Location: ${location})"
+    else
+        fail "[${client_id}] OIDC initiation redirect does not point to Kanidm: ${location}"
+    fi
+
+    # Surface Kanidm-level errors immediately
+    if echo "$location" | grep -q "error=invalid_origin"; then
+        fail "[${client_id}] Kanidm rejected redirect_uri (invalid_origin) — check registered redirect URIs in setup-oidc.sh"
+    elif echo "$location" | grep -q "unrecoverable_error"; then
+        fail "[${client_id}] Kanidm reported an unrecoverable_error in the OIDC flow"
+    fi
+}
+
 # === Test Native OIDC Services ===
 info "--- Validating Native OIDC Services ---"
 for service in "${NATIVE_OIDC_SERVICES[@]}"; do
     IFS=':' read -r name hostname <<< "$service"
     check_200 "https://${hostname}" "$name"
+    check_oidc_login "${hostname}" "${name}"
 done
 
 # === Test OAuth2-Proxy & Auto-Redirect Services ===
