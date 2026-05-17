@@ -508,6 +508,29 @@ setup_gitea() {
     echo "⚠️ Failed to add Gitea OIDC auth source. Configure manually at https://gitea.${DOMAIN}/-/admin/auths/new"
   fi
 
+  # Enable PKCE via SQLite — the Gitea CLI does not expose a --use-pkce flag in v1.21.x.
+  # Kanidm requires PKCE for the gitea client; without UsePKCE:true Gitea sends no
+  # code_challenge and Kanidm rejects the token exchange with 401.
+  echo "Enabling UsePKCE on Gitea kanidm auth source via SQLite..."
+  run_on_node "XDG_RUNTIME_DIR=/run/user/\$(id -u) podman unshare python3 -c \"
+import sqlite3, json
+DB='${DATA_DIR}/gitea/data/gitea/gitea.db'
+conn = sqlite3.connect(DB)
+row = conn.execute(\\\"SELECT id, cfg FROM login_source WHERE name='kanidm'\\\").fetchone()
+if row:
+    src_id, cfg_raw = row
+    cfg = json.loads(cfg_raw)
+    cfg['UsePKCE'] = True
+    conn.execute(\\\"UPDATE login_source SET cfg=? WHERE id=?\\\", (json.dumps(cfg), src_id))
+    conn.commit()
+    print('UsePKCE=True set on login_source id=' + str(src_id))
+else:
+    print('WARNING: kanidm login_source not found')
+conn.close()
+\" 2>&1" 2>/dev/null \
+    && echo "✅ Gitea UsePKCE enabled." \
+    || echo "⚠️ Could not set UsePKCE via SQLite — verify manually."
+
   # Fetch and persist the runner registration token (idempotent).
   # NOTE: Gitea 1.21.x does not expose /api/v1/admin/runners/registration-token.
   # Tokens are written directly to the SQLite DB via podman unshare.

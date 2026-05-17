@@ -20,6 +20,7 @@ services:
       - DD_SOCIAL_AUTH_ENABLED=True
       - DD_SOCIAL_AUTH_OIDC_AUTH_ENABLED=True
       - DD_SOCIAL_AUTH_OIDC_USERNAME_KEY=preferred_username
+      - DD_SOCIAL_AUTH_OIDC_LOGIN_BUTTON_TEXT=Login with Kanidm (SSO)
       - DD_SOCIAL_AUTH_REDIRECT_IS_HTTPS=True
       # SSL_CERT_FILE: covers Python's native ssl module (supplements REQUESTS_CA_BUNDLE
       # which only covers the requests library). Both are needed for full TLS trust.
