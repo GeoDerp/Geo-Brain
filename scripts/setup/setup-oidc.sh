@@ -3,10 +3,15 @@ BASE_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 ENVFILE="$BASE_DIR/.env"
 set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
 
-if [[ -z "${KANIDM_ADMIN_PASSWORD:-}" ]]; then
-  # Try to recover it
-  KANIDM_ADMIN_PASSWORD=$(systemd-run --user --wait -p Type=oneshot -- sh -c "podman exec kanidm /sbin/kanidmd recover-account -c /data/server.toml idm_admin > /tmp/kanidm-recovery.tmp 2>&1" 2>/dev/null; grep new_password /tmp/kanidm-recovery.tmp 2>/dev/null | grep -o '"[^"]*"' | tr -d '"' || true)
-fi
+# Always recover a fresh one-time token — stored passwords expire after first use
+# (recover-account generates a single-use credential; re-using a consumed one fails with 401)
+# Uses XDG_RUNTIME_DIR so this works both in interactive sessions and via SSH/Ansible.
+_PUID=$(id -u)
+KANIDM_ADMIN_PASSWORD=$(
+  DBUS_SESSION_BUS_ADDRESS="" XDG_RUNTIME_DIR="/run/user/${_PUID}" \
+  podman exec kanidm /sbin/kanidmd recover-account -c /data/server.toml idm_admin 2>&1 \
+  | grep new_password | awk -F'"' '{print $2}' || true
+)
 
 if [[ -z "$KANIDM_ADMIN_PASSWORD" ]]; then
   echo "No Kanidm admin password available."

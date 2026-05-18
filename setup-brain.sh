@@ -531,6 +531,10 @@ conn.close()
     && echo "✅ Gitea UsePKCE enabled." \
     || echo "⚠️ Could not set UsePKCE via SQLite — verify manually."
 
+  # Restart Gitea so the SQLite UsePKCE change takes effect (Gitea reads config at startup only).
+  echo "Restarting Gitea to apply UsePKCE=True..."
+  run_on_node "XDG_RUNTIME_DIR=/run/user/\$(id -u) podman restart gitea" >/dev/null 2>&1     && echo "✅ Gitea restarted."     || echo "⚠️ Gitea restart failed — restart manually with: podman restart gitea"
+
   # Fetch and persist the runner registration token (idempotent).
   # NOTE: Gitea 1.21.x does not expose /api/v1/admin/runners/registration-token.
   # Tokens are written directly to the SQLite DB via podman unshare.

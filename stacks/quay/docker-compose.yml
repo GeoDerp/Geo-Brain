@@ -184,6 +184,8 @@ services:
     depends_on:
       clair-db:
         condition: service_healthy
+    tmpfs:
+      - /tmp:mode=1777,size=2g
     volumes:
       - ./config:/config:Z
     networks:

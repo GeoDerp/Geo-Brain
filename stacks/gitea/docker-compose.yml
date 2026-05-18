@@ -67,6 +67,9 @@ services:
     labels:
       - "kanidm.oidc.client_id=gitea"
       - "kanidm.oidc.redirect_path=/user/oauth2/kanidm/callback"
+      # Gitea 1.21.x does not support PKCE (added in 1.22). Disable PKCE in Kanidm
+      # until Gitea is upgraded to >=1.22. Remove this label post-upgrade.
+      - "kanidm.oidc.no_pkce=true"
       - "security.stig.compliance=true"
       - "traefik.enable=true"
       - "traefik.http.routers.gitea.rule=Host(`gitea.${DOMAIN}`)"
