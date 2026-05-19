@@ -429,7 +429,7 @@ setup_gitea() {
     if run_on_node "podman exec --user git gitea gitea admin auth add-oauth \
       --name kanidm \
       --provider openidConnect \
-      --key gitea \
+      --key kanidm \
       --secret '${GITEA_SECRET}' \
       --auto-discover-url 'https://kanidm.${DOMAIN}/oauth2/openid/gitea/.well-known/openid-configuration' \
       --scopes 'profile email groups'" 2>/dev/null; then
