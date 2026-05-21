@@ -3,6 +3,13 @@ services:
     image: docker.io/defectdojo/defectdojo-nginx:2.58.3
     container_name: defectdojo-nginx
     restart: always
+    # Inject large_client_header_buffers before the original entrypoint runs.
+    # Kanidm JWT cookies can exceed nginx's default 4x8k limit, causing 400s.
+    # This mirrors DefectDojo's own entrypoint pattern (sed -i on nginx.conf).
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "sed -i 's/keepalive_timeout 65;/keepalive_timeout 65;\\n  large_client_header_buffers 8 32k;\\n  client_header_buffer_size 4k;/' /etc/nginx/nginx.conf && exec /entrypoint-nginx.sh"
     security_opt:
       - no-new-privileges:true
     cap_drop:
