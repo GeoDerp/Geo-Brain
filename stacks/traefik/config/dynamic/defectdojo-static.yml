@@ -5,7 +5,7 @@
 http:
   routers:
     defectdojo-static:
-      rule: "Host(`defectdojo.${DOMAIN}`) && PathPrefix(`/static/`)"
+      rule: 'Host(`defectdojo.{{ env "DOMAIN" }}`) && PathPrefix(`/static/`)'
       entryPoints:
         - websecure
       service: defectdojo-static

@@ -25,7 +25,7 @@ php admin/cli/install_database.php \
   --fullname="My-HomeLab Moodle" \
   --shortname="moodle" \
   --adminuser=admin \
-  --adminpass="${ADMIN_PASSWORD:-changeme}" \
+  --adminpass="${MOODLE_ADMIN_PASSWORD:-changeme}" \
   --adminemail="admin@${DOMAIN}" \
   2>/dev/null || true
 

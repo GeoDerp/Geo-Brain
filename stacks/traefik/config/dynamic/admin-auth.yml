@@ -5,7 +5,7 @@
 http:
   routers:
     admin-auth:
-      rule: "(Host(`auth.${DOMAIN}`) || Host(`${DOMAIN}`)) && PathPrefix(`/admin-oauth2/`)"
+      rule: '(Host(`auth.{{ env "DOMAIN" }}`) || Host(`{{ env "DOMAIN" }}`)) && PathPrefix(`/admin-oauth2/`)'
       entryPoints:
         - websecure
       service: admin-auth

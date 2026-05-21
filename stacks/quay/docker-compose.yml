@@ -122,8 +122,6 @@ services:
         condition: service_healthy
       quay-redis:
         condition: service_healthy
-    ports:
-      - "8080:8080"
     environment:
       - QUAY_DB_USER=${QUAY_DB_USER}
       - QUAY_DB_PASSWORD=${QUAY_DB_PASSWORD}
@@ -184,8 +182,6 @@ services:
     depends_on:
       clair-db:
         condition: service_healthy
-    tmpfs:
-      - /tmp:mode=1777,size=2g
     volumes:
       - ./config:/config:Z
     networks:
