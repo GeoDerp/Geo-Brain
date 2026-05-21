@@ -1,6 +1,6 @@
 services:
   wazuh-indexer:
-    image: docker.io/wazuh/wazuh-indexer:4.14.3
+    image: docker.io/wazuh/wazuh-indexer:4.14.5
     container_name: wazuh-indexer
     restart: always
     security_opt:
@@ -43,7 +43,7 @@ services:
       - "homepage.icon=wazuh.png"
 
   wazuh-manager:
-    image: docker.io/wazuh/wazuh-manager:4.14.3
+    image: docker.io/wazuh/wazuh-manager:4.14.5
     container_name: wazuh-manager
     restart: always
     # NOTE: no-new-privileges omitted — manager runs multiple exec'd processes
@@ -95,7 +95,7 @@ services:
       - "homepage.icon=wazuh.png"
 
   wazuh-dashboard:
-    image: docker.io/wazuh/wazuh-dashboard:4.14.3
+    image: docker.io/wazuh/wazuh-dashboard:4.14.5
     security_opt:
       - no-new-privileges:true
     cap_drop:

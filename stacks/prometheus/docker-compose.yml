@@ -1,6 +1,6 @@
 services:
   prometheus:
-    image: docker.io/prom/prometheus:v3.1.0
+    image: docker.io/prom/prometheus:v3.11.3
     container_name: prometheus
     restart: always
     security_opt:

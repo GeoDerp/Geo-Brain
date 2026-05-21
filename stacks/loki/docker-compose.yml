@@ -1,6 +1,6 @@
 services:
   loki:
-    image: docker.io/grafana/loki:3.4.1
+    image: docker.io/grafana/loki:3.7.2
     container_name: loki
     restart: always
     security_opt:

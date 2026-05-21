@@ -1,6 +1,6 @@
 services:
   dockge:
-    image: docker.io/louislam/dockge:1.4.2
+    image: docker.io/louislam/dockge:1.5.0
     container_name: dockge
     restart: always
     security_opt:

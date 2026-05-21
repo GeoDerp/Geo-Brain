@@ -1,6 +1,6 @@
 services:
   gitea:
-    image: docker.io/gitea/gitea:1.21.11
+    image: docker.io/gitea/gitea:1.26.2
     container_name: gitea
     restart: always
     security_opt:

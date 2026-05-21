@@ -18,4 +18,4 @@ http:
     defectdojo-static:
       loadBalancer:
         servers:
-          - url: "http://defectdojo-django:8081"
+          - url: "http://defectdojo-nginx:8080"

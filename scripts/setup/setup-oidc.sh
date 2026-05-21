@@ -3,15 +3,10 @@ BASE_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 ENVFILE="$BASE_DIR/.env"
 set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
 
-# Always recover a fresh one-time token — stored passwords expire after first use
-# (recover-account generates a single-use credential; re-using a consumed one fails with 401)
-# Uses XDG_RUNTIME_DIR so this works both in interactive sessions and via SSH/Ansible.
-_PUID=$(id -u)
-KANIDM_ADMIN_PASSWORD=$(
-  DBUS_SESSION_BUS_ADDRESS="" XDG_RUNTIME_DIR="/run/user/${_PUID}" \
-  podman exec kanidm /sbin/kanidmd recover-account -c /data/server.toml idm_admin 2>&1 \
-  | grep new_password | awk -F'"' '{print $2}' || true
-)
+if [[ -z "${KANIDM_ADMIN_PASSWORD:-}" ]]; then
+  # Try to recover it
+  KANIDM_ADMIN_PASSWORD=$(systemd-run --user --wait -p Type=oneshot -- sh -c "podman exec kanidm /sbin/kanidmd recover-account -c /data/server.toml idm_admin > /tmp/kanidm-recovery.tmp 2>&1" 2>/dev/null; grep new_password /tmp/kanidm-recovery.tmp 2>/dev/null | grep -o '"[^"]*"' | tr -d '"' || true)
+fi
 
 if [[ -z "$KANIDM_ADMIN_PASSWORD" ]]; then
   echo "No Kanidm admin password available."
@@ -127,6 +122,9 @@ for APP_INFO in \$EXPECTED_APPS; do
     kanidm system oauth2 update-scope-map "\$APP" stig_admins openid profile email groups -C /tmp/ca.crt >/dev/null 2>&1 || true
     kanidm system oauth2 update-scope-map "\$APP" stig_users openid profile email groups -C /tmp/ca.crt >/dev/null 2>&1 || true
     kanidm system oauth2 set-landing-url "\$APP" "\$ORIGIN_URL" -C /tmp/ca.crt >/dev/null 2>&1 || true
+    # Use short username (e.g. "geo") instead of SPN (e.g. "geo@domain") as preferred_username.
+    # Required for apps like Gitea that reject "@" in usernames.
+    kanidm system oauth2 prefer-short-username "\$APP" -C /tmp/ca.crt >/dev/null 2>&1 || true
     
     SECRET=\$(kanidm system oauth2 show-basic-secret "\$APP" -C /tmp/ca.crt 2>/dev/null | tail -n 1)
     if [ "\$SECRET" = "No secret configured" ] || [ -z "\$SECRET" ]; then
@@ -146,7 +144,7 @@ done
 INNEREOF
 )
 
-setup_output=$(echo "$payload" | DBUS_SESSION_BUS_ADDRESS="" XDG_RUNTIME_DIR="/run/user/$(id -u)" podman run -i --rm --network host --env KANIDM_PASSWORD="${KANIDM_ADMIN_PASSWORD}" docker.io/kanidm/tools:1.9.2 sh 2>&1) || true
+setup_output=$(echo "$payload" | DBUS_SESSION_BUS_ADDRESS="" XDG_RUNTIME_DIR="/run/user/$(id -u)" podman run -i --rm --network host --env KANIDM_PASSWORD="${KANIDM_ADMIN_PASSWORD}" docker.io/kanidm/tools:1.9.4 sh 2>&1) || true
 
 UPDATED_ENV=false
 
@@ -219,7 +217,7 @@ RESETEOF
     DBUS_SESSION_BUS_ADDRESS="" XDG_RUNTIME_DIR="/run/user/$(id -u)" \
     podman run -i --rm --network host \
     --env KANIDM_PASSWORD="${KANIDM_ADMIN_PASSWORD}" \
-    docker.io/kanidm/tools:1.9.2 sh 2>&1) || true
+    docker.io/kanidm/tools:1.9.4 sh 2>&1) || true
 
   for _APP in $NEEDS_RESET; do
     _secret=$(echo "$reset_output" | grep "^${_APP}_OIDC_RESET_VALUE=" | cut -d'=' -f2- || true)

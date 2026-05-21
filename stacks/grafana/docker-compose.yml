@@ -1,6 +1,6 @@
 services:
   grafana:
-    image: docker.io/grafana/grafana:11.5.1
+    image: docker.io/grafana/grafana:13.0.1-security-01
     container_name: grafana
     restart: always
     security_opt:

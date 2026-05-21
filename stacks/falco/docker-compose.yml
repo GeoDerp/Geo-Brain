@@ -1,6 +1,6 @@
 services:
   falco:
-    image: docker.io/falcosecurity/falco:0.43.0
+    image: docker.io/falcosecurity/falco:0.43.1
     container_name: falco
     restart: always
     security_opt:
