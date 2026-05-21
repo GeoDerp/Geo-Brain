@@ -602,9 +602,12 @@ deploy_batch() {
     echo ">>> Batch $COMMAND for ${#stacks[@]} stack(s)..."
     echo ""
 
-    # Always cleanup old generated configs at the start of a run (if up/redeploy)
+    # Cleanup only the generated configs for the stacks in this batch.
+    # Cleaning ALL gen_ files would break routing for stacks not in the batch.
     if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
-        cleanup_traefik_configs
+        for stack in "${stacks[@]}"; do
+            cleanup_traefik_configs "$stack"
+        done
     fi
 
     # --- QUAY-FIRST BOOTSTRAPPING (Handled by Ansible) ---
