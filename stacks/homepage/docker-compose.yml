@@ -13,6 +13,7 @@ services:
       - 3000:3000
     environment:
       - HOMEPAGE_VAR_DISABLE_UPDATE_CHECK=true
+      - HOMEPAGE_ALLOWED_HOSTS=${DOMAIN}
       - HOMEPAGE_OIDC_SECRET=${HOMEPAGE_OIDC_SECRET:-}
       - HOMEPAGE_VAR_WAZUH_URL=https://wazuh.${DOMAIN}
       - HOMEPAGE_VAR_DEFECTDOJO_URL=https://defectdojo.${DOMAIN}
