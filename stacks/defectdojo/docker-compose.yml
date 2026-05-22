@@ -9,7 +9,7 @@ services:
     entrypoint:
       - /bin/sh
       - -c
-      - "sed -i 's/keepalive_timeout 65;/keepalive_timeout 65;\\n  large_client_header_buffers 8 32k;\\n  client_header_buffer_size 4k;/' /etc/nginx/nginx.conf && exec /entrypoint-nginx.sh"
+      - "grep -q 'large_client_header_buffers' /etc/nginx/nginx.conf || sed -i 's/keepalive_timeout 65;/keepalive_timeout 65;\\n  large_client_header_buffers 8 32k;\\n  client_header_buffer_size 4k;/' /etc/nginx/nginx.conf; exec /entrypoint-nginx.sh"
     security_opt:
       - no-new-privileges:true
     cap_drop:
