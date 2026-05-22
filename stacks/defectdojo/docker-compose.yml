@@ -25,7 +25,10 @@ services:
       - DD_UWSGI_PORT=3031
       - NGINX_METRICS_ENABLED=false
     volumes:
-      - defectdojo-static:/usr/share/nginx/html/static:ro,z
+      # Static files are pre-baked into the nginx image; do NOT mount the
+      # defectdojo-static volume here — it only contains Django app statics
+      # (admin, dojo, etc.) from collectstatic and would shadow the vendor
+      # JS/CSS (jquery, bootstrap, datatables...) that are in the image.
       - defectdojo-media:/usr/share/nginx/html/media:ro,z
     networks:
       - defectdojo-backend
