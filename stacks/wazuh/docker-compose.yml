@@ -41,6 +41,8 @@ services:
       - "homepage.group=SOC"
       - "homepage.name=Wazuh Indexer"
       - "homepage.icon=wazuh.png"
+      - "homepage.description=OpenSearch Log Indexer"
+      - "homepage.href=https://wazuh.${DOMAIN}"
 
   wazuh-manager:
     image: docker.io/wazuh/wazuh-manager:4.14.5

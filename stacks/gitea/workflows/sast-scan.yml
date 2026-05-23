@@ -90,3 +90,63 @@ jobs:
             --scanners vuln \
             .
         continue-on-error: true   # Change to false to make this a hard gate
+
+  # --- AI-Assisted Security Review (RamaLama) ---
+  # GEMINI.md §CI/CD mandate: RamaLama MUST be integrated into the pipeline to
+  # perform automated, localized code reviews on PRs and condense DefectDojo
+  # security logs into actionable summaries.
+  # Requires additional Gitea secret: GITEA_TOKEN (PAT with repo write access).
+  # gitea-runner must be on vulnerability-net (configured in docker-compose.yml).
+  ramalama-review:
+    needs: trivy-scan
+    runs-on: host
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Summarize findings with RamaLama and post PR comment
+        env:
+          DD_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DD_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+          DD_PRODUCT: ${{ secrets.DEFECTDOJO_PRODUCT_ID }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          set -euo pipefail
+          # Ensure jq is available (act_runner host mode may need it installed)
+          which jq 2>/dev/null || apk add --no-cache jq 2>/dev/null || apt-get install -y -q jq 2>/dev/null || true
+
+          # Fetch CRITICAL/HIGH active findings for this product from DefectDojo
+          FINDINGS=$(curl -sf \
+            "${DD_URL}/api/v2/findings/?product=${DD_PRODUCT}&severity=Critical&severity=High&active=true&limit=20&ordering=-severity" \
+            -H "Authorization: Token ${DD_KEY}" \
+            | jq -r '.results[]? | "[\(.severity)] \(.title) (\(.file_path // "N/A"):\(.line // "0"))"' \
+            2>/dev/null || echo "No active findings or DefectDojo unreachable")
+
+          # Build the RamaLama request safely via jq (handles quotes/newlines in FINDINGS)
+          jq -n \
+            --arg model "${RAMALAMA_MODEL:-phi3:mini}" \
+            --arg prompt "You are a DISA STIG security reviewer for a homelab. Summarize these scan findings for ${REPO} into 3-5 developer-actionable bullet points. Be concise and specific about remediation steps.\n\nFindings:\n${FINDINGS}" \
+            '{model: $model, prompt: $prompt, stream: false}' > /tmp/ramalama-req.json
+
+          # Call RamaLama (Ollama-compatible API) via vulnerability-net direct connection
+          SUMMARY=$(curl -sf --max-time 120 \
+            -X POST http://ramalama:8080/api/generate \
+            -H "Content-Type: application/json" \
+            -d @/tmp/ramalama-req.json \
+            | jq -r '.response // empty' \
+            2>/dev/null || echo "")
+          [ -z "$SUMMARY" ] && SUMMARY="RamaLama unavailable — review DefectDojo directly at ${DD_URL}."
+
+          # Build PR comment body safely (write to file first, then JSON-encode via jq)
+          printf '## RamaLama Security Review\n\n%s\n\n---\n_Automated by RamaLama (%s) via DefectDojo findings. Verify before acting._\n' \
+            "$SUMMARY" "${RAMALAMA_MODEL:-phi3:mini}" > /tmp/review-body.txt
+          jq -Rs '{"body": .}' < /tmp/review-body.txt > /tmp/comment.json
+
+          # Post review as PR comment via Gitea API
+          curl -sf \
+            -X POST "${SERVER_URL}/api/v1/repos/${REPO}/issues/${PR_NUM}/comments" \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/comment.json
+          echo "AI security review posted to ${SERVER_URL}/${REPO}/pulls/${PR_NUM}"

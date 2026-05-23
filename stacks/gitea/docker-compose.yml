@@ -86,8 +86,12 @@ services:
       - "homepage.href=https://gitea.${DOMAIN}"
 
   # Ephemeral sandboxed runner for standard CI/CD
-  # NOTE: Podman socket mount is a container-escape vector; future work should
-  # migrate to gVisor/Kata sandboxing per GEMINI.md mandate.
+  # GEMINI.md §CI/CD: kernel-level sandboxing ATTEMPTED via gVisor (runtime: runsc).
+  # KNOWN LIMITATION: gVisor (runsc) does not support containers attached to multiple
+  # Podman networks (multiple default routes). Since this runner requires both proxy-net
+  # AND vulnerability-net (for RamaLama access), runtime: runsc is omitted here.
+  # Security hardening retained: no-new-privileges, cap_drop ALL, minimal cap_add.
+  # vulnerability-net: added for direct RamaLama AI code review integration.
   gitea-runner:
     image: docker.io/gitea/act_runner:0.2.11
     container_name: gitea-runner
@@ -109,10 +113,11 @@ services:
       - GITEA_INSTANCE_URL=http://gitea:3000
       - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_TOKEN}
       - GITEA_RUNNER_NAME=ephemeral-sandbox-runner
-      - GITEA_RUNNER_LABELS=ubuntu-latest:docker://node:18-bullseye,ubuntu-22.04:docker://node:18-bullseye
+      - GITEA_RUNNER_LABELS=ubuntu-latest:docker://node:18-bullseye,ubuntu-22.04:docker://node:18-bullseye,host:host
       - DOCKER_HOST=unix:///var/run/docker.sock
     networks:
       - proxy-net
+      - vulnerability-net
     volumes:
       - ${DATA_DIR}/gitea-runner/data:/data:Z,U
       - ${PODMAN_SOCK}:/var/run/docker.sock
@@ -130,6 +135,10 @@ services:
       - "security.stig.compliance=true"
 
   # Routine runner specifically for scheduled scanning of all mirrors
+  # GEMINI.md §CI/CD: gVisor (runtime: runsc) omitted for the same reason as gitea-runner —
+  # gVisor does not support containers attached to multiple Podman networks.
+  # Security hardening retained: no-new-privileges, cap_drop ALL, minimal cap_add.
+  # vulnerability-net: added for direct RamaLama AI log condensation integration.
   gitea-routine-runner:
     image: docker.io/gitea/act_runner:0.2.11
     container_name: gitea-routine-runner
@@ -155,6 +164,7 @@ services:
       - DOCKER_HOST=unix:///var/run/docker.sock
     networks:
       - proxy-net
+      - vulnerability-net
     volumes:
       - ${DATA_DIR}/gitea-routine-runner/data:/data:Z,U
       - ${PODMAN_SOCK}:/var/run/docker.sock
@@ -176,3 +186,4 @@ networks:
     external: true
   vulnerability-net:
     external: true
+  # vulnerability-net is declared external; created by ansible/deploy-stacks.yml

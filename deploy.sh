@@ -357,10 +357,16 @@ ensure_networks() {
     echo "    Creating missing external networks for $stack_label:"
     for net in $missing; do
         echo "      + $net"
+        # Internal air-gapped networks must be created with --internal (no NAT gateway).
+        # Matches ansible/deploy-stacks.yml which uses the same logic.
+        local net_flags="--label security.stig.compliance=true"
+        if [[ "$net" == "secure-backbone" || "$net" == "quay-net" || "$net" == "moodle-db-net" ]]; then
+            net_flags="$net_flags --internal"
+        fi
         if [[ "$DEPLOY_MODE" == "remote" ]]; then
-            "${SSH_CMD[@]}" "podman network create --label security.stig.compliance=true '$net'" || true
+            "${SSH_CMD[@]}" "podman network create $net_flags '$net'" || true
         else
-            podman network create --label "security.stig.compliance=true" "$net" || true
+            podman network create $net_flags "$net" || true
         fi
     done
 }
