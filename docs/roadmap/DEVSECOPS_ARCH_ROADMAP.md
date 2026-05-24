@@ -1,6 +1,6 @@
-# GEO-Brain DevSecOps Architectural Roadmap
+# My-HomeLab DevSecOps Architectural Roadmap
 
-This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from its current state into a highly resilient, enterprise-ready DevSecOps platform, strictly maintaining the rootless Podman architecture.
+This roadmap outlines the prioritized steps to mature the My-HomeLab homelab from its current state into a highly resilient, enterprise-ready DevSecOps platform, strictly maintaining the rootless Podman architecture.
 
 ## Phase 1: Immediate Fixes (Bootstrapping & Core Security)
 
@@ -20,7 +20,7 @@ This roadmap outlines the prioritized steps to mature the GEO-Brain homelab from
 
 4.  **OAuth2 Proxy SSO Gateway (Completed)**
     *   **Rationale:** Centralized OIDC-based forward-auth via Kanidm, eliminating the need for LDAP service accounts.
-    *   **Implementation:** Dual-instance deployment (`oauth2-proxy` for `brain_users` + `brain_admins`, `oauth2-proxy-admin` for `brain_admins` only). Traefik ForwardAuth middlewares route all protected services through OAuth2 Proxy → Kanidm OIDC.
+    *   **Implementation:** Dual-instance deployment (`oauth2-proxy` for `stig_users` + `stig_admins`, `oauth2-proxy-admin` for `stig_admins` only). Traefik ForwardAuth middlewares route all protected services through OAuth2 Proxy → Kanidm OIDC.
 
 5.  **Gitea CI/CD Pipeline (Completed)**
     *   **Rationale:** Self-hosted Git with integrated CI/CD runners for air-gapped DevSecOps.

@@ -122,27 +122,41 @@ services:
         condition: service_healthy
       quay-redis:
         condition: service_healthy
-    ports:
-      - "8080:8080"
+    environment:
+      - QUAY_DB_USER=${QUAY_DB_USER}
+      - QUAY_DB_PASSWORD=${QUAY_DB_PASSWORD}
+      - QUAY_DB_NAME=${QUAY_DB_NAME}
+      - QUAY_OIDC_SECRET=${QUAY_OIDC_SECRET}
+      - QUAY_SECRET_KEY=${QUAY_SECRET_KEY}
+      - QUAY_DB_SECRET_KEY=${QUAY_DB_SECRET_KEY}
+      - DOMAIN=${DOMAIN}
+      # kanidm doesn't support the test token flow quay's config-tool uses
+      # (authorization_code with a fake code → 400). Boot anyway; OIDC SSO works at runtime.
+      - IGNORE_VALIDATION=true
     volumes:
       - ./config:/conf/stack:Z
-      - ../../stacks/traefik/config/certs/root_ca.crt:/conf/stack/extra_ca_certs/root_ca.crt:ro,Z
       - ${DATA_DIR}/quay-storage:/datastorage:Z,U
+      # Quay auto-imports all .crt files from extra_ca_certs/ on startup.
+      # Required for TLS verification when contacting Kanidm OIDC endpoints.
+      - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/conf/stack/extra_ca_certs/step-ca.crt:ro,z
     networks:
       - quay-net
       - proxy-net
     deploy:
       resources:
         limits:
-          memory: 6G
+          memory: 10G
           cpus: '2.0'
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health/instance')\""]
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 5m
     labels:
       - "kanidm.oidc.client_id=quay"
+      - "kanidm.oidc.redirect_path=/oauth2/kanidm/callback"
+      - "kanidm.oidc.no_pkce=true"
       - "security.stig.compliance=true"
       - "traefik.enable=true"
       - "traefik.http.routers.quay.rule=Host(`quay.${DOMAIN}`)"
@@ -150,6 +164,7 @@ services:
       - "traefik.http.routers.quay.tls=true"
       - "traefik.http.routers.quay.middlewares=security-headers@file"
       - "traefik.http.services.quay.loadbalancer.server.port=8080"
+      - "traefik.docker.network=proxy-net"
       - "homepage.group=Infrastructure"
       - "homepage.name=Quay"
       - "homepage.icon=quay.png"
@@ -169,24 +184,21 @@ services:
         condition: service_healthy
     volumes:
       - ./config:/config:Z
-    networks:
-      - quay-net
     deploy:
       resources:
         limits:
-          memory: 1G
-          cpus: '0.5'
+          memory: 4G
+          cpus: '1.0'
     healthcheck:
-      test: ["CMD-SHELL", "test -e /proc/1/status"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8089/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 2m
     command: ["-conf", "/config/clair-config.yaml"]
     networks:
       - quay-net
       - monitoring-net
-    ports:
-      - "8089:8089"
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=scanner"

@@ -1,4 +1,4 @@
-# GEMINI Context: Geo-Brain (Single Source of Truth)
+# GEMINI Context: My-HomeLab (Single Source of Truth)
 
 This repository serves as the Single Source of Truth (SSOT) for a DISA STIG compliant, single-node homelab. It manages infrastructure-as-code via Podman and Docker Compose.
 
@@ -18,9 +18,10 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - **Zero-Trust mTLS Architecture:** All backend services and databases MUST utilize the mTLS Sidecar Pattern (e.g., Caddy). Applications bind strictly to `127.0.0.1` and share a network namespace with a sidecar proxy that handles mTLS termination via Step-CA. 
 - **Network Micro-Segmentation:** Applications reside on dedicated Podman networks. Internal backend networks MUST be set to `internal: true` to air-gap them and drop the default NAT gateway. No inter-stack communication unless explicitly defined via an mTLS sidecar.
 - **Air-gap Preparedness:** All images are pinned to specific versions/digests. No `:latest` tags.
-- **Data Separation:** Persistent data lives under `${DATA_DIR}` (default `/var/Geo-Brain`) on a large partition. Config files stay relative (`./config`) for rsync portability. New stacks mount data as `${DATA_DIR}/<stack-name>/...`.
+- **Data Separation:** Persistent data lives under `${DATA_DIR}` (default `/var/My-HomeLab`) on a large partition. Config files stay relative (`./config`) for rsync portability. New stacks mount data as `${DATA_DIR}/<stack-name>/...`.
 - **Single Source of Truth:** All infrastructure state is defined in this repository. Manual changes on the host are forbidden.
 - **HTTPS Only:** All HTTP endpoints MUST be encrypted with TLS. Plain HTTP is only allowed for local bootstrap redirects to HTTPS.
+- **Agent Validation:** After completing any agentic task or making code changes, the AI agent MUST autonomously run the full suite of automated tests (`./tests/test_stacks.sh all`, `./tests/test_kube_compliance.sh`, `./tests/test_sso_routes.sh`, and `./tests/validate_sso_detailed.sh`) to validate that the project remains fully functional and STIG-compliant.
 
 ## Application Stack 
 
@@ -45,7 +46,7 @@ This repository serves as the Single Source of Truth (SSOT) for a DISA STIG comp
 - **Kanidm (IDM):** Primary Identity Management server (LDAP/OIDC).
 - **OAuth2 Proxy (Auth Portal):** OIDC-based forward-auth proxy for SSO via Kanidm.- **Step-CA (PKI):** Internal Certificate Authority for automated TLS (`*.example.local`).
 - **Quay (Registry):** Local OCI registry and pull-through cache with integrated Clair scanning.
-- **MinIO (Storage):** S3-compatible object storage for Loki chunks and Velero/Restic backups.
+- **SeaweedFS (Storage):** S3-compatible distributed object storage for Loki chunks and Velero/Restic backups. SeaweedFS replaced MinIO as the deployed S3 implementation (S3 gateway on port 8333, master on 9333, filer on 8888). Loki uses `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` env vars as S3 credentials (legacy naming retained for compatibility).
 
 ### Optional Stacks (WIP)
 - **Pangolin (Tunnel Proxy):** Identity-aware reverse proxy and WireGuard VPN for zero-trust remote access. Replaces Traefik + OAuth2 Proxy when used.
@@ -98,7 +99,7 @@ graph TD
     end
 
     subgraph "Layer 2 — Storage & Registry"
-        MINIO[MinIO<br/><i>S3 Object Storage</i>]
+        MINIO[SeaweedFS<br/><i>S3 Object Storage</i>]
         QUAYDB[(Quay-DB<br/>PostgreSQL)]
         CLAIRDB[(Clair-DB<br/>PostgreSQL)]
         QUAYREDIS[(Quay-Redis)]
@@ -155,7 +156,7 @@ graph TD
     CLAIRDB -->|"stores vuln data"| CLAIR
     QUAY <-->|"scans images"| CLAIR
 
-    %% Layer 0 → Layer 3 (Loki depends on MinIO S3)
+    %% Layer 0 → Layer 3 (Loki depends on SeaweedFS S3 gateway)
     MINIO -->|"S3 storage"| LOKI
     VECTOR -->|"ships logs"| LOKI
     VECTOR -->|"ships security logs"| WAZMGR
@@ -196,7 +197,7 @@ graph LR
         KANIDM_N2[Kanidm]
         O2P_N[OAuth2 Proxy]
         QUAY_N[Quay]
-        MINIO_N[MinIO]
+        MINIO_N[SeaweedFS]
         GRAFANA_N[Grafana]
         WAZDASH_N[Wazuh Dashboard]
         DOJO_N[DefectDojo]
@@ -240,7 +241,7 @@ graph LR
     end
 
     subgraph "storage-net <i>(external)</i>"
-        MINIO_S[MinIO]
+        MINIO_S[SeaweedFS]
         LOKI_S[Loki]
         PROMETHEUS_ST[Prometheus]
     end
@@ -287,13 +288,13 @@ graph LR
 |---|---|---|---|---|
 | **Step-CA** | — (root of trust) | Traefik (ACME certs), all TLS-terminating services | `pki-net`, `proxy-net` | **CRITICAL.** If Step-CA goes down: no new certs issued, ACME renewal fails. Existing certs remain valid until expiry. If CA key is compromised: entire TLS trust chain is broken — every service's identity is suspect. Requires full cert rotation. |
 | **Traefik** | Step-CA (ACME), Podman socket (Docker provider), OAuth2 Proxy (forwardAuth), CrowdSec (bouncer plugin) | **ALL** web-exposed services (every `traefik.enable=true` stack), CrowdSec (access logs) | `proxy-net`, `identity-net`, `mgmt-net`, `monitoring-net`, `security-net`, `wazuh-net`, `vulnerability-net`, `quay-net`, `pki-net`, `storage-net` | **CRITICAL.** Single point of ingress. Outage = total loss of web access to all services. Config change to `entryPoints` or `middlewares` affects every routed service. Adding/removing a network breaks routing to that network's services. Podman socket mount is a container-escape vector if Traefik is compromised. |
-| **Kanidm** | TLS certs (`certs/kanidm-chain.crt`, `certs/kanidm.key`) | OAuth2 Proxy (OIDC issuer), OAuth2 Proxy Admin, MinIO (OIDC), DefectDojo (OIDC), all SSO-protected services transitively | `identity-net`, `proxy-net` | **CRITICAL.** Identity provider for entire platform. Outage = no new SSO logins (existing sessions survive until cookie expiry). Password/config change breaks all OIDC clients. If compromised: attacker gains identity of any user, can forge OIDC tokens, and access all SSO-protected services. Recovery requires credential rotation for all OIDC clients. |
-| **OAuth2 Proxy** | Kanidm (OIDC), Traefik CA bundle (`ca-bundle.crt`), `OAUTH2_PROXY_CLIENT_SECRET`, `OAUTH2_PROXY_COOKIE_SECRET` | Traefik (forwardAuth middleware `oauth2-proxy@file`), Homepage, Moodle, n8n, SilverBullet — all `brain_users` + `brain_admins` access | `identity-net`, `proxy-net` | **HIGH.** Outage = users get 401/502 on all OAuth2-proxy-protected routes. Cookie secret rotation invalidates all active sessions. Client secret mismatch = authentication loop. CA bundle mismatch = OIDC validation failure. |
-| **OAuth2 Proxy Admin** | Same as OAuth2 Proxy | Traefik (forwardAuth middleware `oauth2-proxy-admin@file`), Grafana, Prometheus, Traefik Dashboard, Wazuh Dashboard, DefectDojo, Dockge — all `brain_admins`-only access | `identity-net`, `proxy-net` | **HIGH.** Outage = admins locked out of infrastructure dashboards. Same secret dependencies as OAuth2 Proxy. |
-| **MinIO** | Kanidm (OIDC, optional) | Loki (S3 backend for log chunks), future: Velero/Restic backups | `storage-net`, `proxy-net` | **HIGH.** Outage = Loki cannot write/read log chunks, ingester stalls, log pipeline backs up. Data loss if MinIO storage is corrupted. Credential change requires updating Loki's S3 config. Bucket deletion = permanent log data loss. |
-| **Loki** | MinIO (S3 storage), `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | Grafana (datasource), Vector (sink target) | `monitoring-net`, `storage-net` | **MEDIUM.** Outage = Grafana log queries fail, Vector buffers logs locally. No data loss if MinIO is healthy (Vector has disk buffer). Config change to `loki-config.yaml` schema requires migration. |
+| **Kanidm** | TLS certs (`certs/kanidm-chain.crt`, `certs/kanidm.key`) | OAuth2 Proxy (OIDC issuer), OAuth2 Proxy Admin, DefectDojo (OIDC), all SSO-protected services transitively | `identity-net`, `proxy-net` | **CRITICAL.** Identity provider for entire platform. Outage = no new SSO logins (existing sessions survive until cookie expiry). Password/config change breaks all OIDC clients. If compromised: attacker gains identity of any user, can forge OIDC tokens, and access all SSO-protected services. Recovery requires credential rotation for all OIDC clients. |
+| **OAuth2 Proxy** | Kanidm (OIDC), Traefik CA bundle (`ca-bundle.crt`), `OAUTH2_PROXY_CLIENT_SECRET`, `OAUTH2_PROXY_COOKIE_SECRET` | Traefik (forwardAuth middleware `oauth2-proxy@file`), Homepage, Moodle, n8n, SilverBullet — all `stig_users` + `stig_admins` access | `identity-net`, `proxy-net` | **HIGH.** Outage = users get 401/502 on all OAuth2-proxy-protected routes. Cookie secret rotation invalidates all active sessions. Client secret mismatch = authentication loop. CA bundle mismatch = OIDC validation failure. |
+| **OAuth2 Proxy Admin** | Same as OAuth2 Proxy | Traefik (forwardAuth middleware `oauth2-proxy-admin@file`), Grafana, Prometheus, Traefik Dashboard, Wazuh Dashboard, DefectDojo, Dockge — all `stig_admins`-only access | `identity-net`, `proxy-net` | **HIGH.** Outage = admins locked out of infrastructure dashboards. Same secret dependencies as OAuth2 Proxy. |
+| **SeaweedFS** | — (env-based S3 auth via `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`) | Loki (S3 backend for log chunks), `setup-brain.sh` (bucket init) | `storage-net`, `proxy-net` | **HIGH.** SeaweedFS is the deployed S3 implementation (replaced MinIO). S3 gateway on port 8333, master on 9333. Outage = Loki cannot write/read log chunks, ingester stalls, log pipeline backs up. Credential change requires updating Loki's S3 config and redeploying both. Volume deletion = permanent log data loss. |
+| **Loki** | SeaweedFS (S3 storage via `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` env vars) | Grafana (datasource), Vector (sink target) | `monitoring-net`, `storage-net` | **MEDIUM.** Outage = Grafana log queries fail, Vector buffers logs locally. No data loss if SeaweedFS is healthy (Vector has disk buffer). Config change to `loki-config.yaml` schema requires migration. |
 | **Vector** | Podman socket (container logs), host `/var/log` (journald), Falco (HTTP alerts on `:8686`) | Loki (log sink), Wazuh Manager (syslog sink on `:1514`), Prometheus (metrics exporter on `:9598`) | `monitoring-net`, `wazuh-net`, `security-net` | **MEDIUM.** Outage = logs stop flowing to Loki and Wazuh. Falco alerts are dropped. Security monitoring is blind. No permanent data loss (host logs persist). Podman socket mount is a read-only container-escape vector. |
-| **Prometheus** | Scrape targets: Vector `:9598`, Loki `:3100`, Traefik `:8082`, Grafana `:3000`, MinIO `:9000`, CrowdSec `:6060`, Wazuh Indexer `:9200` | Grafana (datasource) | `monitoring-net`, `proxy-net`, `security-net`, `wazuh-net`, `storage-net` | **MEDIUM.** Outage = no metrics collection, Grafana metrics dashboards empty. Historical data preserved in TSDB. Scrape target changes (port/host) require `prometheus.yml` update. |
+| **Prometheus** | Scrape targets: Vector `:9598`, Loki `:3100`, Traefik `:8082`, Grafana `:3000`, SeaweedFS `:9333`, CrowdSec `:6060`, Wazuh Indexer `:9200` | Grafana (datasource) | `monitoring-net`, `proxy-net`, `security-net`, `wazuh-net`, `storage-net` | **MEDIUM.** Outage = no metrics collection, Grafana metrics dashboards empty. Historical data preserved in TSDB. Scrape target changes (port/host) require `prometheus.yml` update. |
 | **Grafana** | Prometheus (datasource), Loki (datasource), Wazuh Indexer (OpenSearch datasource), OAuth2 Proxy Admin (auth headers) | End users (visualization) | `monitoring-net`, `wazuh-net`, `proxy-net` | **LOW.** Outage = no dashboards. All data preserved in upstream sources. Auth header config change requires matching OAuth2 Proxy header config. |
 | **Wazuh Indexer** | — (self-contained OpenSearch) | Wazuh Manager (Filebeat output), Wazuh Dashboard, Grafana (OpenSearch datasource), Prometheus (scrape target) | `wazuh-net` | **HIGH.** Outage = Wazuh Manager Filebeat queues alerts, Dashboard shows no data. Requires 2G+ memory — OOM kills cascade to Manager. Security plugin disabled (`plugins.security.disabled: true`) — network isolation is the only access control. |
 | **Wazuh Manager** | Wazuh Indexer (Filebeat output target) | Vector (syslog listener on `:1514`), Wazuh Dashboard, external agents on `:1514`/`:1515` | `wazuh-net` | **HIGH.** Outage = no SIEM analysis, incoming agent data queued or dropped. `seccomp:unconfined` + elevated caps make this the highest-privilege container. Compromise = arbitrary host log injection. Port `:55000` API exposure requires strong auth. |
@@ -320,7 +321,7 @@ graph LR
 | `OAUTH2_PROXY_CLIENT_SECRET` | `setup-brain.sh` (from Kanidm OIDC) | OAuth2 Proxy, OAuth2 Proxy Admin | Rotation requires: Kanidm client secret reset → `.env` update → OAuth2 Proxy redeploy |
 | `OAUTH2_PROXY_COOKIE_SECRET` | `setup-brain.sh` (random gen) | OAuth2 Proxy, OAuth2 Proxy Admin | Rotation invalidates ALL active user sessions |
 | `KANIDM_ADMIN_PASSWORD` | `setup-brain.sh` (recovery) | `create-kanidm-user.sh`, `setup-brain.sh` | Rotation requires re-running `setup-brain.sh identity` |
-| `MINIO_ROOT_PASSWORD` | User (`.env`) | MinIO, Loki (`loki-config.yaml`) | Rotation requires: `.env` update → MinIO redeploy → Loki config re-render → Loki redeploy |
+| `MINIO_ROOT_PASSWORD` | User (`.env`) | SeaweedFS (S3 auth), Loki (`loki-config.yaml`) | Rotation requires: `.env` update → SeaweedFS redeploy → Loki config re-render → Loki redeploy. Env var name retained for backwards compatibility (SeaweedFS uses same S3 credential interface). |
 | `CROWDSEC_BOUNCER_API_KEY` | `setup-brain.sh` (CrowdSec CLI) | Traefik (`middleware.yml`), CrowdSec (auto-register) | Rotation requires: CrowdSec bouncer re-register → `.env` update → Traefik config re-render → Traefik redeploy |
 | `QUAY_DB_PASSWORD` | User (`.env`) | Quay (`config.yaml`), Quay-DB | Rotation requires: DB password change → Quay config re-render → both redeploy |
 | `CLAIR_DB_PASSWORD` | User (`.env`) | Clair (`clair-config.yaml`), Clair-DB | Rotation requires: DB password change → Clair config re-render → both redeploy |
@@ -335,7 +336,7 @@ graph LR
 | Script | Depends On | Modifies | Side Effects |
 |---|---|---|---|
 | `deploy.sh` | `.env`, `certs/`, all `stacks/*/docker-compose.yml`, SSH key, remote node | Traefik dynamic configs (`gen_*.yml`), remote filesystem, running containers | Creates Podman networks, syncs configs via rsync, renders templates via `envsubst` |
-| `setup-brain.sh` | Running containers (Step-CA, Kanidm, Quay, MinIO, DefectDojo, CrowdSec), `.env`, `certs/ca.crt` | `.env` (writes secrets), `stacks/traefik/config/certs/` (CA bundle), Podman secrets, Kanidm OIDC clients | Redeploys OAuth2 Proxy and Traefik as side effects; creates Quay proxy cache orgs |
+| `setup-brain.sh` | Running containers (Step-CA, Kanidm, Quay, SeaweedFS, DefectDojo, CrowdSec), `.env`, `certs/ca.crt` | `.env` (writes secrets), `stacks/traefik/config/certs/` (CA bundle), Podman secrets, Kanidm OIDC clients | Redeploys OAuth2 Proxy and Traefik as side effects; creates Quay proxy cache orgs |
 | `create-kanidm-user.sh` | `.env` (`KANIDM_ADMIN_PASSWORD`), `certs/ca.crt`, running Kanidm, SSH Key | Kanidm user database | Creates person, adds to group, generates credential reset token |
 | `scripts/sast/sast-scan.sh` | Local tooling (Checkov, Gitleaks, Grype, Semgrep) | Scan results (stdout/files) | Read-only; no infrastructure side effects |
 | `scripts/analysis/validate_stacks.py` | All `stacks/*/docker-compose.yml` | Stdout (validation results) | Read-only; no infrastructure side effects |
@@ -382,4 +383,62 @@ setup-brain.sh → runs AFTER deploy.sh:
   6. wait_proxies      → Traefik health gate
   7. setup_soc         → DefectDojo admin capture
   8. setup_crowdsec    → Bouncer registration, Traefik redeploy
+```
+
+### C4 Architecture Model
+
+```mermaid
+C4Container
+    title Container diagram for My-HomeLab Homelab
+
+    System_Ext(github, "GitHub", "External Git Repository")
+
+    Person(user, "User", "Homelab User")
+    Person(admin, "Admin", "Homelab Admin")
+
+    System_Boundary(homelab, "My-HomeLab Homelab") {
+        Container(traefik, "Traefik", "Go", "Edge Proxy")
+        Container(stepca, "Step-CA", "Go", "Internal CA")
+        
+        Container(kanidm, "Kanidm", "Rust", "Identity Provider (OIDC)")
+        Container(oauth2_proxy, "OAuth2 Proxy", "Go", "SSO Gateway")
+        
+        Container(quay, "Quay", "Python", "OCI Registry")
+        Container(clair, "Clair", "Go", "Image Scanner")
+        Container(minio, "MinIO", "Go", "S3 Object Storage")
+        
+        Container(grafana, "Grafana", "Go", "Dashboards")
+        Container(prometheus, "Prometheus", "Go", "Metrics")
+        Container(loki, "Loki", "Go", "Log Aggregation")
+        Container(vector, "Vector", "Rust", "Log Pipeline")
+        
+        Container(wazuh, "Wazuh", "C/C++", "SIEM Engine")
+        Container(falco, "Falco", "C/eBPF", "Runtime Security")
+        Container(crowdsec, "CrowdSec", "Go", "Intrusion Prevention")
+        Container(defectdojo, "DefectDojo", "Python", "Vulnerability Management")
+        
+        Container(dockge, "Dockge", "Node.js", "Stack Manager")
+        Container(homepage, "Homepage", "Node.js", "Dashboard")
+        
+        Container(moodle, "Moodle", "PHP", "LMS")
+        Container(n8n, "n8n", "Node.js", "Workflow Automation")
+        Container(notes, "SilverBullet", "Deno", "Notes")
+        Container(gitea, "Gitea", "Go", "Git Mirror")
+    }
+
+    Rel(user, traefik, "Visits", "HTTPS")
+    Rel(admin, traefik, "Manages", "HTTPS")
+    
+    Rel(traefik, stepca, "Requests certs", "ACME")
+    Rel(traefik, oauth2_proxy, "Forwards Auth", "HTTP")
+    Rel(oauth2_proxy, kanidm, "Authenticates", "OIDC")
+    
+    Rel(vector, loki, "Ships logs", "HTTP")
+    Rel(vector, wazuh, "Ships alerts", "Syslog")
+    Rel(falco, vector, "Sends alerts", "HTTP")
+    
+    Rel(traefik, gitea, "Routes to", "HTTP")
+    Rel(traefik, grafana, "Routes to", "HTTP")
+    Rel(traefik, quay, "Routes to", "HTTP")
+    Rel(gitea, github, "Mirrors from/to", "Git/HTTPS")
 ```

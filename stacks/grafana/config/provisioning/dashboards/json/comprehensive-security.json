@@ -1,24 +1,26 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
-      "type": "datasource",
-      "pluginId": "prometheus"
-    },
-    {
-      "name": "DS_OPENSEARCH",
-      "label": "Wazuh Indexer",
-      "type": "datasource",
-      "pluginId": "opensearch"
-    }
-  ],
-  "__requires": [
-    { "type": "grafana", "id": "grafana", "version": "10.0.0" },
-    { "type": "datasource", "id": "prometheus", "version": "1.0.0" },
-    { "type": "datasource", "id": "opensearch", "version": "1.0.0" }
-  ],
-  "annotations": { "list": [ { "builtIn": 1, "datasource": { "type": "grafana", "uid": "-- Grafana --" }, "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "target": { "limit": 100, "matchAny": false, "tags": [], "type": "dashboard" }, "type": "dashboard" } ] },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      }
+    ]
+  },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -28,97 +30,241 @@
     {
       "title": "Wazuh Alerts by Level",
       "type": "timeseries",
-      "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
       "targets": [
         {
-          "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
           "query": "rule.level:>=8",
           "refId": "High",
-          "metrics": [{ "type": "count", "id": "1" }],
-          "bucketAggs": [{ "type": "date_histogram", "field": "@timestamp", "settings": { "interval": "auto" }, "id": "2" }]
+          "metrics": [
+            {
+              "type": "count",
+              "id": "1"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "type": "date_histogram",
+              "field": "@timestamp",
+              "settings": {
+                "interval": "auto"
+              },
+              "id": "2"
+            }
+          ]
         },
         {
-          "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
           "query": "rule.level:>=5 AND rule.level:<8",
           "refId": "Medium",
-          "metrics": [{ "type": "count", "id": "1" }],
-          "bucketAggs": [{ "type": "date_histogram", "field": "@timestamp", "settings": { "interval": "auto" }, "id": "2" }]
+          "metrics": [
+            {
+              "type": "count",
+              "id": "1"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "type": "date_histogram",
+              "field": "@timestamp",
+              "settings": {
+                "interval": "auto"
+              },
+              "id": "2"
+            }
+          ]
         }
       ]
     },
     {
-        "title": "Top 10 Wazuh Rules Triggered",
-        "type": "barchart",
-        "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
-        "targets": [
-          {
-            "query": "*",
-            "metrics": [{ "type": "count", "id": "1" }],
-            "bucketAggs": [{ "type": "terms", "field": "rule.description.keyword", "settings": { "size": "10", "order": "desc" }, "id": "2" }]
-          }
-        ]
+      "title": "Top 10 Wazuh Rules Triggered",
+      "type": "barchart",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "query": "*",
+          "metrics": [
+            {
+              "type": "count",
+              "id": "1"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "type": "terms",
+              "field": "rule.description.keyword",
+              "settings": {
+                "size": "10",
+                "order": "desc"
+              },
+              "id": "2"
+            }
+          ]
+        }
+      ]
     },
     {
-      "title": "CrowdSec Decisions",
+      "title": "CrowdSec Active Decisions",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [ { "expr": "sum(increase(crowdsec_lapi_decisions_total[5m])) by (reason, type)", "legendFormat": "{{type}} - {{reason}}" } ]
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(cs_lapi_decisions) by (origin, action) or sum(cs_lapi_decisions_total) by (origin, action) or vector(0)",
+          "legendFormat": "{{action}} by {{origin}}",
+          "refId": "A"
+        }
+      ]
     },
     {
-      "title": "Falco Alerts by Priority",
+      "title": "Falco Alerts (Log Volume)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [ { "expr": "sum(increase(vector_component_sent_events_total{component_name='falco_alerts'}[5m])) by (priority)", "legendFormat": "{{priority}}" } ]
-    },
-    {
-      "title": "WAF (BunkerWeb) Blocked Requests",
-      "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [ { "expr": "sum(increase(bunkerweb_http_requests_total{status_code='403'}[5m])) by (server)", "legendFormat": "Blocked on {{server}}" } ]
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({source=\"falco\"}[5m]))",
+          "legendFormat": "Falco Events",
+          "refId": "A"
+        }
+      ]
     },
     {
       "title": "Traefik Gateway Errors (4xx/5xx)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [ { "expr": "sum(rate(traefik_service_requests_total{code=~"[45].."}[5m])) by (service, code)", "legendFormat": "{{service}} - {{code}}" } ]
-    },
-    {
-        "title": "Latest High-Severity Wazuh Alerts",
-        "type": "table",
-        "datasource": { "type": "opensearch", "uid": "${DS_OPENSEARCH}" },
-        "targets": [
-            {
-                "query": "rule.level:>=10",
-                "bucketAggs": [],
-                "metrics": [{"id": "1", "type": "count"}]
-            }
-        ],
-        "fields": {
-            "Timestamp": "@timestamp",
-            "Rule": "rule.description",
-            "Agent": "agent.name",
-            "Source IP": "data.srcip"
-        }
-    },
-    {
-      "title": "Clair Vulnerabilities by Severity",
-      "type": "barchart",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
-          "expr": "sum(clair_vulnerabilities_total) by (severity)",
-          "legendFormat": "{{severity}}"
+          "expr": "sum(rate(traefik_service_requests_total{code=~\"[45]..\"}[5m])) by (service, code)",
+          "legendFormat": "{{service}} - {{code}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Vector Log Pipeline Throughput",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(vector_component_sent_events_total[5m])) by (component_name)",
+          "legendFormat": "{{component_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Latest High-Severity Wazuh Alerts",
+      "type": "table",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "wazuh-opensearch"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "wazuh-opensearch"
+          },
+          "query": "rule.level:>=10",
+          "bucketAggs": [],
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "refId": "A"
         }
       ]
     }
   ],
   "schemaVersion": 37,
   "style": "dark",
-  "tags": ["security", "soc", "overview", "comprehensive"],
-  "templating": { "list": [] },
-  "time": { "from": "now-6h", "to": "now" },
+  "tags": [
+    "security",
+    "soc",
+    "overview",
+    "comprehensive"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "",
-  "title": "Comprehensive Security Dashboard",
-  "version": 2
+  "title": "My-HomeLab: Comprehensive Security Dashboard",
+  "version": 3,
+  "uid": "homelab-security"
 }

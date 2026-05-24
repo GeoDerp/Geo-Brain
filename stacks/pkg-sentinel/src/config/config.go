@@ -1,6 +1,6 @@
 // Package config provides application-wide configuration management for
 // pkg-sentinel. All tunables are driven by environment variables, matching
-// the Geo-Brain convention of declarative, .env-driven deployments.
+// the My-HomeLab convention of declarative, .env-driven deployments.
 package config
 
 import (

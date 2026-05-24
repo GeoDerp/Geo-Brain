@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# clean-node.sh - Completely wipes the remote node of Geo-Brain data
+# clean-node.sh - Completely wipes the remote node of My-HomeLab data
 # =============================================================================
 set -euo pipefail
 
@@ -13,7 +13,7 @@ fi
 
 REMOTE_HOST="${REMOTE_HOST:-example.local}"
 REMOTE_USER="${REMOTE_USER:-admin}"
-DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
+DATA_DIR="${DATA_DIR:-/var/My-HomeLab}"
 DATA_DIR="${DATA_DIR/#\~/$HOME}"
 
 # Safety guard: refuse to operate if DATA_DIR is empty, root, or a system path
@@ -66,7 +66,7 @@ DATA_DIR="$1"
 
   echo ">>> Removing project files in $DATA_DIR..."
   sudo rm -rf "$DATA_DIR" || podman unshare rm -rf "$DATA_DIR" || true
-  rm -rf ~/Geo-Brain || true
+  rm -rf ~/My-HomeLab || true
 REMOTE_CLEAN
 
 echo "✅ Clean complete."

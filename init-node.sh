@@ -91,7 +91,7 @@ EXTRA_VARS=()
 [[ -n "$AUTO_YES" ]]    && EXTRA_VARS+=(-e "auto_yes=true")
 
 # --- Run Playbook ---
-echo ">>> Geo-Brain: Remote Node Initialization"
+echo ">>> My-HomeLab: Remote Node Initialization"
 echo "    Playbook: ${PLAYBOOK}"
 [[ -n "$REMOTE_HOST" ]] && echo "    Target:   ${REMOTE_USER:-$USER}@${REMOTE_HOST}:${SSH_PORT}"
 echo ""

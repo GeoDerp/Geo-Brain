@@ -1,6 +1,6 @@
 services:
   gitea:
-    image: docker.io/gitea/gitea:1.21.11
+    image: docker.io/gitea/gitea:1.26.2
     container_name: gitea
     restart: always
     security_opt:
@@ -26,23 +26,34 @@ services:
       - GITEA__server__SSH_DOMAIN=gitea.${DOMAIN}
       - GITEA__server__SSH_PORT=2222
       - GITEA__server__SSH_LISTEN_PORT=2222
-      - GITEA__service__DISABLE_REGISTRATION=true
+      - GITEA__service__DISABLE_REGISTRATION=false
       - GITEA__service__ALLOW_ONLY_EXTERNAL_REGISTRATION=true
       - GITEA__service__REQUIRE_SIGNIN_VIEW=true
       - GITEA__oauth2__ENABLED=true
       - GITEA__openid__ENABLE_OPENID_SIGNIN=false
-      - GITEA__service.oauth2__PROVIDER=openidConnect
-      - GITEA__service.oauth2__NAME=Kanidm
-      - GITEA__service.oauth2__CLIENT_ID=gitea
-      - GITEA__service.oauth2__CLIENT_SECRET=${GITEA_OIDC_SECRET}
-      - GITEA__service.oauth2__AUTO_DISCOVER_URL=https://kanidm.${DOMAIN}/oauth2/openid/gitea/.well-known/openid-configuration
+      - GITEA__oauth2_client__ENABLE_AUTO_REGISTRATION=true
+      - GITEA__oauth2_client__ACCOUNT_LINKING=auto
+      # Note: GITEA__service.oauth2__* would map to [service.oauth2] INI section which
+      # does not exist in Gitea. OIDC auth source is managed by setup_gitea() in setup-brain.sh
+      # via `gitea admin auth add-oauth --name kanidm` (callback: /user/oauth2/kanidm/callback).
+      - GITEA__service__ENABLE_REVERSE_PROXY_AUTHENTICATION=true
+      - GITEA__service__ENABLE_REVERSE_PROXY_AUTO_REGISTRATION=true
+      - GITEA__service__ENABLE_REVERSE_PROXY_EMAIL=true
+      - GITEA__service__REVERSE_PROXY_AUTH_USER=X-Auth-Request-User
+      - GITEA__service__REVERSE_PROXY_AUTH_EMAIL=X-Auth-Request-Email
+      - GITEA__security__REVERSE_PROXY_TRUSTED_PROXIES=${PODMAN_SUBNET:-10.89.0.0/16},127.0.0.1
+      - GITEA__auth__DISABLE_REGULAR_ORG_CREATION=true
+      - GITEA__service__ALLOW_ONLY_EXTERNAL_REGISTRATION=true
+      - GITEA__service__SHOW_REGISTRATION_BUTTON=false
+      - GITEA__security__LOGIN_REMEMBER_DAYS=7
+      - GITEA__actions__ENABLED=true
     networks:
       - proxy-net
       - vulnerability-net
     volumes:
       - ${DATA_DIR}/gitea/data:/data:Z,U
-      - ${STACKS_PATH}/../certs/ca.crt:/usr/local/share/ca-certificates/step-ca.crt:ro,z
-    entrypoint: ["/bin/sh", "-c", "cat /usr/local/share/ca-certificates/step-ca.crt >> /etc/ssl/certs/ca-certificates.crt && exec /bin/s6-svscan /etc/s6"]
+      - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/usr/local/share/ca-certificates/step-ca.crt:ro,z
+    entrypoint: ["/bin/sh", "-c", "cat /usr/local/share/ca-certificates/step-ca.crt >> /etc/ssl/certs/ca-certificates.crt && exec /usr/bin/entrypoint"]
     deploy:
       resources:
         limits:
@@ -55,6 +66,10 @@ services:
       retries: 3
     labels:
       - "kanidm.oidc.client_id=gitea"
+      - "kanidm.oidc.redirect_path=/user/oauth2/kanidm/callback"
+      # Gitea 1.21.x does not support PKCE (added in 1.22). Disable PKCE in Kanidm
+      # until Gitea is upgraded to >=1.22. Remove this label post-upgrade.
+      - "kanidm.oidc.no_pkce=true"
       - "security.stig.compliance=true"
       - "traefik.enable=true"
       - "traefik.http.routers.gitea.rule=Host(`gitea.${DOMAIN}`)"
@@ -63,6 +78,7 @@ services:
       - "traefik.http.routers.gitea.tls.certresolver=stepca"
       - "traefik.http.routers.gitea.middlewares=security-headers@file"
       - "traefik.http.services.gitea.loadbalancer.server.port=3000"
+      - "traefik.docker.network=proxy-net"
       - "homepage.group=Services"
       - "homepage.name=Gitea"
       - "homepage.icon=gitea.png"
@@ -70,8 +86,12 @@ services:
       - "homepage.href=https://gitea.${DOMAIN}"
 
   # Ephemeral sandboxed runner for standard CI/CD
-  # NOTE: Podman socket mount is a container-escape vector; future work should
-  # migrate to gVisor/Kata sandboxing per GEMINI.md mandate.
+  # GEMINI.md §CI/CD: kernel-level sandboxing ATTEMPTED via gVisor (runtime: runsc).
+  # KNOWN LIMITATION: gVisor (runsc) does not support containers attached to multiple
+  # Podman networks (multiple default routes). Since this runner requires both proxy-net
+  # AND vulnerability-net (for RamaLama access), runtime: runsc is omitted here.
+  # Security hardening retained: no-new-privileges, cap_drop ALL, minimal cap_add.
+  # vulnerability-net: added for direct RamaLama AI code review integration.
   gitea-runner:
     image: docker.io/gitea/act_runner:0.2.11
     container_name: gitea-runner
@@ -93,10 +113,11 @@ services:
       - GITEA_INSTANCE_URL=http://gitea:3000
       - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_TOKEN}
       - GITEA_RUNNER_NAME=ephemeral-sandbox-runner
-      - GITEA_RUNNER_LABELS=ubuntu-latest:docker://node:18-bullseye,ubuntu-22.04:docker://node:18-bullseye
+      - GITEA_RUNNER_LABELS=ubuntu-latest:docker://node:18-bullseye,ubuntu-22.04:docker://node:18-bullseye,host:host
       - DOCKER_HOST=unix:///var/run/docker.sock
     networks:
       - proxy-net
+      - vulnerability-net
     volumes:
       - ${DATA_DIR}/gitea-runner/data:/data:Z,U
       - ${PODMAN_SOCK}:/var/run/docker.sock
@@ -114,6 +135,10 @@ services:
       - "security.stig.compliance=true"
 
   # Routine runner specifically for scheduled scanning of all mirrors
+  # GEMINI.md §CI/CD: gVisor (runtime: runsc) omitted for the same reason as gitea-runner —
+  # gVisor does not support containers attached to multiple Podman networks.
+  # Security hardening retained: no-new-privileges, cap_drop ALL, minimal cap_add.
+  # vulnerability-net: added for direct RamaLama AI log condensation integration.
   gitea-routine-runner:
     image: docker.io/gitea/act_runner:0.2.11
     container_name: gitea-routine-runner
@@ -139,6 +164,7 @@ services:
       - DOCKER_HOST=unix:///var/run/docker.sock
     networks:
       - proxy-net
+      - vulnerability-net
     volumes:
       - ${DATA_DIR}/gitea-routine-runner/data:/data:Z,U
       - ${PODMAN_SOCK}:/var/run/docker.sock
@@ -160,3 +186,4 @@ networks:
     external: true
   vulnerability-net:
     external: true
+  # vulnerability-net is declared external; created by ansible/deploy-stacks.yml

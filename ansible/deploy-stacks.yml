@@ -1,15 +1,17 @@
 ---
 # ansible/deploy-stacks.yml
-# Ansible playbook to securely and declaratively deploy Geo-Brain stacks.
+# Ansible playbook to securely and declaratively deploy My-HomeLab stacks.
 # Matches GEMINI.md mandate: "Declarative: All deployments and configurations must be strictly declarative."
 # Replaces the imperative logic of deploy.sh.
 
-- name: Deploy Geo-Brain Stacks
+- name: Deploy My-HomeLab Stacks
   hosts: all
   become: no
   vars:
     repo_root: "{{ playbook_dir | dirname }}"
-    remote_base: "Geo-Brain"
+    remote_base: "{{ lookup('env', 'REMOTE_PROJECT_DIR') | default('My-HomeLab', true) }}"
+    # remote_base is read from $REMOTE_PROJECT_DIR env var (set in .env before running ansible-playbook).
+    # Default fallback: 'My-HomeLab' for backwards compatibility with existing deployments.
     # Base stacks in deployment order
     ordered_stacks:
       - step-ca
@@ -18,7 +20,7 @@
       - pangolin
       - kanidm
       - oauth2-proxy
-      - minio
+      - seaweedfs
       - loki
       - vector
       - prometheus
@@ -115,8 +117,8 @@
         set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
         command -v envsubst &>/dev/null || exit 0
         # Build a list of all exported variables for substitution
-        VARS=$(env | grep -E '^(DOMAIN|DATA_DIR|KANIDM|OAUTH2|MINIO|QUAY|CLAIR|DEFECTDOJO|WAZUH|DOJO|GITEA|MOODLE|N8N|CROWDSEC|PUID|PGID)' | cut -d= -f1 | sed 's/^/$/' | tr '\n' ',' | sed 's/,$//')
-        find "$STACKDIR" -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' \) 2>/dev/null | while IFS= read -r f; do
+        VARS=$(env | grep -E '^(DOMAIN|DATA_DIR|KANIDM|OAUTH2|MINIO|QUAY|CLAIR|DEFECTDOJO|WAZUH|DOJO|GITEA|MOODLE|N8N|CROWDSEC|PUID|PGID|DS_)' | cut -d= -f1 | sed 's/^/$/' | tr '\n' ',' | sed 's/,$//')
+        find "$STACKDIR" -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' -o -name '*.conf' -o -name '*.json' \) 2>/dev/null | while IFS= read -r f; do
             envsubst "$VARS" < "$f" > "$f.rendered" && mv "$f.rendered" "$f"
         done
       args:
@@ -127,7 +129,7 @@
     - name: Ensure compose volume directories exist on remote
       shell: |
         set -a; [ -f "$HOME/{{ remote_base }}/.env" ] && source "$HOME/{{ remote_base }}/.env"; set +a
-        DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
+        DATA_DIR="${DATA_DIR:-/var/My-HomeLab}"
         DATA_DIR="${DATA_DIR/#\~/$HOME}"
         COMPOSE_FILE="$HOME/{{ remote_base }}/stacks/{{ item }}/docker-compose.yml"
         
@@ -159,6 +161,14 @@
         group: no
       ignore_errors: true
 
+    - name: Synchronize scripts
+      synchronize:
+        src: "{{ repo_root }}/scripts/"
+        dest: "~/{{ remote_base }}/scripts/"
+        owner: no
+        group: no
+      ignore_errors: true
+
     - name: Ensure pre-requisite podman networks exist
       shell: |
         if [ "{{ item }}" = "secure-backbone" ] || [ "{{ item }}" = "quay-net" ] || [ "{{ item }}" = "moodle-db-net" ]; then
@@ -182,10 +192,16 @@
         - waf-net
         - secure-backbone
 
+    - name: Pre-flight delay for Quay
+      pause:
+        seconds: 30
+      when: "'quay' in target_stacks"
+
     - name: Deploy stacks using Podman Compose
       shell: |
         set -a; [ -f "$HOME/{{ remote_base }}/.env" ] && source "$HOME/{{ remote_base }}/.env"; set +a
-        podman-compose up -d --build --remove-orphans
+        podman-compose up -d --build --remove-orphans{% if force_recreate is defined and force_recreate %} --force-recreate{% endif %}
+
       args:
         chdir: "~/{{ remote_base }}/stacks/{{ item }}"
         executable: /bin/bash
@@ -213,7 +229,7 @@
       changed_when: false
 
     - name: Automate Kanidm OIDC Clients and generate secrets
-      script: "{{ repo_root }}/scripts/setup/setup-oidc.sh"
+      shell: "~/{{ remote_base }}/scripts/setup/setup-oidc.sh"
       register: oidc_automation
       changed_when: "'UPDATED_ENV' in oidc_automation.stdout"
       when: kanidm_check.rc == 0
@@ -225,10 +241,10 @@
         flat: yes
       when: oidc_automation.changed
 
-    - name: Redeploy stacks to pick up new OIDC secrets
+    - name: Redeploy oauth2-proxy stacks to pick up new OIDC secrets
       shell: |
         set -a; [ -f "$HOME/{{ remote_base }}/.env" ] && source "$HOME/{{ remote_base }}/.env"; set +a
-        podman-compose up -d --build --remove-orphans
+        podman-compose up -d --build --remove-orphans --force-recreate
       args:
         chdir: "~/{{ remote_base }}/stacks/{{ item }}"
         executable: /bin/bash
@@ -236,7 +252,7 @@
         CONTAINER_UID: "{{ ansible_facts.user_uid }}"
         PODMAN_SOCK: "/run/user/{{ ansible_facts.user_uid }}/podman/podman.sock"
         STACKS_PATH: "{{ ansible_env.HOME }}/{{ remote_base }}/stacks"
-      loop: "{{ target_stacks }}"
+      loop: "{{ target_stacks | intersect(['oauth2-proxy']) }}"
       when: oidc_automation.changed
       register: compose_redeploy
       changed_when: "'Created' in compose_redeploy.stdout or 'Recreated' in compose_redeploy.stdout"

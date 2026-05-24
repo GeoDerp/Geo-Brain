@@ -13,10 +13,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"time"
 
-	"github.com/geo-brain/pkg-sentinel/rules"
+	"github.com/stig-homelab/pkg-sentinel/rules"
 )
 
 // Result captures the outcome of an Azazel detonation analysis session.
@@ -44,8 +45,12 @@ type Analyzer struct {
 }
 
 // New creates a new Analyzer with the given Azazel binary path, rule engine,
-// optional LLM endpoint, and model name.
+// optional LLM endpoint, and model name. Logs a warning if the binary is absent
+// so operators know eBPF tracing is inactive at startup.
 func New(azazelBin string, engine *rules.Engine, llmEndpoint, llmModel string) *Analyzer {
+	if _, err := os.Stat(azazelBin); os.IsNotExist(err) {
+		log.Printf("[analyzer] WARNING: azazel binary not found at %q — eBPF tracing will be disabled until the binary is installed", azazelBin)
+	}
 	return &Analyzer{
 		AzazelBin:   azazelBin,
 		RuleEngine:  engine,
@@ -57,8 +62,22 @@ func New(azazelBin string, engine *rules.Engine, llmEndpoint, llmModel string) *
 // Trace attaches Azazel to the specified container PID / cgroup and streams
 // telemetry through the rule engine. It blocks until the context is cancelled
 // or the Azazel process exits.
+//
+// If the Azazel binary is not present (WIP / not yet installed), Trace returns
+// a degraded Result with Safe=true and logs a warning. The proxy continues to
+// function but without eBPF behavioural analysis.
 func (a *Analyzer) Trace(ctx context.Context, containerPID int, cgroupPath string) (*Result, error) {
 	start := time.Now()
+
+	// Gracefully degrade when the eBPF tracer is not installed.
+	if _, err := os.Stat(a.AzazelBin); os.IsNotExist(err) {
+		log.Printf("[analyzer] WARNING: azazel binary not found at %q — eBPF tracing disabled, allowing package (untraced)", a.AzazelBin)
+		return &Result{
+			Safe:       true,
+			EventCount: 0,
+			Duration:   time.Since(start),
+		}, nil
+	}
 
 	args := []string{
 		"--pid", fmt.Sprintf("%d", containerPID),

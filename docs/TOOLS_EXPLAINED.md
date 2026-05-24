@@ -1,6 +1,6 @@
-# GEO-Brain Tools: A Deep Dive
+# My-HomeLab Tools: A Deep Dive
 
-This document provides an educational overview of all tools and technologies used in the GEO-Brain SSOF homelab infrastructure. It explains what each tool does, why it was selected, and how it fits into the overall security-focused architecture defined in [GEMINI.md](../GEMINI.md).
+This document provides an educational overview of all tools and technologies used in the My-HomeLab SSOF homelab infrastructure. It explains what each tool does, why it was selected, and how it fits into the overall security-focused architecture defined in [GEMINI.md](../GEMINI.md).
 
 ---
 
@@ -46,7 +46,7 @@ This document provides an educational overview of all tools and technologies use
 
 ## Architecture Diagram
 
-The following diagram illustrates how all components interact within the GEO-Brain homelab infrastructure. Edge labels describe what data flows between components.
+The following diagram illustrates how all components interact within the My-HomeLab homelab infrastructure. Edge labels describe what data flows between components.
 
 ```mermaid
 graph TD
@@ -287,7 +287,7 @@ labels:
 - **Real-time Logs:** View container logs directly from the UI.
 - **YAML Editing:** Built-in editor for compose files with syntax highlighting.
 
-**Integration with GEO-Brain:**
+**Integration with My-HomeLab:**
 - All stacks in this repository are managed through Dockge
 - Changes are synced from Git to ensure version control
 - Provides visual feedback on stack health and status
@@ -557,7 +557,7 @@ Client → Traefik (TLS) → Caddy Sidecar (mTLS) → 127.0.0.1:app_port → App
 
 **Why it's used:**
 - **Centralized IAM:** Kanidm provides Single Sign-On (SSO) via OpenID Connect (OIDC) for all supported web interfaces (Quay, Wazuh, DefectDojo, MinIO, etc.).
-- **Role-Based Access Control (RBAC):** We define groups (`brain_admins`, `brain_users`) in Kanidm. When an OIDC token is minted for an application like Quay or DefectDojo, Kanidm passes these group memberships as "scopes" or "roles" within the JWT claims. The downstream application maps these claims to its internal admin tags. This means you grant administrative access centrally in Kanidm, rather than per-stack.
+- **Role-Based Access Control (RBAC):** We define groups (`stig_admins`, `stig_users`) in Kanidm. When an OIDC token is minted for an application like Quay or DefectDojo, Kanidm passes these group memberships as "scopes" or "roles" within the JWT claims. The downstream application maps these claims to its internal admin tags. This means you grant administrative access centrally in Kanidm, rather than per-stack.
 - **OIDC Clients:** Applications that support OIDC natively (Quay, Wazuh, DefectDojo, MinIO, etc.) authenticate directly against Kanidm. For applications that don't support OIDC, OAuth2 Proxy acts as a forward-auth middleware, redirecting unauthenticated users to Kanidm's login page.
 
 ### OAuth2 Proxy
@@ -645,4 +645,4 @@ Client → Traefik (TLS) → Caddy Sidecar (mTLS) → 127.0.0.1:app_port → App
 
 ---
 
-*This document is part of the GEO-Brain SSOF (Single Source of Truth) repository. For architectural mandates and system requirements, see [GEMINI.md](../GEMINI.md).*
+*This document is part of the My-HomeLab SSOF (Single Source of Truth) repository. For architectural mandates and system requirements, see [GEMINI.md](../GEMINI.md).*

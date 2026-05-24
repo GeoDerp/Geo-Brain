@@ -20,7 +20,7 @@ if ! command -v bw >/dev/null 2>&1; then
     exit 1
 fi
 
-DOMAIN=${DOMAIN:-geo-brain.local}
+DOMAIN=${DOMAIN:-stig-homelab.local}
 BW_URL=${BW_URL:-"https://vaultwarden.${DOMAIN}"}
 
 if [ -z "${BW_CLIENTID:-}" ] || [ -z "${BW_CLIENTSECRET:-}" ]; then

@@ -30,10 +30,49 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
 fi
 
 # Expand tilde in DATA_DIR and SSH_KEY if they exist
-DATA_DIR="${DATA_DIR:-/var/Geo-Brain}"
+DATA_DIR="${DATA_DIR:-/var/My-HomeLab}"
 DATA_DIR="${DATA_DIR/#\~/$HOME}"
 SSH_KEY="${SSH_KEY:-~/.ssh/id_ed25519}"
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
+
+# Auto-detect Podman default network subnet (for services that need to trust the proxy IP)
+if [[ -z "${PODMAN_SUBNET:-}" ]]; then
+    _detected=$(podman network inspect podman --format '{{range .Subnets}}{{.Subnet}}{{end}}' 2>/dev/null | head -n1 || true)
+    if [[ -n "$_detected" ]]; then
+        export PODMAN_SUBNET="$_detected"
+    fi
+fi
+
+# Validate that critical environment variables are set before deploying
+validate_env() {
+    local errors=0
+    local REQUIRED_VARS=(DOMAIN ADMIN_PASSWORD MINIO_ROOT_PASSWORD QUAY_DB_PASSWORD CLAIR_DB_PASSWORD DEFECTDOJO_DB_PASSWORD)
+    for var in "${REQUIRED_VARS[@]}"; do
+        if [[ -z "${!var:-}" ]]; then
+            echo "[ERROR] Required variable \$$var is not set. Add it to .env"
+            (( errors++ )) || true
+        fi
+    done
+    # Warn on known-weak defaults
+    local WEAK_DEFAULTS=(moodle123! changeme123! minioadmin password admin)
+    for var in MOODLE_DB_PASSWORD MOODLE_ADMIN_PASSWORD MINIO_ROOT_PASSWORD ADMIN_PASSWORD; do
+        val="${!var:-}"
+        for weak in "${WEAK_DEFAULTS[@]}"; do
+            if [[ "$val" == "$weak" ]]; then
+                echo "[WARNING] \$$var is set to a known-weak default value: '$val'"
+            fi
+        done
+    done
+    if (( errors > 0 )); then
+        echo ""
+        echo "Copy .env.example to .env and fill in the required values."
+        exit 1
+    fi
+}
+
+if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
+    validate_env
+fi
 
 if [[ "$COMMAND" == "up" ]]; then
     if [[ ! -f "$REPO_ROOT/certs/ca.crt" ]] || [[ ! -f "$REPO_ROOT/certs/wildcard.crt" ]]; then
@@ -78,7 +117,7 @@ if [[ -n "${REMOTE_HOST:-}" ]]; then
     ensure_ssh_agent
     PODMAN_CONNECTION="${PODMAN_CONNECTION:-homelab}"
     SSH_CMD=(ssh -o StrictHostKeyChecking=accept-new -i "${SSH_KEY}" -p "${SSH_PORT:-22}" "${REMOTE_USER}@${REMOTE_HOST}")
-    REMOTE_BASE="${REMOTE_PROJECT_DIR:-Geo-Brain}"
+    REMOTE_BASE="${REMOTE_PROJECT_DIR:-My-HomeLab}"
 else
     DEPLOY_MODE="local"
     LOCAL_UID=$(id -u)
@@ -95,9 +134,30 @@ if [ -z "$STACK_NAME" ]; then
     echo "  all   - Deploy all stacks (base + user, excludes cicd)"
     echo "  base  - Deploy all base infrastructure stacks"
     echo "  user  - Deploy all user application stacks"
-    echo "  cicd  - Deploy CI/CD pipeline (gitea + defectdojo + ramalama)"
+    echo "  cicd  - Deploy CI/CD pipeline (gitea + defectdojo [+ ramalama if GPU found])"
     exit 1
 fi
+
+# --- GPU Detection ---
+# Probes the target host for discrete GPU devices.
+# Returns: "nvidia", "amd", or "none"
+detect_remote_gpu() {
+    local result="none"
+    if [[ "$DEPLOY_MODE" == "remote" ]]; then
+        if "${SSH_CMD[@]}" 'ls /dev/nvidia0 2>/dev/null | grep -q nvidia0' 2>/dev/null; then
+            result="nvidia"
+        elif "${SSH_CMD[@]}" 'ls /dev/dri/renderD128 2>/dev/null | grep -q renderD' 2>/dev/null; then
+            result="amd"
+        fi
+    else
+        if ls /dev/nvidia0 2>/dev/null | grep -q nvidia0; then
+            result="nvidia"
+        elif ls /dev/dri/renderD128 2>/dev/null | grep -q renderD; then
+            result="amd"
+        fi
+    fi
+    echo "$result"
+}
 
 # --- Stack Discovery ---
 
@@ -109,7 +169,7 @@ get_base_stacks() {
         "pangolin"
         "kanidm"
         "oauth2-proxy"
-        "minio"
+        "seaweedfs"
         "loki"
         "vector"
         "prometheus"
@@ -176,7 +236,7 @@ get_all_stacks() {
     # Also include cicd stacks for full coverage
     for dir in "$REPO_ROOT"/stacks/*/; do
         local name=$(basename "$dir")
-        if [[ "$name" == "gitea" || "$name" == "defectdojo" || "$name" == "ramalama" || "$name" == "prometheus" ]]; then
+        if [[ "$name" == "gitea" || "$name" == "defectdojo" || "$name" == "prometheus" ]]; then
              echo "$name"
         fi
     done | sort -u
@@ -297,10 +357,16 @@ ensure_networks() {
     echo "    Creating missing external networks for $stack_label:"
     for net in $missing; do
         echo "      + $net"
+        # Internal air-gapped networks must be created with --internal (no NAT gateway).
+        # Matches ansible/deploy-stacks.yml which uses the same logic.
+        local net_flags="--label security.stig.compliance=true"
+        if [[ "$net" == "secure-backbone" || "$net" == "quay-net" || "$net" == "moodle-db-net" ]]; then
+            net_flags="$net_flags --internal"
+        fi
         if [[ "$DEPLOY_MODE" == "remote" ]]; then
-            "${SSH_CMD[@]}" "podman network create --label security.stig.compliance=true '$net'" || true
+            "${SSH_CMD[@]}" "podman network create $net_flags '$net'" || true
         else
-            podman network create --label "security.stig.compliance=true" "$net" || true
+            podman network create $net_flags "$net" || true
         fi
     done
 }
@@ -372,11 +438,12 @@ generate_traefik_config() {
     # Use the service name as the subdomain if not explicitly overridden by labels
     local rule="Host(\`${service_name}.${DOMAIN}\`)"
     if grep -q "traefik.http.routers.*.rule" "$compose_file"; then
-        local raw_rule=$(grep "traefik.http.routers.*.rule" "$compose_file" | sed -E 's/.*Host\(`([^`]+)`\).*/\1/' | head -n 1)
-        rule="Host(\`$(echo "$raw_rule" | sed "s/\${DOMAIN}/${DOMAIN}/g" | sed "s/\$DOMAIN/${DOMAIN}/g" | sed "s/{{DOMAIN}}/${DOMAIN}/g")\`)"
+        local raw_rule=$(grep "traefik.http.routers.*.rule" "$compose_file" | sed -E 's/.*rule="?([^"]+)"?/\1/' | head -n 1)
+        rule=$(echo "$raw_rule" | sed "s/\${DOMAIN}/${DOMAIN}/g" | sed "s/\$DOMAIN/${DOMAIN}/g" | sed "s/{{DOMAIN}}/${DOMAIN}/g" | sed 's/\$\$/$/g' | sed 's/\\\\/\\/g')
     fi
     
     local port=$(grep "traefik.http.services.*.port" "$compose_file" | sed -E 's/.*port[=:]"?([0-9]+)"?.*/\1/' | head -n 1)
+    local priority=$(grep "traefik.http.routers.*.priority" "$compose_file" | sed -E 's/.*priority[=:]"?([0-9]+)"?.*/\1/' | head -n 1)
     local scheme=$(grep "traefik.http.services.*.scheme" "$compose_file" | sed -E 's/.*scheme[=:]"?([https]+)"?.*/\1/' | head -n 1)
     local resolver=$(grep "traefik.http.routers.*.certresolver" "$compose_file" | sed -E 's/.*certresolver[=:]"?([^"]+)"?.*/\1/' | head -n 1)
     local middlewares=$(grep "traefik.http.routers.*.middlewares" "$compose_file" | sed -E 's/.*middlewares[=:]"?([^"]+)"?.*/\1/' | head -n 1)
@@ -429,24 +496,22 @@ generate_traefik_config() {
 http:
   routers:
     ${stack_name/\//_}_${service_name}:
-      rule: "$rule"
+      rule: '$rule'
+$(if [[ -n "$priority" ]]; then echo "      priority: $priority"; fi)
       entryPoints:
         - websecure
       service: ${custom_service:-${stack_name/\//_}_${service_name}}
-      tls:
-        certResolver: $resolver
+      tls: {}
 EOF
+    
+    if [[ -n "$resolver" && "$resolver" != "none" ]]; then
+        sed -i 's/tls: {}/tls:\n        certResolver: '"$resolver"'/g' "$output_file"
+    fi
 
     if [[ -n "$middlewares" ]]; then
         echo "      middlewares:" >> "$output_file"
         IFS=',' read -ra ADDR <<< "$middlewares"
         for i in "${ADDR[@]}"; do
-            # Automatically add error handlers BEFORE OAuth2 Proxy to catch its 401s
-            if [[ "$i" == "oauth2-proxy@file" ]]; then
-                 echo "        - auth-error@file" >> "$output_file"
-            elif [[ "$i" == "oauth2-proxy-admin@file" ]]; then
-                 echo "        - auth-admin-error@file" >> "$output_file"
-            fi
             echo "        - $i" >> "$output_file"
         done
     fi
@@ -503,10 +568,10 @@ deploy_single() {
             check_security "$REPO_ROOT/$stack_dir" "$stack_name" || return 1
             if [[ "$DEPLOY_MODE" == "remote" ]]; then
                 echo ">>> Delegating remote redeployment to Ansible Playbook for $stack_name..."
-                ansible-playbook -i "$REMOTE_HOST," -u "$REMOTE_USER" --private-key "$SSH_KEY" "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$stack_name"
+                ansible-playbook -i "$REMOTE_HOST," -u "$REMOTE_USER" --private-key "$SSH_KEY" "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$stack_name" -e "force_recreate=true"
             else
                 echo ">>> Delegating local redeployment to Ansible Playbook for $stack_name..."
-                ansible-playbook -i "localhost," -c local "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$stack_name"
+                ansible-playbook -i "localhost," -c local "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$stack_name" -e "force_recreate=true"
             fi
             ;;
         down)    run_compose "$stack_dir" "down" ;;
@@ -543,9 +608,12 @@ deploy_batch() {
     echo ">>> Batch $COMMAND for ${#stacks[@]} stack(s)..."
     echo ""
 
-    # Always cleanup old generated configs at the start of a run (if up/redeploy)
+    # Cleanup only the generated configs for the stacks in this batch.
+    # Cleaning ALL gen_ files would break routing for stacks not in the batch.
     if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
-        cleanup_traefik_configs
+        for stack in "${stacks[@]}"; do
+            cleanup_traefik_configs "$stack"
+        done
     fi
 
     # --- QUAY-FIRST BOOTSTRAPPING (Handled by Ansible) ---
@@ -553,12 +621,14 @@ deploy_batch() {
     if [[ "$COMMAND" == "up" || "$COMMAND" == "redeploy" ]]; then
         local limit_stacks
         limit_stacks=$(IFS=,; echo "${stacks[*]}")
+        local force_flag=""
+        [[ "$COMMAND" == "redeploy" ]] && force_flag="-e force_recreate=true"
         if [[ "$DEPLOY_MODE" == "remote" ]]; then
             echo ">>> Delegating remote batch deployment to Ansible Playbook..."
-            ansible-playbook -i "$REMOTE_HOST," -u "$REMOTE_USER" --private-key "$SSH_KEY" "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$limit_stacks"
+            ansible-playbook -i "$REMOTE_HOST," -u "$REMOTE_USER" --private-key "$SSH_KEY" "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$limit_stacks" $force_flag
         else
             echo ">>> Delegating local batch deployment to Ansible Playbook..."
-            ansible-playbook -i "localhost," -c local "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$limit_stacks"
+            ansible-playbook -i "localhost," -c local "$REPO_ROOT/ansible/deploy-stacks.yml" -e "limit_stacks=$limit_stacks" $force_flag
         fi
         if [ $? -ne 0 ]; then
             echo ">>> Batch $COMMAND failed during Ansible execution."
@@ -601,13 +671,23 @@ case $STACK_NAME in
         deploy_batch "${stacks[@]}"
         ;;
     cicd)
-        # CI/CD pipeline: Gitea (code hosting) + DefectDojo (vuln mgmt) + RamaLama (AI analysis)
-        # These three stacks share vulnerability-net and are deployed as a unit.
-        deploy_batch "defectdojo" "gitea" "ramalama"
+        # CI/CD pipeline: Gitea (code hosting) + DefectDojo (vuln mgmt)
+        # RamaLama (AI log triage) enabled only when a GPU is detected on the target host.
+        GPU_TYPE=$(detect_remote_gpu)
+        if [[ "$GPU_TYPE" != "none" ]]; then
+            echo ">>> GPU detected ($GPU_TYPE) — enabling RamaLama in CI/CD batch."
+            export GPU_TYPE
+            deploy_batch "defectdojo" "gitea" "ramalama"
+        else
+            echo ">>> No GPU detected — RamaLama requires a GPU and will be skipped."
+            echo "    To enable: add a GPU to the host and re-run './deploy.sh cicd up'."
+            deploy_batch "defectdojo" "gitea"
+        fi
         ;;
     dev)
-        # Developer tools: pkg-sentinel (Supply-Chain Security Proxy) + RamaLama (AI analysis)
-        deploy_batch "pkg-sentinel" "ramalama"
+        # Developer tools: pkg-sentinel (Supply-Chain Security Proxy)
+        # ramalama disabled — see TODO in README.md
+        deploy_batch "pkg-sentinel"
         ;;
     *)
         # Always cleanup old generated configs at the start of a run (if up/redeploy)

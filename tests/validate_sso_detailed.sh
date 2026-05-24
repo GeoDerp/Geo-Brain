@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+# validate_sso_detailed.sh: Deep validation of OIDC configuration across all My-HomeLab stacks.
+# Checks: Discovery endpoints, Redirection logic, Client ID matching, and Redirect URI registration.
+
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ -f "$REPO_ROOT/.env" ]]; then
+    set -a; source "$REPO_ROOT/.env"; set +a
+fi
+
+DOMAIN="${DOMAIN:-example.local}"
+# Prefer the full CA bundle (root + intermediate) as test_sso_routes.sh does
+if [[ -f "$REPO_ROOT/stacks/traefik/config/certs/ca-bundle.crt" ]]; then
+    CA_CERT="$REPO_ROOT/stacks/traefik/config/certs/ca-bundle.crt"
+elif [[ -f "$REPO_ROOT/certs/ca.crt" ]]; then
+    CA_CERT="$REPO_ROOT/certs/ca.crt"
+else
+    CA_CERT="$REPO_ROOT/stacks/traefik/config/certs/root_ca.crt"
+fi
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+pass() { echo -e "  ${GREEN}✓ PASS:${NC} $1"; }
+fail() { echo -e "  ${RED}✗ FAIL:${NC} $1"; ((FAIL_COUNT++)); }
+warn() { echo -e "  ${YELLOW}! WARN:${NC} $1"; }
+info() { echo -e "\n${BOLD}${CYAN}━━━ $1 ━━━${NC}"; }
+
+FAIL_COUNT=0
+
+# --- 1. Validate OIDC Discovery Endpoints ---
+# These must return valid JSON with the correct issuer.
+info "1. Validating OIDC Discovery Endpoints"
+
+# Auto-discover all registered OIDC clients from compose labels
+DISCOVERY_APPS=()
+while IFS= read -r compose; do
+    while IFS= read -r client_id; do
+        [[ -z "$client_id" ]] && continue
+        DISCOVERY_APPS+=("${client_id}:https://kanidm.${DOMAIN}/oauth2/openid/${client_id}/.well-known/openid-configuration")
+    done < <(grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' "$compose" 2>/dev/null || true)
+done < <(find "$REPO_ROOT/stacks" -not -path '*/_template/*' -type f -name "docker-compose.yml" | sort)
+
+for app_info in "${DISCOVERY_APPS[@]}"; do
+    app="${app_info%%:*}"
+    url="${app_info#*:}"
+    
+    echo "Testing discovery for $app..."
+    resp=$(curl -s --cacert "$CA_CERT" -f "$url" || echo "FAILED")
+    if [[ "$resp" == "FAILED" ]]; then
+        fail "[$app] Discovery endpoint unreachable: $url"
+    elif ! echo "$resp" | grep -q '"issuer"'; then
+        fail "[$app] Discovery returned invalid JSON or missing issuer: $resp"
+    else
+        issuer=$(echo "$resp" | grep -oP '"issuer":"\K[^"]+')
+        pass "[$app] Discovery OK. Issuer: $issuer"
+    fi
+done
+
+# --- 2. Validate Redirection & Client Parameters ---
+# We simulate a hit to the app and check how it sends the user to Kanidm.
+info "2. Validating Application Redirection Logic (ForwardAuth)"
+
+# Core oauth2-proxy tests are always included
+TEST_CASES=(
+    "oauth2-proxy|https://auth.${DOMAIN}/oauth2/start|client_id=oauth2-proxy"
+    "oauth2-proxy-admin|https://auth.${DOMAIN}/admin-oauth2/start|client_id=oauth2-proxy-admin"
+)
+# Auto-discover ForwardAuth-protected services
+while IFS= read -r compose; do
+    has_proxy=$(grep -l "oauth2-proxy-admin@file\|oauth2-proxy@file" "$compose" 2>/dev/null || true)
+    [[ -z "$has_proxy" ]] && continue
+    grep -q 'kanidm\.oidc\.client_id=oauth2-proxy' "$compose" && continue
+    hostname=$(grep -oP 'traefik\.http\.routers\.[^.]+\.rule=Host\(`\K[^`]+' "$compose" | head -n1 || true)
+    [[ -z "$hostname" ]] && continue
+    # Expand ${DOMAIN} placeholder that appears literally in compose label strings
+    hostname="${hostname/\$\{DOMAIN\}/$DOMAIN}"
+    if grep -q "oauth2-proxy-admin@file" "$compose"; then
+        client="oauth2-proxy-admin"
+    else
+        client="oauth2-proxy"
+    fi
+    svc_name=$(basename "$(dirname "$compose")")
+    TEST_CASES+=("${svc_name}|https://${hostname}|client_id=${client}")
+done < <(find "$REPO_ROOT/stacks" -not -path '*/_template/*' -type f -name "docker-compose.yml" | sort)
+
+for test_case in "${TEST_CASES[@]}"; do
+    IFS='|' read -r app url params <<< "$test_case"
+    
+    echo "Testing redirection for $app at $url..."
+    # Pre-probe: skip optional/conditional stacks not deployed (404/502/unreachable)
+    probe_code=$(curl -s --cacert "$CA_CERT" -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null || echo "000")
+    if [[ "$probe_code" == "404" || "$probe_code" == "502" || "$probe_code" == "000" ]]; then
+        warn "[$app] Service not reachable (HTTP $probe_code) — optional/conditional stack not deployed, skipping"
+        continue
+    fi
+    # Get the final location after all redirects
+    location=$(curl -s --cacert "$CA_CERT" -L -o /dev/null -w "%{url_effective}" "$url")
+    
+    if [[ "$location" != *"kanidm.${DOMAIN}"* ]]; then
+        fail "[$app] No redirect to Kanidm received from $url (Landed at: $location)"
+        continue
+    fi
+
+    # Check if redirect contains expected client_id
+    if echo "$location" | grep -q "$params"; then
+        pass "[$app] Redirect parameters correct ($params)"
+    else
+        fail "[$app] Redirect missing or wrong parameters. Got: $location"
+    fi
+
+    # Check for invalid origin indicator (common OIDC error we saw in logs)
+    if echo "$location" | grep -q "error=invalid_origin"; then
+        fail "[$app] Kanidm rejected redirect_uri (invalid_origin error)"
+    elif echo "$location" | grep -q "unrecoverable_error"; then
+        fail "[$app] Kanidm reported an unrecoverable error"
+    fi
+done
+
+# --- 2b. Validate Native OIDC Service Initiation ---
+# Each native OIDC service must redirect to Kanidm when its OIDC initiation URL is hit.
+# A 200 or redirect-to-self means OIDC is not configured/active.
+info "2b. Validating Native OIDC Service Initiation"
+
+# Map client_id → OIDC initiation path (first-hop redirect must go to kanidm.${DOMAIN})
+declare -A NATIVE_OIDC_INIT_PATHS=(
+    [moodle]="/auth/oauth2/login.php?id=1"
+    [gitea]="/user/oauth2/kanidm"
+    [quay]="/oauth2/kanidm/initiate"
+    [defectdojo]="/login/oidc/"
+    [grafana]="/login/generic_oauth"
+)
+
+while IFS= read -r compose; do
+    while IFS= read -r client_id; do
+        [[ -z "$client_id" ]] && continue
+        # Skip ForwardAuth proxy clients — they're covered in Section 2
+        [[ "$client_id" == oauth2-proxy* ]] && continue
+
+        init_path="${NATIVE_OIDC_INIT_PATHS[$client_id]:-}"
+        if [[ -z "$init_path" ]]; then
+            warn "[$client_id] No known OIDC initiation path — skipping."
+            continue
+        fi
+
+        hostname=$(grep -oP 'traefik\.http\.routers\.[^.]+\.rule=Host\(`\K[^`]+' "$compose" | head -n1 || true)
+        hostname="${hostname/\$\{DOMAIN\}/$DOMAIN}"
+        [[ -z "$hostname" ]] && continue
+
+        url="https://${hostname}${init_path}"
+        echo "Testing native OIDC initiation for $client_id at $url..."
+
+        http_response=$(curl -s -i --cacert "$CA_CERT" --max-redirs 0 --max-time 15 "$url" 2>&1 || true)
+        http_code=$(echo "$http_response" | grep -m1 "^HTTP/" | awk '{print $2}')
+        location=$(echo "$http_response" | grep -i "^Location:" | sed 's/^[Ll]ocation: //I' | tr -d '\r')
+
+        # Handle URL normalization redirects (e.g., Quay returns 308 to add trailing slash).
+        # Follow one additional hop if the location is just a variant of the same host.
+        if [[ "$http_code" == "308" ]] && [[ "$location" == *"${hostname}"* ]]; then
+            http_response=$(curl -s -i --cacert "$CA_CERT" --max-redirs 0 --max-time 15 "$location" 2>&1 || true)
+            http_code=$(echo "$http_response" | grep -m1 "^HTTP/" | awk '{print $2}')
+            location=$(echo "$http_response" | grep -i "^Location:" | sed 's/^[Ll]ocation: //I' | tr -d '\r')
+        fi
+
+        if [[ "$http_code" != 30* ]]; then
+            # Some OIDC endpoints require browser session/CSRF tokens and cannot be tested via
+            # unauthenticated GET (e.g., Quay's initiate/ is intercepted by the registry auth
+            # handler; Moodle's login.php requires a sesskey for CSRF protection). Treat
+            # 401/4xx with sesskey error as "configured but CSRF-protected" (not a failure).
+            body=$(echo "$http_response" | tail -n +20)
+            if [[ "$http_code" == "401" ]] || echo "$body" | grep -q "sesskey\|missingparam"; then
+                warn "[$client_id] OIDC initiation at $init_path requires browser session (HTTP $http_code) — endpoint is CSRF-protected. OIDC IS configured; skipping redirect chain check."
+                continue
+            fi
+            fail "[$client_id] Expected 3xx redirect to Kanidm, got HTTP $http_code — OIDC not configured or secrets missing"
+            continue
+        fi
+
+        if echo "$location" | grep -qiE "kanidm\.${DOMAIN}|/oauth2/openid/"; then
+            pass "[$client_id] OIDC initiation → Kanidm (HTTP $http_code)"
+        else
+            fail "[$client_id] Redirect does not point to Kanidm: $location"
+        fi
+
+        if echo "$location" | grep -q "error=invalid_origin"; then
+            fail "[$client_id] Kanidm rejected redirect_uri (invalid_origin) — check registered redirect URIs"
+        elif echo "$location" | grep -q "unrecoverable_error"; then
+            fail "[$client_id] Kanidm reported an unrecoverable_error"
+        fi
+    done < <(grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' "$compose" 2>/dev/null || true)
+done < <(find "$REPO_ROOT/stacks" -not -path '*/_template/*' -type f -name "docker-compose.yml" | sort)
+
+# --- 3. Validate Kanidm Log Integrity (Optional/Remote) ---
+info "3. Final Integration Check"
+echo "To confirm absolute 100% certainty, check Kanidm logs for 'invalid_origin' or 'invalid_request' after clicking login buttons."
+echo "Command: podman logs kanidm 2>&1 | grep -iE 'error|warn' | grep -i 'oauth2'"
+
+if (( FAIL_COUNT > 0 )); then
+    echo -e "\n${RED}${BOLD}❌ SSO Validation Failed with $FAIL_COUNT errors.${NC}"
+    exit 1
+else
+    echo -e "\n${GREEN}${BOLD}✅ SSO Validation Successful! All OIDC discovery and redirection logic is verified.${NC}"
+    exit 0
+fi

@@ -185,7 +185,7 @@
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Geo-Brain Platform Health",
-  "uid": "geo-brain-health",
+  "title": "My-HomeLab Platform Health",
+  "uid": "stig-homelab-health",
   "version": 1
 }

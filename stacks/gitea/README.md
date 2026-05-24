@@ -1,8 +1,8 @@
 # Gitea & CI/CD Pipeline
 
-**Git Server & DevSecOps Platform** for Geo-Brain
+**Git Server & DevSecOps Platform** for My-HomeLab
 
-The `gitea` stack provides a fully self-hosted Git server, integrated with CI/CD runners, AI-driven log triage, and vulnerability management. This forms the backbone of the "Two-Way Mirror" workflow required by the Geo-Brain architectural mandates.
+The `gitea` stack provides a fully self-hosted Git server, integrated with CI/CD runners, AI-driven log triage, and vulnerability management. This forms the backbone of the "Two-Way Mirror" workflow required by the My-HomeLab architectural mandates.
 
 ---
 

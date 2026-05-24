@@ -22,10 +22,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/geo-brain/pkg-sentinel/analyzer"
-	"github.com/geo-brain/pkg-sentinel/config"
-	"github.com/geo-brain/pkg-sentinel/orchestrator"
-	"github.com/geo-brain/pkg-sentinel/rules"
+	"github.com/stig-homelab/pkg-sentinel/analyzer"
+	"github.com/stig-homelab/pkg-sentinel/config"
+	"github.com/stig-homelab/pkg-sentinel/orchestrator"
+	"github.com/stig-homelab/pkg-sentinel/rules"
 )
 
 func main() {

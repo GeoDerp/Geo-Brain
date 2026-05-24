@@ -1,0 +1,44 @@
+# Mirror-sync workflow template
+# ==============================
+# Copy this file into your repository as:
+#   .gitea/workflows/mirror-sync.yml
+#
+# Triggers on pushes to 'main' after SAST passes, and pushes the verified
+# commit to the configured upstream (e.g. GitHub).
+#
+# Requires repository secrets:
+#   - MIRROR_UPSTREAM_URL : full HTTPS URL including PAT token, e.g.
+#       https://<PAT>@github.com/your-user/your-repo.git
+#
+# Relationship to sast-scan.yml:
+#   - sast-scan.yml runs first (parallel or sequential on PR)
+#   - mirror-sync.yml only runs on push to 'main', AFTER scans pass
+#   - If DefectDojo gate is enforced and sast-scan fails, this job is skipped
+#     because the PR cannot be merged
+
+name: Mirror Sync (Gitea → Upstream)
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  push-mirror:
+    runs-on: ubuntu-latest      # handled by gitea-runner (ephemeral sandbox)
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # required for git push --mirror semantics
+
+      - name: Push verified commit to upstream
+        env:
+          UPSTREAM: ${{ secrets.MIRROR_UPSTREAM_URL }}
+        run: |
+          GITEA_HOST=$(echo "${{ github.server_url }}" | sed 's|^https\?://||')
+          git config --global user.email "ci@${GITEA_HOST}"
+          git config --global user.name "Gitea CI Mirror"
+          git remote add upstream "$UPSTREAM"
+          # Push only the main branch (not all refs) to avoid pushing CI internals
+          git push upstream HEAD:main --force-with-lease
+          echo "Pushed $(git rev-parse --short HEAD) to upstream mirror"

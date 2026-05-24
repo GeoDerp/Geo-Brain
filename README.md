@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/logo.svg" alt="Geo-Brain SSOF Logo" width="128"/>
+  <img src="./docs/logo.svg" alt="My-HomeLab SSOF Logo" width="128"/>
 </br>
 <img src="./docs/homepage.png" />
 </p>
@@ -7,9 +7,9 @@
 
 
 
-# Geo-Brain: Single Node Homelab
+# My-HomeLab: Single Node Homelab
 
-Welcome to the **Geo-Brain** Single Source of Truth (SSOT) repository. This project deploys a highly secure, STIG-compliant, and fully containerized homelab on a single node using rootless **Podman** and **Docker Compose**.
+Welcome to the **My-HomeLab** Single Source of Truth (SSOT) repository. This project deploys a highly secure, STIG-compliant, and fully containerized homelab on a single node using rootless **Podman** and **Docker Compose**.
 
 > **Note:** This is not a CI/CD pipeline. It focuses on operational security, monitoring, and robust zero-trust access for pre-built containers.
 
@@ -19,14 +19,14 @@ For a detailed breakdown of every tool and architectural choice, see **[TOOLS_EX
 
 ## 📖 Overview
 
-The Geo-Brain homelab is organized into discrete **stacks**:
+The My-HomeLab homelab is organized into discrete **stacks**:
 
 - **Core Infrastructure:** `step-ca` (Internal PKI), `quay` (Container Registry), `traefik` (Reverse Proxy)
 - **Identity & Access:** `kanidm` (Identity Provider), `oauth2-proxy` (SSO via OIDC)
 - **Security Operations:** `wazuh` (SIEM), `falco` (Runtime Security), `crowdsec` (IPS)
 - **Observability:** `prometheus` & `grafana` (Metrics), `vector` & `loki` (Logs)
 - **Management:** `homepage` (Dashboard), `dockge` (Stack UI)
-- **CI/CD Pipeline (optional):** `gitea` ([Git Server + Runners](./stacks/gitea/README.md)), `defectdojo` (Vulnerability Management), `ramalama` (AI Log Triage) — deployed together via `./deploy.sh cicd up`
+- **CI/CD Pipeline (optional):** `gitea` ([Git Server + Runners](./stacks/gitea/README.md)), `defectdojo` (Vulnerability Management), `ramalama` (AI Log Triage — *auto-enabled when GPU detected*) — deployed together via `./deploy.sh cicd up`
 - **Developer Tools (optional):** `pkg-sentinel` ([Supply-Chain Security Proxy](./stacks/pkg-sentinel/README.md)) — deployed via `./deploy.sh dev up`
 - **Optional/WIP:** `bunkerweb` (WAF), `pangolin` (Zero-Trust Tunnel)
 
@@ -34,7 +34,7 @@ The Geo-Brain homelab is organized into discrete **stacks**:
 
 ## 🚀 Quick Start Guide
 
-Follow these steps to deploy Geo-Brain from scratch on a remote node (e.g., `myhost.example.local`).
+Follow these steps to deploy My-HomeLab from scratch on a remote node (e.g., `myhost.example.local`).
 
 ### Step 1: Environment Configuration
 
@@ -77,7 +77,9 @@ The CI/CD pipeline (Gitea + DefectDojo + RamaLama) is excluded from the default 
 ./deploy.sh cicd up
 ```
 
-This brings up Gitea (self-hosted Git with CI/CD runners), DefectDojo (vulnerability management), and RamaLama (AI-driven security triage) as a unit on the shared `vulnerability-net` network.
+This brings up Gitea (self-hosted Git with CI/CD runners) and DefectDojo (vulnerability management) as a unit on the shared `vulnerability-net` network.
+
+> **Note:** `ramalama` is automatically included when a GPU is detected on the server (`/dev/nvidia0` or `/dev/dri/renderD128`). If no GPU is present, it is skipped. See [TODO](#-todo) for resource requirements.
 
 ### Step 5: Post-Deployment Setup
 
@@ -93,7 +95,7 @@ To avoid browser warnings, install the combined CA bundle (which includes the St
 
 - **Fedora/RHEL/openSUSE:** 
   ```bash
-  sudo cp stacks/traefik/config/certs/ca-bundle.crt /etc/pki/ca-trust/source/anchors/Geo-Brain-ca.crt && sudo update-ca-trust
+  sudo cp stacks/traefik/config/certs/ca-bundle.crt /etc/pki/ca-trust/source/anchors/My-HomeLab-ca.crt && sudo update-ca-trust
   ```
 - **macOS:**
   ```bash
@@ -124,12 +126,12 @@ Before logging into downstream apps, you **must** bootstrap your identity provid
 
    | Group | Role | Access |
    |-------|------|--------|
-   | `brain_admins` | Admin | **All** applications — infrastructure, SOC, observability, and user stacks |
-   | `brain_users` | User | **User stacks only** — moodle, n8n, notes, and other `user/` applications |
+   | `stig_admins` | Admin | **All** applications — infrastructure, SOC, observability, and user stacks |
+   | `stig_users` | User | **User stacks only** — moodle, n8n, notes, and other `user/` applications |
 
    OAuth2 Proxy enforces group-based access at the Traefik ForwardAuth layer:
-   - **Admin-only routes** (Traefik, Wazuh, Dockge, DefectDojo) use the `oauth2-proxy-admin` middleware — requires `brain_admins` membership.
-   - **All other routes** use the `oauth2-proxy` middleware — requires `brain_admins` OR `brain_users` membership.
+   - **Admin-only routes** (Traefik, Wazuh, Dockge, DefectDojo) use the `oauth2-proxy-admin` middleware — requires `stig_admins` membership.
+   - **All other routes** use the `oauth2-proxy` middleware — requires `stig_admins` OR `stig_users` membership.
    - OIDC scopes requested: `openid`, `profile`, `email`, `groups`.
 
 2. **Quay (Registry):** `https://quay.<DOMAIN>`
@@ -142,7 +144,7 @@ Before logging into downstream apps, you **must** bootstrap your identity provid
 
 4. **Gitea (Git Server & CI/CD):** `https://gitea.<DOMAIN>`
    - **SSO:** Click "Sign in with Kanidm" on the login page. Gitea uses native OIDC (not ForwardAuth) to support git CLI operations.
-   - **Local Admin:** Created automatically by `setup-brain.sh`. Username: `admin`.
+   - **Local Admin:** Created automatically by `setup-brain.sh`. Username: `gitadmin`.
    - **Runners:** Two runners deploy alongside Gitea — an ephemeral sandbox runner for standard CI/CD, and a routine scanner for scheduled Trivy scans of all mirrored repos.
 
 5. **DefectDojo (Vulnerability Management):** `https://defectdojo.<DOMAIN>`
@@ -159,7 +161,7 @@ Before logging into downstream apps, you **must** bootstrap your identity provid
 
 8. **Dockge (Stack Management):** `https://dockge.<DOMAIN>`
    - First-time access prompts you to create the local admin account.
-   - Use Dockge to visually manage, start, stop, and read logs of all Compose stacks.
+   - Use Dockge to view all Compose stacks and monitor container health. The stacks directory is mounted **read-only** — use `./deploy.sh` or the Ansible playbook to make changes.
 
 ---
 
@@ -170,7 +172,7 @@ If you need to completely wipe the installation (destroy all data, volumes, and 
 ```bash
 ./scripts/clean-node.sh
 ```
-*Warning: This script permanently deletes `/var/Geo-Brain` and all rootless podman data on the remote node.*
+*Warning: This script permanently deletes `/var/My-HomeLab` and all rootless podman data on the remote node.*
 
 ---
 
@@ -208,4 +210,14 @@ You can deploy your own applications via the `stacks/user/` directory.
 2. Add your `docker-compose.yml` following the [template](stacks/_template/docker-compose.yml).
 3. Deploy it: `./deploy.sh user/myapp up`
 
-All user stacks automatically receive Traefik reverse proxy configuration and OAuth2 Proxy SSO protection if they include the label `traefik.enable=true`. User stacks are accessible to members of both `brain_admins` and `brain_users` groups.
+All user stacks automatically receive Traefik reverse proxy configuration and OAuth2 Proxy SSO protection if they include the label `traefik.enable=true`. User stacks are accessible to members of both `stig_admins` and `stig_users` groups.
+
+---
+
+## 📋 TODO
+
+- [ ] **ramalama (AI Log Triage):** Requires a GPU on the server — automatically enabled by `./deploy.sh cicd up` when a GPU is detected (`/dev/nvidia0` for NVIDIA, `/dev/dri/renderD128` for AMD/Intel). Also requires ~2.1 GB of disk for model storage. Re-evaluate when:
+  - A discrete GPU is available on the host, **or**
+  - A lighter quantized model (≤500 MB) is substituted.
+  - When GPU is present, ramalama is deployed with the base `docker-compose.yml`; add a `docker-compose.nvidia.yml` or `docker-compose.amd.yml` override to pass through GPU devices for hardware inference.
+- [ ] **`changed_when` in Ansible deploy task:** `podman-compose up --force-recreate` does not output "Created" or "Recreated", so the task always reports `ok` even when containers are recreated. Fix the detection condition for accurate change reporting.

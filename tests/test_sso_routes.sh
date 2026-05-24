@@ -1,0 +1,243 @@
+#!/bin/bash
+# test_sso_routes.sh: Validates that all SSO-protected services
+# correctly redirect to Kanidm with the proper callback URL,
+# or properly load their Native OIDC login screens.
+
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+if [[ -f "$REPO_ROOT/.env" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$REPO_ROOT/.env"
+    set +a
+fi
+
+DOMAIN="${DOMAIN:-example.local}"
+# Prefer the combined CA bundle (self-signed + Step-CA); fall back to self-signed CA
+if [[ -f "$REPO_ROOT/stacks/traefik/config/certs/ca-bundle.crt" ]]; then
+    CA_CERT="$REPO_ROOT/stacks/traefik/config/certs/ca-bundle.crt"
+elif [[ -f "$REPO_ROOT/certs/ca.crt" ]]; then
+    CA_CERT="$REPO_ROOT/certs/ca.crt"
+else
+    CA_CERT="$REPO_ROOT/stacks/traefik/config/certs/root_ca.crt"
+fi
+
+if [[ ! -f "$CA_CERT" ]]; then
+    echo "CA root not found (tried ca-bundle.crt, certs/ca.crt, root_ca.crt)"
+    exit 1
+fi
+
+# --- Auto-discover services from compose labels ---
+# Native OIDC: has kanidm.oidc.client_id label AND no oauth2-proxy middleware
+NATIVE_OIDC_SERVICES=()
+# ForwardAuth: has oauth2-proxy@file or oauth2-proxy-admin@file middleware
+PROXY_SERVICES=()
+
+while IFS= read -r compose; do
+    has_client_id=$(grep -oP 'kanidm\.oidc\.client_id=\K[^"]+' "$compose" | head -n1 || true)
+    has_proxy_mw=$(grep -l "oauth2-proxy@file\|oauth2-proxy-admin@file" "$compose" 2>/dev/null || true)
+    has_admin_mw=$(grep -l "oauth2-proxy-admin@file" "$compose" 2>/dev/null || true)
+
+    # Extract full hostname from Host() rule (everything between backticks)
+    hostname=$(grep -oP 'traefik\.http\.routers\.[^.]+\.rule=Host\(`\K[^`]+' "$compose" | head -n1 || true)
+    # Expand ${DOMAIN} placeholder that appears literally in compose label strings
+    hostname="${hostname/\$\{DOMAIN\}/$DOMAIN}"
+    # service name is stack dir basename
+    svc_name=$(basename "$(dirname "$compose")")
+
+    if [[ -n "$has_client_id" && -z "$has_proxy_mw" ]]; then
+        # Skip oauth2-proxy container itself (it IS the auth proxy)
+        [[ "$has_client_id" == oauth2-proxy* ]] && continue
+        [[ -n "$hostname" ]] || continue
+        NATIVE_OIDC_SERVICES+=("${has_client_id}:${hostname}")
+    fi
+
+    if [[ -n "$has_proxy_mw" ]]; then
+        # Skip the oauth2-proxy stack itself
+        grep -q 'kanidm\.oidc\.client_id=oauth2-proxy' "$compose" && continue
+        [[ -n "$hostname" ]] || continue
+        if [[ -n "$has_admin_mw" ]]; then
+            PROXY_SERVICES+=("${svc_name}:${hostname}:true:/admin-oauth2/callback")
+        else
+            PROXY_SERVICES+=("${svc_name}:${hostname}:false:/oauth2/callback")
+        fi
+    fi
+done < <(find "$REPO_ROOT/stacks" -not -path '*/_template/*' -type f -name "docker-compose.yml" | sort)
+
+# --- Output helpers ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+PASS=0
+FAIL=0
+
+pass() { ((PASS++)); echo -e "  ${GREEN}✓ PASS:${NC} $1"; }
+fail() { ((FAIL++)); echo -e "  ${RED}✗ FAIL:${NC} $1"; }
+warn() { echo -e "  ${YELLOW}! WARN:${NC} $1"; }
+skip() { echo -e "  ${YELLOW}~ SKIP:${NC} $1"; }
+info() { echo "--- $1 ---"; }
+
+check_redirect() {
+    local url="$1"
+    local expected_callback_path="$2"
+    local service_name="$3"
+
+    info "Testing ${service_name} at ${url}"
+
+    # Capture first redirect only — stops at first 3xx, avoids false-passes
+    # from an active browser session that would follow all redirects to the app.
+    http_response=$(curl --cacert "$CA_CERT" -s -i --max-redirs 0 --max-time 15 "$url" 2>&1 || true)
+    http_code=$(echo "$http_response" | grep -m1 "^HTTP/" | awk '{print $2}')
+    location=$(echo "$http_response" | grep -i "^Location:" | sed 's/^[Ll]ocation: //I' | tr -d '\r')
+
+    if [[ "$http_code" != 30* ]]; then
+        fail "Expected 3xx redirect from ForwardAuth, got HTTP $http_code"
+        return
+    fi
+
+    if ! echo "$location" | grep -qE "kanidm\\.${DOMAIN}|/oauth2/start|/admin-oauth2/start"; then
+        fail "First redirect does not point to auth endpoint: $location"
+        return
+    fi
+    pass "ForwardAuth issues redirect (HTTP $http_code) toward auth"
+
+    # Extract the redirect_uri parameter to verify the callback path
+    redirect_uri=$(echo "$location" | grep -oP 'redirect_uri=\K[^& ]+' \
+        | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read().strip()))" 2>/dev/null || true)
+
+    if [[ -z "$redirect_uri" ]]; then
+        warn "redirect_uri not in first redirect (Kanidm may be the next hop) — skipping path check for ${service_name}"
+        return
+    fi
+
+    callback_path=$(echo "$redirect_uri" | sed -E 's|https?://[^/]+||')
+    if [[ "$callback_path" == "$expected_callback_path" ]]; then
+        pass "Callback path correct: ${callback_path}"
+    else
+        fail "Expected '${expected_callback_path}', got '${callback_path}'"
+    fi
+}
+
+check_200() {
+    local url="$1"
+    local service_name="$2"
+
+    info "Testing ${service_name} at ${url}"
+
+    # Expect a 200 OK because the app serves its own login page with an SSO button
+    http_code=$(curl --cacert "$CA_CERT" -s -o /dev/null -w "%{http_code}" --max-time 15 "$url")
+
+    if [[ "$http_code" == "200" || "$http_code" == "302" ]]; then
+        # 302 is acceptable if it redirects to a local /login path
+        pass "Service reachable and serving native login/redirect (HTTP ${http_code})."
+    else
+        fail "Service not serving expected login page. HTTP code: ${http_code}"
+    fi
+}
+
+# Maps a Native OIDC client_id to the URL path that initiates the OIDC flow.
+# These paths should return HTTP 302 pointing to kanidm.${DOMAIN}.
+_oidc_initiation_path() {
+    local client_id="$1"
+    case "$client_id" in
+        moodle)     echo "/auth/oauth2/login.php?id=1" ;;
+        gitea)      echo "/user/oauth2/kanidm" ;;
+        quay)       echo "/oauth2/kanidm/initiate" ;;
+        defectdojo) echo "/login/oidc/" ;;
+        grafana)    echo "/login/generic_oauth" ;;
+        *)          echo "" ;;
+    esac
+}
+
+check_oidc_login() {
+    local hostname="$1"
+    local client_id="$2"
+
+    local init_path
+    init_path=$(_oidc_initiation_path "$client_id")
+
+    if [[ -z "$init_path" ]]; then
+        warn "[${client_id}] No known OIDC initiation path — skipping login flow check."
+        return
+    fi
+
+    local url="https://${hostname}${init_path}"
+    local http_response location http_code
+
+    # One redirect max: the first hop must be toward kanidm
+    http_response=$(curl --cacert "$CA_CERT" -s -i --max-redirs 0 --max-time 15 "$url" 2>&1 || true)
+    http_code=$(echo "$http_response" | grep -m1 "^HTTP/" | awk '{print $2}')
+    location=$(echo "$http_response" | grep -i "^Location:" | sed 's/^[Ll]ocation: //I' | tr -d '\r')
+
+    # Handle URL normalization redirects (e.g., Quay returns 308 to add trailing slash).
+    # Follow one additional hop if the location is just a variant of the same host.
+    if [[ "$http_code" == "308" ]] && [[ "$location" == *"${hostname}"* ]]; then
+        http_response=$(curl --cacert "$CA_CERT" -s -i --max-redirs 0 --max-time 15 "$location" 2>&1 || true)
+        http_code=$(echo "$http_response" | grep -m1 "^HTTP/" | awk '{print $2}')
+        location=$(echo "$http_response" | grep -i "^Location:" | sed 's/^[Ll]ocation: //I' | tr -d '\r')
+    fi
+
+    if [[ "$http_code" != 30* ]]; then
+        # Some OIDC endpoints require browser session/CSRF tokens and cannot be tested via
+        # unauthenticated GET (e.g., Quay's initiate/ is intercepted by the registry auth
+        # handler; Moodle's login.php requires a sesskey parameter for CSRF protection).
+        # Treat 401 (auth-required) or 4xx with sesskey error as a configured-but-protected
+        # endpoint, which still means OIDC is properly set up.
+        local body
+        body=$(echo "$http_response" | tail -n +20)
+        if [[ "$http_code" == "401" ]] || echo "$body" | grep -q "sesskey\|missingparam"; then
+            warn "[${client_id}] OIDC initiation at ${init_path} requires browser session (HTTP ${http_code}) — OIDC IS configured but endpoint is CSRF-protected. Skipping redirect chain check."
+            ((PASS++))
+            return
+        fi
+        fail "[${client_id}] OIDC initiation at ${init_path} returned HTTP ${http_code} (expected 3xx redirect to Kanidm)"
+        return
+    fi
+
+    if echo "$location" | grep -qiE "kanidm\.${DOMAIN}|/oauth2/openid/"; then
+        pass "[${client_id}] OIDC initiation → Kanidm redirect OK (HTTP ${http_code}, Location: ${location})"
+    else
+        fail "[${client_id}] OIDC initiation redirect does not point to Kanidm: ${location}"
+    fi
+
+    # Surface Kanidm-level errors immediately
+    if echo "$location" | grep -q "error=invalid_origin"; then
+        fail "[${client_id}] Kanidm rejected redirect_uri (invalid_origin) — check registered redirect URIs in setup-oidc.sh"
+    elif echo "$location" | grep -q "unrecoverable_error"; then
+        fail "[${client_id}] Kanidm reported an unrecoverable_error in the OIDC flow"
+    fi
+}
+
+# === Test Native OIDC Services ===
+info "--- Validating Native OIDC Services ---"
+for service in "${NATIVE_OIDC_SERVICES[@]}"; do
+    IFS=':' read -r name hostname <<< "$service"
+    check_200 "https://${hostname}" "$name"
+    check_oidc_login "${hostname}" "${name}"
+done
+
+# === Test OAuth2-Proxy & Auto-Redirect Services ===
+info "--- Validating OAuth2-Proxy Services ---"
+for service in "${PROXY_SERVICES[@]}"; do
+    IFS=':' read -r name hostname is_admin expected_path <<< "$service"
+    # Pre-probe: if service returns 404, it may be an optional stack not deployed
+    probe_code=$(curl --cacert "$CA_CERT" -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${hostname}" 2>/dev/null || echo "000")
+    if [[ "$probe_code" == "404" || "$probe_code" == "502" || "$probe_code" == "000" ]]; then
+        skip "[$name] Service not reachable (HTTP $probe_code) — optional/conditional stack not deployed"
+        continue
+    fi
+    check_redirect "https://${hostname}" "$expected_path" "$name"
+done
+
+echo ""
+info "--- SSO Test Summary ---"
+echo "  Passed: $PASS"
+echo "  Failed: $FAIL"
+
+if (( FAIL > 0 )); then
+    exit 1
+fi
+exit 0

@@ -1,0 +1,132 @@
+services:
+  moodle:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: localhost/moodle-homelab:5.0-stable
+    container_name: moodle
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
+    depends_on:
+      moodle-db:
+        condition: service_healthy
+    environment:
+      - MOODLE_DOCKER_DBTYPE=mariadb
+      - MOODLE_DOCKER_DBNAME=moodle
+      - MOODLE_DOCKER_DBUSER=${MOODLE_DB_USER:-moodle}
+      - MOODLE_DOCKER_DBPASS=${MOODLE_DB_PASSWORD}
+      - MOODLE_DOCKER_DBHOST=moodle-db
+      - MOODLE_DOCKER_WWWROOT=/var/www/html
+      - MOODLE_DOCKER_PHP_EXTENSION_OPCACHE=1
+      - MOODLE_OIDC_SECRET=${MOODLE_OIDC_SECRET}
+      - DOMAIN=${DOMAIN}
+      - MOODLE_WWWROOT=https://moodle.${DOMAIN}
+      - APACHE_DOCUMENT_ROOT=/var/www/html
+      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+      # Names read directly by config.php and 20-moodle-install.sh
+      - MOODLE_DB_HOST=moodle-db
+      - MOODLE_DB_NAME=moodle
+      - MOODLE_DB_USER=${MOODLE_DB_USER:-moodle}
+      - MOODLE_DB_PASSWORD=${MOODLE_DB_PASSWORD}
+      - MOODLE_DB_PORT=3306
+      - MOODLE_SSLPROXY=true
+      - MOODLE_ADMIN_PASSWORD=${MOODLE_ADMIN_PASSWORD}
+    volumes:
+      - ${DATA_DIR}/moodle/data:/var/www/moodledata:Z,U
+      - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/usr/local/share/ca-certificates/step-ca.crt:ro,z
+      - ./docker-entrypoint.d/30-setup-sso.sh:/docker-entrypoint.d/30-setup-sso.sh:ro,z
+    entrypoint: ["/bin/bash", "-c", "update-ca-certificates 2>/dev/null || true && for f in /docker-entrypoint.d/*.sh; do bash \"$$f\" || true; done && exec apache2-foreground"]
+    networks:
+      - moodle-db-net
+      - proxy-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 10m
+    labels:
+      - "kanidm.oidc.client_id=moodle"
+      - "kanidm.oidc.redirect_path=/admin/oauth2callback.php"
+      - "kanidm.oidc.no_pkce=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.moodle.rule=Host(`moodle.${DOMAIN}`)"
+      - "traefik.http.routers.moodle.entrypoints=websecure"
+      - "traefik.http.routers.moodle.tls=true"
+      - "traefik.http.routers.moodle.tls.certresolver=stepca"
+      - "traefik.http.routers.moodle.middlewares=security-headers@file"
+      - "traefik.http.services.moodle.loadbalancer.server.port=8080"
+      - "traefik.docker.network=proxy-net"
+      - "security.stig.compliance=true"
+      - "security.stig.role=lms"
+      - "homepage.group=Services"
+      - "homepage.name=Moodle"
+      - "homepage.icon=moodle.png"
+      - "homepage.description=Learning Management System"
+      - "homepage.href=https://moodle.${DOMAIN}"
+
+  moodle-db:
+    image: docker.io/library/mariadb:10.11
+    container_name: moodle-db
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run/mysqld
+    environment:
+      - MYSQL_DATABASE=moodle
+      - MYSQL_USER=${MOODLE_DB_USER:-moodle}
+      - MYSQL_PASSWORD=${MOODLE_DB_PASSWORD}
+      - MYSQL_RANDOM_ROOT_PASSWORD=yes
+    volumes:
+      - ${DATA_DIR}/moodle/database:/var/lib/mysql:Z,U
+    networks:
+      - moodle-db-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.3'
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 3m
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=database"
+
+networks:
+  moodle-db-net:
+    internal: true
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=backend-db-net"
+  proxy-net:
+    external: true
