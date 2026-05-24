@@ -184,13 +184,11 @@ services:
         condition: service_healthy
     volumes:
       - ./config:/config:Z
-    networks:
-      - quay-net
     deploy:
       resources:
         limits:
-          memory: 1G
-          cpus: '0.5'
+          memory: 4G
+          cpus: '1.0'
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8089/healthz || exit 1"]
       interval: 30s
@@ -201,8 +199,6 @@ services:
     networks:
       - quay-net
       - monitoring-net
-    ports:
-      - "8089:8089"
     labels:
       - "security.stig.compliance=true"
       - "security.stig.role=scanner"
