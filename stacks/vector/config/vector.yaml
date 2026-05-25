@@ -64,8 +64,11 @@ transforms:
       - classify_logs
       - falco_normalize
     source: |
-      # Extract security status before we potentially delete labels
-      .security = .labels.security ?? "false"
+      # Extract security status
+      .security = "false"
+      if exists(.labels.security) {
+          .security = .labels.security
+      }
       
       # Strip bloated metadata
       del(.label)
@@ -79,8 +82,9 @@ transforms:
       if is_string(.message) && starts_with(to_string!(.message), "{") {
           parsed, err = parse_json(.message)
           if err == null {
-              .message = parsed.message ?? .message
-              # Keep other interesting fields from parsed JSON if needed
+              if exists(parsed.message) {
+                  .message = parsed.message
+              }
           }
       }
 

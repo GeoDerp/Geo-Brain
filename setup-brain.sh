@@ -1,7 +1,7 @@
 #!/bin/bash
 # @GEMINI.md: Single Source of Truth for this script's mandates.
 # setup-brain.sh
-# Idempotent rootless Podman setup script for the Geo Brain environment
+# Idempotent rootless Podman setup script for the My-HomeLab environment
 # This script configures Quay, Identity (Kanidm), PKI (Step-CA), SOC (DefectDojo/Wazuh), and Proxy.
 
 set -euo pipefail
@@ -15,14 +15,14 @@ if [ -f .env ]; then
 fi
 
 # Fallback/Default variables if not in .env
-DOMAIN=${DOMAIN:-geo-brain.local}
+DOMAIN=${DOMAIN:-stig-homelab.local}
 ADMIN_PASSWORD=${ADMIN_PASSWORD:?"ADMIN_PASSWORD must be set in .env — generate with: openssl rand -base64 32"}
 MAX_RETRIES=15
 INITIAL_BACKOFF=2
-DATA_DIR=${DATA_DIR:-/var/Geo-Brain}
+DATA_DIR=${DATA_DIR:-/var/My-HomeLab}
 DATA_DIR="${DATA_DIR/#\~/$HOME}"
 
-echo "Starting Geo Brain post-deployment rootless bootstrapper..."
+echo "Starting My-HomeLab post-deployment rootless bootstrapper..."
 
 # Global state variables
 KANIDM_RECOVERY=""

@@ -1,6 +1,6 @@
 services:
   kanidm:
-    image: docker.io/kanidm/server:1.9.2
+    image: docker.io/kanidm/server:1.10.2
     container_name: kanidm
     restart: always
     security_opt:
@@ -37,6 +37,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.kanidm.rule=Host(`kanidm.${DOMAIN}`)"
+      - "traefik.http.routers.kanidm.priority=2000"
       - "traefik.http.routers.kanidm.entrypoints=websecure"
       - "traefik.http.routers.kanidm.tls=true"
       - "traefik.http.routers.kanidm.middlewares=security-headers@file"

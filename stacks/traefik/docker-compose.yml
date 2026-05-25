@@ -1,6 +1,6 @@
 services:
   traefik:
-    image: docker.io/library/traefik:v3.3.4
+    image: docker.io/library/traefik:v3.7.1
     container_name: traefik
     restart: always
     security_opt:
@@ -29,16 +29,19 @@ services:
       - DOCKER_API_VERSION=1.40
       - DOMAIN=${DOMAIN}
     networks:
-      - proxy-net
-      - identity-net
-      - mgmt-net
-      - monitoring-net
-      - security-net
-      - wazuh-net
-      - vulnerability-net
-      - quay-net
-      - pki-net
-      - storage-net
+      proxy-net:
+        aliases:
+          - "kanidm.${DOMAIN}"
+          - "auth.${DOMAIN}"
+      identity-net:
+      mgmt-net:
+      monitoring-net:
+      security-net:
+      wazuh-net:
+      vulnerability-net:
+      quay-net:
+      pki-net:
+      storage-net:
     deploy:
       resources:
         limits:
