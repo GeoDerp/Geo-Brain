@@ -144,8 +144,8 @@ services:
       - DD_SECRET_KEY=${DOJO_SECRET_KEY}
       - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
       - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
-      - SSL_CERT_FILE=/tmp/ca-bundle.crt
-      - REQUESTS_CA_BUNDLE=/tmp/ca-bundle.crt
+      - SSL_CERT_FILE=/etc/extra-ca/ca-bundle.crt
+      - REQUESTS_CA_BUNDLE=/etc/extra-ca/ca-bundle.crt
       - DD_ALLOWED_HOSTS=defectdojo.${DOMAIN},defectdojo-django
     volumes:
       - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/etc/extra-ca/ca-bundle.crt:ro,z
@@ -184,8 +184,8 @@ services:
       - DD_SECRET_KEY=${DOJO_SECRET_KEY}
       - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
       - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
-      - SSL_CERT_FILE=/tmp/ca-bundle.crt
-      - REQUESTS_CA_BUNDLE=/tmp/ca-bundle.crt
+      - SSL_CERT_FILE=/etc/extra-ca/ca-bundle.crt
+      - REQUESTS_CA_BUNDLE=/etc/extra-ca/ca-bundle.crt
       - DD_ALLOWED_HOSTS=defectdojo.${DOMAIN},defectdojo-django
     volumes:
       - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/etc/extra-ca/ca-bundle.crt:ro,z
