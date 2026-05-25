@@ -1,6 +1,68 @@
 services:
+  defectdojo-nginx:
+    image: docker.io/defectdojo/defectdojo-nginx:2.58.3
+    container_name: defectdojo-nginx
+    restart: always
+    # Inject large_client_header_buffers before the original entrypoint runs.
+    # Kanidm JWT cookies can exceed nginx's default 4x8k limit, causing 400s.
+    # This mirrors DefectDojo's own entrypoint pattern (sed -i on nginx.conf).
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "grep -q 'large_client_header_buffers' /etc/nginx/nginx.conf || sed -i 's/keepalive_timeout 65;/keepalive_timeout 65;\\n  large_client_header_buffers 8 32k;\\n  client_header_buffer_size 4k;/' /etc/nginx/nginx.conf; exec /entrypoint-nginx.sh"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+    depends_on:
+      - defectdojo-django
+    environment:
+      - DOLLAR=$
+      - DD_UWSGI_HOST=defectdojo-django
+      - DD_UWSGI_PORT=3031
+      - NGINX_METRICS_ENABLED=false
+    volumes:
+      # Static files are pre-baked into the nginx image; do NOT mount the
+      # defectdojo-static volume here — it only contains Django app statics
+      # (admin, dojo, etc.) from collectstatic and would shadow the vendor
+      # JS/CSS (jquery, bootstrap, datatables...) that are in the image.
+      - defectdojo-media:/usr/share/nginx/html/media:ro,z
+    networks:
+      - defectdojo-backend
+      - proxy-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.2'
+    healthcheck:
+      # wget exits non-zero on 4xx; use -S to capture headers and grep for any HTTP response
+      # so that Django's 400 (missing Host header on loopback) doesn't fail the check.
+      test: ["CMD-SHELL", "wget -qSO /dev/null http://127.0.0.1:8080/ 2>&1 | grep -q 'HTTP/'"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 2m
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.defectdojo.rule=Host(`defectdojo.${DOMAIN}`)"
+      - "traefik.http.routers.defectdojo.entrypoints=websecure"
+      - "traefik.http.routers.defectdojo.tls=true"
+      - "traefik.http.routers.defectdojo.middlewares=security-headers@file"
+      - "traefik.http.services.defectdojo.loadbalancer.server.port=8080"
+      - "security.stig.compliance=true"
+      - "security.stig.role=vulnerability-mgmt-frontend"
+      - "homepage.group=SOC"
+      - "homepage.name=DefectDojo"
+      - "homepage.icon=defectdojo.png"
+      - "homepage.description=Vulnerability Management"
+      - "homepage.href=https://defectdojo.${DOMAIN}"
+
   defectdojo-django:
-    image: docker.io/defectdojo/defectdojo-django:2.55.4
+    image: docker.io/defectdojo/defectdojo-django:2.58.3
     container_name: defectdojo-django
     restart: always
     entrypoint: ["/entrypoint-initializer.sh"]
@@ -16,15 +78,23 @@ services:
       - DD_SECRET_KEY=${DOJO_SECRET_KEY}
       - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
       - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
+      - DD_SOCIAL_AUTH_OIDC_ENABLED=True
+      - DD_SOCIAL_AUTH_ENABLED=True
       - DD_SOCIAL_AUTH_OIDC_AUTH_ENABLED=True
+      - DD_SOCIAL_AUTH_OIDC_USERNAME_KEY=preferred_username
+      - DD_SOCIAL_AUTH_OIDC_LOGIN_BUTTON_TEXT=Login with Kanidm (SSO)
       - DD_SOCIAL_AUTH_REDIRECT_IS_HTTPS=True
+      # SSL_CERT_FILE: covers Python's native ssl module (supplements REQUESTS_CA_BUNDLE
+      # which only covers the requests library). Both are needed for full TLS trust.
+      - SSL_CERT_FILE=/tmp/ca-bundle.crt
       - DD_SOCIAL_AUTH_OIDC_OIDC_ENDPOINT=https://kanidm.${DOMAIN}/oauth2/openid/defectdojo
       - DD_SOCIAL_AUTH_OIDC_KEY=defectdojo
       - DD_SOCIAL_AUTH_OIDC_SECRET=${DEFECTDOJO_OIDC_SECRET}
-      - DD_ENABLE_SSO_LOGIN_FORM=False
+      - DD_ENABLE_SSO_LOGIN_FORM=True
       - DD_ALLOWED_HOSTS=defectdojo.${DOMAIN},defectdojo-django
+      - DD_UWSGI_MODE=socket
+      - DD_UWSGI_ENDPOINT=0.0.0.0:3031
       - DD_UWSGI_BUFFER_SIZE=65535
-      - DD_UWSGI_EXTRA_ARGS=--static-map /static=/app/static
       - REQUESTS_CA_BUNDLE=/tmp/ca-bundle.crt
       - DD_INITIALIZE=true
       - DD_ADMIN_USER=admin
@@ -33,12 +103,12 @@ services:
       - DD_ADMIN_FIRST_NAME=Admin
       - DD_ADMIN_LAST_NAME=User
     volumes:
-      - ${DATA_DIR}/step-ca/step/certs/root_ca.crt:/etc/extra-ca/root_ca.crt:ro,z
-      - ${STACKS_PATH}/../certs/ca.crt:/etc/extra-ca/temp_ca.crt:ro,z
+      - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/etc/extra-ca/ca-bundle.crt:ro,z
       - defectdojo-static:/app/static
+      - defectdojo-media:/app/media
     networks:
+      - defectdojo-backend
       - vulnerability-net
-      - proxy-net
     deploy:
       resources:
         limits:
@@ -52,19 +122,89 @@ services:
       start_period: 5m
     labels:
       - "kanidm.oidc.client_id=defectdojo"
-      - "traefik.enable=true"
-      - "traefik.http.routers.defectdojo.rule=Host(`defectdojo.${DOMAIN}`)"
-      - "traefik.http.routers.defectdojo.entrypoints=websecure"
-      - "traefik.http.routers.defectdojo.tls=true"
-      - "traefik.http.routers.defectdojo.middlewares=security-headers@file"
-      - "traefik.http.services.defectdojo.loadbalancer.server.port=8081"
+      - "kanidm.oidc.redirect_path=/complete/oidc/"
+      - "kanidm.oidc.no_pkce=true"
       - "security.stig.compliance=true"
       - "security.stig.role=vulnerability-mgmt"
-      - "homepage.group=SOC"
-      - "homepage.name=DefectDojo"
-      - "homepage.icon=defectdojo.png"
-      - "homepage.description=Vulnerability Management"
-      - "homepage.href=https://defectdojo.${DOMAIN}"
+
+  defectdojo-celery-worker:
+    image: docker.io/defectdojo/defectdojo-django:2.58.3
+    container_name: defectdojo-celery-worker
+    restart: always
+    entrypoint: ["/entrypoint-celery-worker.sh"]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      - defectdojo-django
+      - defectdojo-db
+      - defectdojo-redis
+    environment:
+      - DD_SECRET_KEY=${DOJO_SECRET_KEY}
+      - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
+      - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
+      - SSL_CERT_FILE=/tmp/ca-bundle.crt
+      - REQUESTS_CA_BUNDLE=/tmp/ca-bundle.crt
+      - DD_ALLOWED_HOSTS=defectdojo.${DOMAIN},defectdojo-django
+    volumes:
+      - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/etc/extra-ca/ca-bundle.crt:ro,z
+      - defectdojo-static:/app/static
+    networks:
+      - defectdojo-backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q celery /proc/1/cmdline 2>/dev/null || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 3m
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=worker"
+
+  defectdojo-celery-beat:
+    image: docker.io/defectdojo/defectdojo-django:2.58.3
+    container_name: defectdojo-celery-beat
+    restart: always
+    entrypoint: ["/entrypoint-celery-beat.sh"]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      - defectdojo-django
+      - defectdojo-db
+      - defectdojo-redis
+    environment:
+      - DD_SECRET_KEY=${DOJO_SECRET_KEY}
+      - DD_DATABASE_URL=postgres://${DEFECTDOJO_DB_USER:-defectdojo}:${DEFECTDOJO_DB_PASSWORD}@defectdojo-db:5432/defectdojo
+      - DD_CELERY_BROKER_URL=redis://defectdojo-redis:6379/0
+      - SSL_CERT_FILE=/tmp/ca-bundle.crt
+      - REQUESTS_CA_BUNDLE=/tmp/ca-bundle.crt
+      - DD_ALLOWED_HOSTS=defectdojo.${DOMAIN},defectdojo-django
+    volumes:
+      - ${STACKS_PATH}/traefik/config/certs/ca-bundle.crt:/etc/extra-ca/ca-bundle.crt:ro,z
+    networks:
+      - defectdojo-backend
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.2'
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /var/run/defectdojo/celery-beat.pid && kill -0 $(cat /var/run/defectdojo/celery-beat.pid) 2>/dev/null || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 3m
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=scheduler"
 
   defectdojo-db:
     image: docker.io/library/postgres:15-alpine
@@ -91,7 +231,7 @@ services:
     volumes:
       - ${DATA_DIR}/defectdojo/database:/var/lib/postgresql/data:Z,U
     networks:
-      - vulnerability-net
+      - defectdojo-backend
     deploy:
       resources:
         limits:
@@ -125,7 +265,7 @@ services:
       - /run
       - /data
     networks:
-      - vulnerability-net
+      - defectdojo-backend
     deploy:
       resources:
         limits:
@@ -143,8 +283,14 @@ services:
 
 volumes:
   defectdojo-static:
+  defectdojo-media:
 
 networks:
+  defectdojo-backend:
+    internal: true
+    labels:
+      - "security.stig.compliance=true"
+      - "security.stig.role=backend-db-net"
   vulnerability-net:
     external: true
   proxy-net:

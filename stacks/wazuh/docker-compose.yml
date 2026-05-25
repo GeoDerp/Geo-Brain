@@ -1,6 +1,6 @@
 services:
   wazuh-indexer:
-    image: docker.io/wazuh/wazuh-indexer:4.14.3
+    image: docker.io/wazuh/wazuh-indexer:4.14.5
     container_name: wazuh-indexer
     restart: always
     security_opt:
@@ -14,6 +14,10 @@ services:
     volumes:
       - ${DATA_DIR}/wazuh/indexer:/var/lib/opensearch/data:Z,U
       - ./config/indexer/opensearch.yml:/usr/share/wazuh-indexer/config/opensearch.yml:ro,U
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     networks:
       wazuh-net:
         aliases:
@@ -31,14 +35,17 @@ services:
       start_period: 5m
     labels:
       - "kanidm.oidc.client_id=wazuh"
+      - "kanidm.oidc.no_pkce=true"
       - "security.stig.compliance=true"
       - "security.stig.role=indexer"
       - "homepage.group=SOC"
       - "homepage.name=Wazuh Indexer"
       - "homepage.icon=wazuh.png"
+      - "homepage.description=OpenSearch Log Indexer"
+      - "homepage.href=https://wazuh.${DOMAIN}"
 
   wazuh-manager:
-    image: docker.io/wazuh/wazuh-manager:4.14.3
+    image: docker.io/wazuh/wazuh-manager:4.14.5
     container_name: wazuh-manager
     restart: always
     # NOTE: no-new-privileges omitted — manager runs multiple exec'd processes
@@ -57,7 +64,6 @@ services:
       - SETUID
       - SETGID
       - SYS_CHROOT
-    pids_limit: 8192
     ports:
       - 1514:1514
       - 1515:1515
@@ -82,6 +88,7 @@ services:
       start_period: 5m
     labels:
       - "kanidm.oidc.client_id=wazuh"
+      - "kanidm.oidc.no_pkce=true"
       - "security.stig.compliance=true"
       - "security.stig.bypass_privileged=true"
       - "security.stig.role=manager"
@@ -90,7 +97,7 @@ services:
       - "homepage.icon=wazuh.png"
 
   wazuh-dashboard:
-    image: docker.io/wazuh/wazuh-dashboard:4.14.3
+    image: docker.io/wazuh/wazuh-dashboard:4.14.5
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -111,9 +118,7 @@ services:
     environment:
       - WAZUH_MANAGER_URL=http://wazuh-manager
       - INDEXER_URL=http://wazuh-indexer:9200
-      - OIDC_ENDPOINT=https://kanidm.${DOMAIN}/oauth2/openid/wazuh
-      - OIDC_CLIENT_ID=wazuh
-      - OIDC_CLIENT_SECRET=${WAZUH_OIDC_SECRET}
+      - WAZUH_API_PASSWORD=${WAZUH_API_PASSWORD}
     networks:
       - wazuh-net
       - monitoring-net
@@ -134,8 +139,9 @@ services:
       - "traefik.http.routers.wazuh.rule=Host(`wazuh.${DOMAIN}`)"
       - "traefik.http.routers.wazuh.entrypoints=websecure"
       - "traefik.http.routers.wazuh.tls=true"
-      - "traefik.http.routers.wazuh.middlewares=security-headers@file"
+      - "traefik.http.routers.wazuh.middlewares=oauth2-proxy-admin@file,security-headers@file"
       - "traefik.http.services.wazuh.loadbalancer.server.port=5601"
+      - "traefik.docker.network=proxy-net"
       - "security.stig.compliance=true"
       - "security.stig.role=dashboard"
       - "homepage.group=SOC"
