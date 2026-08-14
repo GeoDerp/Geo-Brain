@@ -12,6 +12,9 @@ stacks/traefik/config/certs/
 stacks/*/data/
 stacks/*/logs/
 
+# Runtime artifacts
+nohup.out
+
 # OS
 .DS_Store
 *.swp

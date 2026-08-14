@@ -169,8 +169,6 @@ services:
         condition: service_healthy
     volumes:
       - ./config:/config:Z
-    networks:
-      - quay-net
     deploy:
       resources:
         limits:

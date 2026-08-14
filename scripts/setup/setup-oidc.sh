@@ -1,3 +1,4 @@
+#!/bin/bash
 # Extract values from existing .env
 ENVFILE="$HOME/Geo-Brain/.env"
 set -a; [ -f "$ENVFILE" ] && source "$ENVFILE"; set +a
